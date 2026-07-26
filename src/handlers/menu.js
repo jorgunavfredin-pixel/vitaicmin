@@ -101,9 +101,20 @@ async function generateCheckoutMessage(product, quantity, lang) {
  * @param {Object} bot - Telegraf bot instance
  */
 const registerMenuHandler = (bot) => {
-    // Quantity typing states: userId -> { productId, chatId, messageId, categoryId }
-    // Set when user taps the "Ketik jumlah" button on the checkout screen.
+    // Quantity typing states: userId -> { productId, chatId, checkoutMessageId, promptMessageId, categoryId }
+    // Set when the user taps the "✍️ Ketik" button on the checkout screen.
     const qtyInputStates = new Map();
+
+    // Remove a pending "type quantity" prompt (delete the prompt message + clear state)
+    const clearQtyPrompt = async (ctx) => {
+        if (!ctx.from) return;
+        const st = qtyInputStates.get(ctx.from.id.toString());
+        if (!st) return;
+        qtyInputStates.delete(ctx.from.id.toString());
+        if (st.promptMessageId) {
+            try { await ctx.telegram.deleteMessage(st.chatId, st.promptMessageId); } catch (e) { }
+        }
+    };
 
     // Show categories / List Produk
     bot.action('menu_categories', async (ctx) => {
@@ -255,6 +266,7 @@ const registerMenuHandler = (bot) => {
         const nextQty = currentQty + 1;
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
+        clearQtyPrompt(ctx);
 
         const product = db.getProductById(productId);
         const stockCount = db.getAvailableStockCount(productId);
@@ -285,6 +297,7 @@ const registerMenuHandler = (bot) => {
         const nextQty = currentQty - 1;
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
+        clearQtyPrompt(ctx);
 
         if (nextQty < 1) {
             await ctx.answerCbQuery('Min quantity is 1');
@@ -315,6 +328,7 @@ const registerMenuHandler = (bot) => {
         const nextQty = currentQty + 5;
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
+        clearQtyPrompt(ctx);
 
         const product = db.getProductById(productId);
         const stockCount = db.getAvailableStockCount(productId);
@@ -343,6 +357,7 @@ const registerMenuHandler = (bot) => {
         const nextQty = currentQty - 5;
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
+        clearQtyPrompt(ctx);
 
         if (nextQty < 1) {
             await ctx.answerCbQuery('Min quantity is 1');
@@ -371,6 +386,7 @@ const registerMenuHandler = (bot) => {
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
         const locale = require(`../locales/${lang}`);
+        clearQtyPrompt(ctx);
 
         // Maintenance mode check
         const settings = db.getSettings();
@@ -440,10 +456,9 @@ const registerMenuHandler = (bot) => {
 
     // ===== TYPE QUANTITY (repurposed "Max" button) =====
 
-    // User taps "✍️ Ketik" — turn the checkout into a "type a number" prompt
+    // User taps "✍️ Ketik" — send a force-reply prompt; the checkout form stays intact above
     bot.action(/^qtytype_(.+)_(\d+)$/, async (ctx) => {
         const productId = ctx.match[1];
-        const currentQty = parseInt(ctx.match[2]);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
 
@@ -454,89 +469,79 @@ const registerMenuHandler = (bot) => {
 
         await ctx.answerCbQuery();
 
+        // Drop any previous pending prompt first
+        await clearQtyPrompt(ctx);
+
+        const checkoutMessageId = ctx.callbackQuery.message.message_id;
+        const promptText = lang === 'en'
+            ? `✍️ Type the quantity you want (1-${maxQty}):`
+            : `✍️ Ketik jumlah yang mau dibeli (1-${maxQty}):`;
+
+        let promptMsg;
+        try {
+            promptMsg = await ctx.reply(promptText, {
+                reply_markup: {
+                    force_reply: true,
+                    input_field_placeholder: lang === 'en' ? 'e.g. 3' : 'contoh: 3'
+                }
+            });
+        } catch (e) { return; }
+
         qtyInputStates.set(userId, {
             productId,
             chatId: ctx.chat.id,
-            messageId: ctx.callbackQuery.message.message_id,
-            categoryId: product.category_id,
-            prevQty: currentQty
+            checkoutMessageId,
+            promptMessageId: promptMsg.message_id,
+            categoryId: product.category_id
         });
-
-        const promptMsg = lang === 'en'
-            ? `🔢 <b>Type quantity</b>\n\nSend a number between <b>1</b> and <b>${maxQty}</b> in the chat.`
-            : `🔢 <b>Ketik Jumlah</b>\n\nKirim angka antara <b>1</b> sampai <b>${maxQty}</b> di chat.`;
-        const cancelText = lang === 'en' ? '❌ Cancel' : '❌ Batal';
-
-        try {
-            await ctx.editMessageText(promptMsg, {
-                parse_mode: 'HTML',
-                reply_markup: { inline_keyboard: [[{ text: cancelText, callback_data: `qtytypecancel_${productId}` }]] }
-            });
-        } catch (e) { }
     });
 
-    // Cancel typing — restore the checkout form with the previous quantity
-    bot.action(/^qtytypecancel_(.+)$/, async (ctx) => {
-        const productId = ctx.match[1];
-        const userId = ctx.from.id.toString();
-        const lang = db.getUserLanguage(userId);
-        const state = qtyInputStates.get(userId);
-        qtyInputStates.delete(userId);
-
-        await ctx.answerCbQuery();
-
-        const product = db.getProductById(productId);
-        if (!product) return;
-        const stockCount = db.getAvailableStockCount(productId);
-        const maxQty = product.stock_mode === 'unlimited' ? 999 : Math.min(stockCount, 999);
-        const qty = Math.min(Math.max(state?.prevQty || 1, 1), maxQty) || 1;
-
-        const message = await generateCheckoutMessage(product, qty, lang);
-        try {
-            await ctx.editMessageText(message, {
-                parse_mode: 'HTML',
-                ...quantityKeyboard(maxQty, productId, qty, product.category_id, lang)
-            });
-        } catch (e) { }
-    });
-
-    // Capture the typed number and update the checkout (deletes the typed message for a clean chat)
+    // Capture the typed number, clean up both messages, and edit the checkout form above
     bot.on('text', async (ctx, next) => {
         const userId = ctx.from.id.toString();
         const state = qtyInputStates.get(userId);
         if (!state) return next();
 
         const raw = ctx.message.text.trim();
-        // Only consume pure numbers; let anything else (menu text, etc.) fall through
+        // Only consume pure numbers; anything else falls through to other handlers
         if (!/^\d+$/.test(raw)) return next();
 
         const lang = db.getUserLanguage(userId);
         const qty = parseInt(raw, 10);
 
-        // Delete the user's typed number for a clean chat
-        try { await ctx.deleteMessage(); } catch (e) { }
+        const deleteReply = async () => { try { await ctx.deleteMessage(); } catch (e) { } };
+        const deletePrompt = async () => {
+            if (state.promptMessageId) { try { await ctx.telegram.deleteMessage(state.chatId, state.promptMessageId); } catch (e) { } }
+        };
 
         const product = db.getProductById(state.productId);
-        if (!product) { qtyInputStates.delete(userId); return; }
+        if (!product) { qtyInputStates.delete(userId); await deleteReply(); await deletePrompt(); return; }
         const stockCount = db.getAvailableStockCount(state.productId);
         const maxQty = product.stock_mode === 'unlimited' ? 999 : Math.min(stockCount, 999);
 
         if (qty < 1 || qty > maxQty) {
+            // Invalid: delete the reply + old prompt, then re-ask with a fresh force-reply
+            await deleteReply();
+            await deletePrompt();
             const errText = lang === 'en'
-                ? `⚠️ Enter a number between 1 and ${maxQty}.`
-                : `⚠️ Masukkan angka 1 sampai ${maxQty}.`;
+                ? `⚠️ Number must be 1-${maxQty}. Type again:`
+                : `⚠️ Angka harus 1-${maxQty}. Ketik lagi:`;
             try {
-                const warn = await ctx.reply(errText);
-                setTimeout(() => ctx.telegram.deleteMessage(ctx.chat.id, warn.message_id).catch(() => { }), 2500);
+                const reprompt = await ctx.reply(errText, { reply_markup: { force_reply: true } });
+                state.promptMessageId = reprompt.message_id;
+                qtyInputStates.set(userId, state);
             } catch (e) { }
-            return; // stay in state so the user can retry
+            return;
         }
 
-        // Valid — clear state and edit the checkout form to the typed quantity
+        // Valid — clean up chat (delete reply AND prompt), then edit the checkout form above
         qtyInputStates.delete(userId);
+        await deleteReply();
+        await deletePrompt();
+
         const message = await generateCheckoutMessage(product, qty, lang);
         try {
-            await ctx.telegram.editMessageText(state.chatId, state.messageId, undefined, message, {
+            await ctx.telegram.editMessageText(state.chatId, state.checkoutMessageId, undefined, message, {
                 parse_mode: 'HTML',
                 ...quantityKeyboard(maxQty, state.productId, qty, product.category_id, lang)
             });
