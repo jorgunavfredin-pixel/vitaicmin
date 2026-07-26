@@ -222,10 +222,6 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
             const origUsd = await convertFn(product.price_idr);
             const disc = Math.round((1 - effectivePrice / product.price_idr) * 100);
             priceText = `<s>$${formatUSD(origUsd)}</s> → <b>$${formatUSD(usdPrice)}</b> (-${disc}%) 🔥`;
-        } else if (voucherData) {
-            // Voucher applied: strike the original per-pcs price, show effective per-pcs after discount
-            const effUsdPerPcs = order.quantity ? order.total_usd / order.quantity : order.total_usd;
-            priceText = `<s>$${formatUSD(usdPrice)}</s> → <b>$${formatUSD(effUsdPerPcs)}</b>`;
         } else {
             priceText = `$${formatUSD(usdPrice)}`;
         }
@@ -234,10 +230,6 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
         if (isFlash) {
             const disc = Math.round((1 - effectivePrice / product.price_idr) * 100);
             priceText = `<s>Rp ${formatIDR(product.price_idr)}</s> → <b>Rp ${formatIDR(effectivePrice)}</b> (-${disc}%) 🔥`;
-        } else if (voucherData) {
-            // Voucher applied: strike the original per-pcs price, show effective per-pcs after discount
-            const effPerPcs = order.quantity ? Math.round(order.total_idr / order.quantity) : order.total_idr;
-            priceText = `<s>Rp ${formatIDR(effectivePrice)}</s> → <b>Rp ${formatIDR(effPerPcs)}</b>`;
         } else {
             priceText = `Rp ${formatIDR(effectivePrice)}`;
         }
@@ -277,10 +269,10 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
         let subtotalText;
         if (lang === 'en') {
             const originalUSD = order.original_total_usd || await convertFn(order.original_total_idr || order.total_idr);
-            subtotalText = `$${formatUSD(originalUSD)}`;
+            subtotalText = `<s>$${formatUSD(originalUSD)}</s>`;
         } else {
             const originalIDR = order.original_total_idr || order.total_idr;
-            subtotalText = `Rp ${formatIDR(originalIDR)}`;
+            subtotalText = `<s>Rp ${formatIDR(originalIDR)}</s>`;
         }
         msg += `<b>${l.subtotal}:</b> ${subtotalText}\n`;
         msg += `${l.voucherApplied}\n`;

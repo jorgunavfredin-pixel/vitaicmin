@@ -1,24 +1,56 @@
 const path = require('path');
+const fs = require('fs');
 
-const BANNER_PATH = path.join(__dirname, '../../assets/banner.png');
+const ASSETS_DIR = path.join(__dirname, '../../assets');
+// Accepted banner image formats, in priority order (first match wins)
+const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+
 let cachedFileId = null;
 
 /**
- * Get banner source - uses cached file_id after first upload for instant display
- * @returns {string|Object} file_id string or {source: path} for first upload
+ * Find a banner image in assets/ named "banner.<ext>" for any supported format.
+ * Returns the file path, or null if no banner image exists.
  */
-const getBannerSource = () => {
-    return cachedFileId || { source: BANNER_PATH };
+const resolveBannerPath = () => {
+    try {
+        for (const ext of IMAGE_EXTS) {
+            const p = path.join(ASSETS_DIR, `banner${ext}`);
+            if (fs.existsSync(p)) return p;
+        }
+    } catch (e) { /* ignore */ }
+    return null;
 };
 
 /**
- * Send photo with banner, caching file_id for speed
+ * Whether a banner image is available.
+ */
+const hasBanner = () => resolveBannerPath() !== null;
+
+/**
+ * Get banner source - cached file_id after first upload, else {source: path}, else null.
+ */
+const getBannerSource = () => {
+    if (cachedFileId) return cachedFileId;
+    const p = resolveBannerPath();
+    return p ? { source: p } : null;
+};
+
+/**
+ * Send photo with banner, caching file_id for speed.
+ * If no banner image exists, falls back to a plain text message so menus still work.
  * @param {Object} ctx - Telegraf context
  * @param {string} caption - Message text
  * @param {Object} extra - Extra options (parse_mode, reply_markup, etc)
  */
 const replyWithBanner = async (ctx, caption, extra = {}) => {
-    const sent = await ctx.replyWithPhoto(getBannerSource(), {
+    const source = getBannerSource();
+
+    // No banner asset — show text only so the menu still appears
+    if (!source) {
+        return ctx.reply(caption, { parse_mode: 'HTML', ...extra });
+    }
+
+    const sent = await ctx.replyWithPhoto(source, {
         caption,
         parse_mode: 'HTML',
         ...extra
@@ -31,8 +63,8 @@ const replyWithBanner = async (ctx, caption, extra = {}) => {
 };
 
 /**
- * Edit existing photo message caption (banner stays, text changes)
- * Falls back to delete+replyWithPhoto if current message is not a photo
+ * Edit existing photo message caption (banner stays, text changes).
+ * Falls back to delete + resend (photo or text) if current message is not a photo.
  */
 const editBannerCaption = async (ctx, caption, extra = {}) => {
     try {
@@ -41,10 +73,13 @@ const editBannerCaption = async (ctx, caption, extra = {}) => {
             ...extra
         });
     } catch (e) {
-        // Fallback: current message is text, not photo
+        // Fallback: current message is text, not a photo
         try { await ctx.deleteMessage(); } catch (e2) { }
         await replyWithBanner(ctx, caption, extra);
     }
 };
 
-module.exports = { replyWithBanner, editBannerCaption, BANNER_PATH };
+// Backward-compat export (some code references BANNER_PATH)
+const BANNER_PATH = path.join(ASSETS_DIR, 'banner.png');
+
+module.exports = { replyWithBanner, editBannerCaption, hasBanner, BANNER_PATH };

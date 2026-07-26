@@ -12,9 +12,21 @@ let bot = null;
 const initReminderService = (botInstance) => {
     bot = botInstance;
 
-    // Run every minute to check pending orders
+    // Run every minute to check pending orders.
+    // Guard against overlap: if a slow run is still going, skip this tick (node-cron
+    // does not serialize runs, so two overlapping checks could double-handle an order).
+    let isChecking = false;
     cron.schedule('* * * * *', async () => {
-        await checkPendingOrders();
+        if (isChecking) {
+            log.warn('[CRON] Previous order check still running, skipping this tick');
+            return;
+        }
+        isChecking = true;
+        try {
+            await checkPendingOrders();
+        } finally {
+            isChecking = false;
+        }
     });
 
     // Daily purge at 3:00 AM WIB — clean old expired/cancelled data
