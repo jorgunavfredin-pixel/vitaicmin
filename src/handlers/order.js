@@ -466,6 +466,42 @@ const registerOrderHandler = (bot) => {
         });
     });
 
+    // Remove an already-applied voucher ("Hapus Voucher" button)
+    bot.action(/^voucher_remove_(.+)$/, async (ctx) => {
+        const orderId = ctx.match[1];
+        const userId = ctx.from.id.toString();
+        const lang = db.getUserLanguage(userId);
+
+        const order = db.getOrderById(orderId);
+        if (!order || order.user_id !== userId) {
+            await ctx.answerCbQuery('❌ Order not found');
+            return;
+        }
+
+        if (order.voucher_code) {
+            // Restore original totals and clear voucher fields (voucher was never consumed)
+            db.updateOrder(orderId, {
+                voucher_code: null,
+                discount_amount: 0,
+                total_idr: order.original_total_idr || order.total_idr,
+                total_usd: order.original_total_usd || order.total_usd,
+                original_total_idr: null,
+                original_total_usd: null
+            });
+        }
+
+        await ctx.answerCbQuery(lang === 'en' ? '🗑️ Voucher removed' : '🗑️ Voucher dihapus');
+
+        const updatedOrder = db.getOrderById(orderId);
+        const confirmMsg = await buildPaymentConfirmation(updatedOrder, lang, db, convertIDRtoUSD);
+
+        try { await ctx.deleteMessage(); } catch (e) { }
+        await ctx.reply(confirmMsg, {
+            parse_mode: 'HTML',
+            ...paymentMethodKeyboard(orderId, lang)
+        });
+    });
+
     // Text handler for voucher code input
     bot.on('text', async (ctx, next) => {
         const userId = ctx.from.id.toString();
@@ -482,11 +518,12 @@ const registerOrderHandler = (bot) => {
         // Validate voucher
         const voucher = db.getVoucherByCode(code);
 
-        if (!voucher || voucher.used) {
-            // FAIL: show error, wait 3s, replace with original form
+        if (!voucher || db.hasUserRedeemedVoucher(code, userId)) {
+            // FAIL: show error, wait 3s, replace with original form.
+            // Per-user rule: a code is valid once PER user (checked via voucher_redemptions).
             const errorMsg = !voucher
                 ? (lang === 'en' ? '❌ Voucher code not found.' : '❌ Kode voucher tidak ditemukan.')
-                : (lang === 'en' ? '❌ This voucher has already been used.' : '❌ Voucher ini sudah digunakan.');
+                : (lang === 'en' ? '❌ You have already used this voucher.' : '❌ Kamu sudah pernah pakai voucher ini.');
 
             const sentMsg = await ctx.reply(errorMsg);
 
@@ -510,8 +547,8 @@ const registerOrderHandler = (bot) => {
         const finalPrice = order.total_idr - discountAmount;
         const finalUSD = await convertIDRtoUSD(finalPrice);
 
-        // Mark voucher as used
-        db.useVoucher(code, userId);
+        // NOTE: voucher is NOT consumed here. It's only recorded as redeemed at
+        // payment success (delivery.js), so an abandoned/cancelled order never burns it.
 
         // Update order with voucher info
         db.updateOrder(orderId, {

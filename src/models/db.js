@@ -123,6 +123,17 @@ try {
   console.log('[DB] Added reservation columns to stock table');
 }
 
+// Migration: add voucher columns to orders (so applied voucher persists)
+try {
+  db.prepare('SELECT voucher_code FROM orders LIMIT 1').get();
+} catch (e) {
+  db.exec('ALTER TABLE orders ADD COLUMN voucher_code TEXT');
+  db.exec('ALTER TABLE orders ADD COLUMN discount_amount INTEGER DEFAULT 0');
+  db.exec('ALTER TABLE orders ADD COLUMN original_total_idr INTEGER');
+  db.exec('ALTER TABLE orders ADD COLUMN original_total_usd REAL');
+  console.log('[DB] Added voucher columns to orders table');
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -168,6 +179,16 @@ db.exec(`
     created_at TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_balhist_user ON balance_history(user_id);
+
+  CREATE TABLE IF NOT EXISTS voucher_redemptions (
+    id TEXT PRIMARY KEY,
+    voucher_code TEXT,
+    user_id TEXT,
+    order_id TEXT,
+    redeemed_at TEXT,
+    UNIQUE(voucher_code, user_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_vred_user ON voucher_redemptions(user_id);
 `);
 
 // ==================== JSON → SQLite MIGRATION ====================
@@ -500,7 +521,7 @@ const updateOrder = (orderId, updates) => {
   const order = getOrderById(orderId);
   if (!order) return null;
   const merged = { ...order, ...updates };
-  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, orderId);
+  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, orderId);
   return getOrderById(orderId);
 };
 
@@ -666,6 +687,25 @@ const calculateDiscount = (totalIDR, voucher) => {
   }
 };
 
+// Per-user voucher usage: a code can be redeemed once PER user (not globally single-use).
+const hasUserRedeemedVoucher = (code, userId) => {
+  const r = db.prepare('SELECT 1 FROM voucher_redemptions WHERE voucher_code = UPPER(?) AND user_id = ?').get(code, userId);
+  return !!r;
+};
+
+// Record a redemption at payment success. Returns false if this user already redeemed the code.
+const redeemVoucher = (code, userId, orderId) => {
+  try {
+    const id = `VRD-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    db.prepare('INSERT INTO voucher_redemptions (id, voucher_code, user_id, order_id, redeemed_at) VALUES (?, UPPER(?), ?, ?, ?)')
+      .run(id, code, userId, orderId, new Date().toISOString());
+    return true;
+  } catch (e) {
+    // UNIQUE(voucher_code, user_id) violation → already redeemed by this user
+    return false;
+  }
+};
+
 // ==================== SETTINGS ====================
 const getSettings = () => {
   const defaults = { maintenance: false, qris_enabled: true, saldo_enabled: true };
@@ -756,7 +796,7 @@ module.exports = {
   // Stats
   getStats, getDetailedStats, getTopSpenders,
   // Vouchers
-  getVouchers, getVoucherByCode, createVoucher, useVoucher, deleteVoucher, calculateDiscount,
+  getVouchers, getVoucherByCode, createVoucher, useVoucher, deleteVoucher, calculateDiscount, hasUserRedeemedVoucher, redeemVoucher,
   // Settings
   getSettings, updateSettings,
   // Flash Sale

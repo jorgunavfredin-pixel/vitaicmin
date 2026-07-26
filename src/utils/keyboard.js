@@ -505,10 +505,16 @@ const paymentMethodKeyboard = (orderId, lang = 'id') => {
     const settings = db.getSettings();
 
     const texts = {
-        id: { qris: '📱 QRIS', saldo: '💰 Saldo', voucher: '🎟️ Pakai Voucher', cancel: '❌ Batalkan' },
-        en: { qris: '📱 QRIS (ID E-Wallet)', saldo: '💰 Balance', voucher: '🎟️ Apply Voucher', cancel: '❌ Cancel' }
+        id: { qris: '📱 QRIS', saldo: '💰 Saldo', voucher: '🎟️ Pakai Voucher', removeVoucher: '❌ Hapus Voucher', cancel: '❌ Batalkan' },
+        en: { qris: '📱 QRIS (ID E-Wallet)', saldo: '💰 Balance', voucher: '🎟️ Apply Voucher', removeVoucher: '❌ Remove Voucher', cancel: '❌ Cancel' }
     };
     const t = texts[lang] || texts.id;
+
+    // Toggle voucher button: "Pakai" if none applied, "Hapus" if one is already applied
+    const order = db.getOrderById(orderId);
+    const voucherBtn = order && order.voucher_code
+        ? Markup.button.callback(t.removeVoucher, `voucher_remove_${orderId}`)
+        : Markup.button.callback(t.voucher, `voucher_apply_${orderId}`);
 
     const qrisBtn = settings.qris_enabled
         ? Markup.button.callback(t.qris, `pay_qris_${orderId}`)
@@ -520,7 +526,7 @@ const paymentMethodKeyboard = (orderId, lang = 'id') => {
 
     return Markup.inlineKeyboard([
         [qrisBtn, saldoBtn],
-        [Markup.button.callback(t.voucher, `voucher_apply_${orderId}`)],
+        [voucherBtn],
         [Markup.button.callback(t.cancel, `pay_cancel_${orderId}`)]
     ]);
 };

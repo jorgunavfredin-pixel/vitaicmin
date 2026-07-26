@@ -278,6 +278,11 @@ const handlePaymentSuccess = async (bot, orderId, paymentData = {}) => {
             delivered_data: stockToDeliver.map(s => s.data)
         });
 
+        // Record voucher redemption ONLY now that payment succeeded (per-user single use).
+        if (order.voucher_code) {
+            db.redeemVoucher(order.voucher_code, order.user_id, orderId);
+        }
+
         // Get user language
         const lang = db.getUserLanguage(order.user_id);
 

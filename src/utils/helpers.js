@@ -170,6 +170,21 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
     const isFlash = db.isFlashSaleActive(product);
     const effectivePrice = db.getEffectivePrice(product);
 
+    // Derive voucher display from the persisted order when not explicitly provided,
+    // so re-renders (remove / cancel / re-select) stay consistent with the applied voucher.
+    if (!voucherData && order.voucher_code) {
+        const v = db.getVoucherByCode(order.voucher_code);
+        let discountDesc;
+        if (v && v.type === 'percent') {
+            discountDesc = lang === 'en' ? `${v.value}% OFF` : `Diskon ${v.value}%`;
+        } else if (lang === 'en') {
+            discountDesc = `-$${formatUSD(await convertFn(order.discount_amount || 0))}`;
+        } else {
+            discountDesc = `-Rp ${formatIDR(order.discount_amount || 0)}`;
+        }
+        voucherData = { code: order.voucher_code, discountDesc };
+    }
+
     const l = lang === 'en' ? {
         title: '🧾 <b>Payment Confirmation</b>',
         status: 'Status: Waiting for payment ⏳',
