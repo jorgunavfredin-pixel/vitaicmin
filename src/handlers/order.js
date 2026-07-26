@@ -440,7 +440,7 @@ const registerOrderHandler = (bot) => {
         await ctx.reply(prompt, {
             parse_mode: 'Markdown',
             reply_markup: {
-                inline_keyboard: [[{ text: lang === 'en' ? '❌ Cancel' : '❌ Batal', callback_data: `voucher_cancel_${orderId}` }]]
+                inline_keyboard: [[{ text: lang === 'en' ? '✘ Cancel' : '✘ Batal', callback_data: `voucher_cancel_${orderId}` }]]
             }
         });
     });
