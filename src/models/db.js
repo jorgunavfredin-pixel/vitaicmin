@@ -337,6 +337,11 @@ const getAvailableStockCount = (productId) => {
   return r.cnt;
 };
 
+// Deliverable stock for fallback path (saldo/unlimited): unsold AND not reserved by any pending order
+const getUnsoldUnreservedStock = (productId) => {
+  return db.prepare('SELECT * FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NULL').all(productId);
+};
+
 const reserveStock = (productId, quantity, orderId) => {
   const available = db.prepare('SELECT id FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NULL LIMIT ?').all(productId, quantity);
   if (available.length < quantity) {
@@ -502,6 +507,13 @@ const updateOrder = (orderId, updates) => {
 const deleteOrder = (orderId) => {
   db.prepare('DELETE FROM orders WHERE id = ?').run(orderId);
   return true;
+};
+
+// Atomically claim an order for payment processing (prevents double-tap double-charge).
+// Returns true only for the ONE caller that flips it out of init/pending; concurrent taps get false.
+const claimOrderForPayment = (orderId) => {
+  const result = db.prepare("UPDATE orders SET status = 'processing' WHERE id = ? AND status IN ('init', 'pending')").run(orderId);
+  return result.changes === 1;
 };
 
 // ==================== USERS ====================
@@ -736,9 +748,9 @@ module.exports = {
   // Products
   getProducts, getProductsByCategory, getProductById, addProduct, updateProduct, deleteProduct,
   // Stock
-  getStock, getStockByProduct, getAvailableStockCount, addStock, addBulkStock, markStockAsSold, restoreStock, deleteStock, clearProductStock, removeLastStock, reserveStock, releaseReservedStock, getReservedStock,
+  getStock, getStockByProduct, getAvailableStockCount, getUnsoldUnreservedStock, addStock, addBulkStock, markStockAsSold, restoreStock, deleteStock, clearProductStock, removeLastStock, reserveStock, releaseReservedStock, getReservedStock,
   // Orders
-  getOrders, getOrderById, getOrdersByUser, getPendingOrders, generateOrderId, createOrder, updateOrder, deleteOrder,
+  getOrders, getOrderById, getOrdersByUser, getPendingOrders, generateOrderId, createOrder, updateOrder, deleteOrder, claimOrderForPayment,
   // Users
   getUsers, getUser, createOrUpdateUser, setUserLanguage, getUserLanguage,
   // Stats

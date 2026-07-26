@@ -267,10 +267,15 @@ const shutdown = (signal) => {
 process.once('SIGINT', () => shutdown('SIGINT'));
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 
-// Handle crash — prevent zombie process holding port
+// Handle uncaught errors — log and KEEP SERVING instead of tearing the whole bot down.
+// A single stray throw (timer callback, malformed webhook, etc.) used to trigger a full
+// shutdown that required a manual restart. We'd rather stay up and log the incident.
 process.on('uncaughtException', (err) => {
-    console.error('💥 Uncaught Exception:', err.message);
-    shutdown('CRASH');
+    log.error('💥 Uncaught Exception (bot kept alive):', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+    log.error('💥 Unhandled Rejection (bot kept alive):', reason);
 });
 
 // Start the bot

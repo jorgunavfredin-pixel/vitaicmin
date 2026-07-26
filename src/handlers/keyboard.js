@@ -108,8 +108,16 @@ const generateCategoryButtons = (categories, page, lang) => {
  * @param {Object} bot - Telegraf bot instance
  */
 const registerKeyboardHandler = (bot) => {
+    // Store topup input states (userId -> true). Declared up-front so the menu
+    // navigation handlers below can clear it when the user leaves the Saldo menu.
+    const topupInputStates = new Map();
+    // H4: drop stale topup state whenever the user taps another menu button,
+    // so a leaked state never swallows voucher/admin text input later.
+    const clearTopupState = (ctx) => { if (ctx.from) topupInputStates.delete(ctx.from.id.toString()); };
+
     // List Produk - show numbered category list
     bot.hears(['🛒 List Produk', '🛒 Products'], async (ctx) => {
+        clearTopupState(ctx);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
 
@@ -417,6 +425,7 @@ const registerKeyboardHandler = (bot) => {
     };
 
     bot.hears(['📦 Cek Stok', '📦 Check Stock'], async (ctx) => {
+        clearTopupState(ctx);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
 
@@ -512,6 +521,7 @@ const registerKeyboardHandler = (bot) => {
     };
 
     bot.hears(['🧾 Riwayat', '🧾 History'], async (ctx) => {
+        clearTopupState(ctx);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
         const locale = require(`../locales/${lang}`);
@@ -560,6 +570,7 @@ const registerKeyboardHandler = (bot) => {
 
     // Ganti Bahasa
     bot.hears(['🌐 Bahasa', '🌐 Language'], async (ctx) => {
+        clearTopupState(ctx);
         const localeId = require('../locales/id');
         await ctx.reply(localeId.select_language, {
             parse_mode: 'Markdown',
@@ -569,6 +580,7 @@ const registerKeyboardHandler = (bot) => {
 
     // Customer Service
     bot.hears(['📞 CS', '📞 Customer Service'], async (ctx) => {
+        clearTopupState(ctx);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
         const locale = require(`../locales/${lang}`);
@@ -577,9 +589,6 @@ const registerKeyboardHandler = (bot) => {
     });
 
     // ==================== SALDO / BALANCE ====================
-
-    // Store topup input states (userId -> true)
-    const topupInputStates = new Map();
 
     const storeName = process.env.STORE_NAME || 'Store';
 

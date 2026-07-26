@@ -347,6 +347,13 @@ const registerOrderHandler = (bot) => {
             return;
         }
 
+        // H1: atomically claim this order so a rapid double-tap can't charge twice.
+        // Only ONE invocation flips it out of init/pending; a concurrent tap gets false and bails.
+        if (!db.claimOrderForPayment(orderId)) {
+            await ctx.answerCbQuery(lang === 'en' ? '⏳ Already being processed...' : '⏳ Order sedang diproses...');
+            return;
+        }
+
         await ctx.answerCbQuery(lang === 'en' ? '💰 Processing...' : '💰 Memproses...');
 
         // Check stock availability one more time before instant payment
@@ -369,6 +376,7 @@ const registerOrderHandler = (bot) => {
         const result = deductBalance(userId, order.total_idr, orderId, `Beli ${productName} x${order.quantity}`);
 
         if (!result) {
+            db.updateOrder(orderId, { status: 'init' }); // revert claim so the user can retry
             const errMsg = lang === 'en' ? '❌ Failed to deduct balance.' : '❌ Gagal memotong saldo.';
             await ctx.answerCbQuery(errMsg, { show_alert: true });
             return;

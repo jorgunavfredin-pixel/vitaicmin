@@ -34,8 +34,9 @@ const deliverOrder = async (bot, orderId) => {
         if (reservedStock.length >= order.quantity) {
             stockToDeliver = reservedStock.slice(0, order.quantity);
         } else {
-            // Fallback: unlimited mode or legacy orders without reservation
-            const availableStock = db.getStockByProduct(order.product_id);
+            // Fallback: unlimited mode or legacy orders without reservation.
+            // Use unreserved stock only, so a saldo order never grabs another order's reserved items.
+            const availableStock = db.getUnsoldUnreservedStock(order.product_id);
             if (availableStock.length < order.quantity) {
                 log.error(`Not enough stock for order ${orderId}`);
                 await notifyAdminStockIssue(bot, orderId, product, order.quantity, availableStock.length);
@@ -252,8 +253,9 @@ const handlePaymentSuccess = async (bot, orderId, paymentData = {}) => {
         if (reservedStock.length >= order.quantity) {
             stockToDeliver = reservedStock.slice(0, order.quantity);
         } else {
-            // Fallback: unlimited mode or legacy orders without reservation
-            const availableStock = db.getStockByProduct(order.product_id);
+            // Fallback: unlimited mode or legacy orders without reservation.
+            // Use unreserved stock only, so a saldo order never grabs another order's reserved items.
+            const availableStock = db.getUnsoldUnreservedStock(order.product_id);
             if (availableStock.length < order.quantity && product.stock_mode !== 'unlimited') {
                 log.error(`Not enough stock for order ${orderId}`);
                 await notifyAdminStockIssue(bot, orderId, product, order.quantity, availableStock.length);
