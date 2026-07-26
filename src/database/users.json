@@ -1,0 +1,490 @@
+{
+  "236374162": {
+    "username": "agantava",
+    "first_name": "Oktava",
+    "last_name": "Nur H",
+    "updated_at": "2026-02-17T05:06:07.415Z",
+    "created_at": "2026-02-17T05:03:44.299Z",
+    "language": "id"
+  },
+  "408082179": {
+    "username": "TangTingPrut",
+    "first_name": " e = mc²",
+    "last_name": null,
+    "updated_at": "2026-02-17T13:17:46.515Z",
+    "created_at": "2026-02-17T13:17:42.950Z",
+    "language": "id"
+  },
+  "469389970": {
+    "username": "nadyasaff",
+    "first_name": "Nadya",
+    "last_name": "Safira",
+    "updated_at": "2026-02-10T04:56:23.383Z",
+    "created_at": "2026-02-10T04:56:16.409Z",
+    "language": "en"
+  },
+  "541900896": {
+    "username": "GREEBEL",
+    "first_name": "Aldi | Jasver Jaspay Vcc for Gemini",
+    "last_name": null,
+    "updated_at": "2026-02-20T05:27:33.004Z",
+    "created_at": "2026-02-09T15:33:42.370Z",
+    "language": "id",
+    "banned": false
+  },
+  "569361231": {
+    "username": "Pern1k",
+    "first_name": "Sasha",
+    "last_name": "Pernik",
+    "updated_at": "2026-02-12T16:51:37.410Z",
+    "created_at": "2026-02-12T16:51:34.993Z",
+    "language": "en"
+  },
+  "710591709": {
+    "username": "Liberman77",
+    "first_name": "👽",
+    "last_name": null,
+    "updated_at": "2026-02-21T08:27:39.698Z",
+    "created_at": "2026-02-13T06:14:10.871Z",
+    "language": "id"
+  },
+  "816793627": {
+    "username": "marketgogreen",
+    "first_name": "z",
+    "last_name": null,
+    "updated_at": "2026-02-12T07:41:37.580Z",
+    "created_at": "2026-02-12T07:41:35.578Z",
+    "language": "id"
+  },
+  "821847348": {
+    "username": "squirtword",
+    "first_name": "🌏 | [GUINZLY]",
+    "last_name": null,
+    "updated_at": "2026-02-21T00:49:28.579Z",
+    "created_at": "2026-02-21T00:49:25.932Z",
+    "language": "id"
+  },
+  "977715720": {
+    "username": "shuujin",
+    "first_name": "Sad",
+    "last_name": "Rii rii",
+    "updated_at": "2026-02-15T23:17:49.169Z",
+    "created_at": "2026-02-15T23:17:46.875Z",
+    "language": "id"
+  },
+  "1025424832": {
+    "username": "tasngab",
+    "first_name": "fiqri",
+    "last_name": null,
+    "updated_at": "2026-02-16T16:50:03.842Z",
+    "created_at": "2026-02-16T16:50:01.649Z",
+    "language": "id"
+  },
+  "1196701683": {
+    "username": "LARAPELIKU",
+    "first_name": "Pecasndahe",
+    "last_name": null,
+    "updated_at": "2026-02-13T16:35:45.393Z",
+    "created_at": "2026-02-13T16:35:41.925Z",
+    "language": "id"
+  },
+  "1242514201": {
+    "username": "Oki_dokiy",
+    "first_name": "Yo",
+    "last_name": null,
+    "updated_at": "2026-02-13T11:17:16.393Z",
+    "created_at": "2026-02-13T11:17:09.050Z",
+    "language": "en"
+  },
+  "1259730340": {
+    "username": "jiseaa",
+    "first_name": "seaa;",
+    "last_name": "avail appmuz cc etc.",
+    "updated_at": "2026-02-16T10:42:51.333Z",
+    "created_at": "2026-02-16T10:42:48.503Z",
+    "language": "id"
+  },
+  "1304639423": {
+    "username": "wleowleooa",
+    "first_name": "ap iyh",
+    "last_name": null,
+    "updated_at": "2026-02-17T05:48:44.603Z",
+    "created_at": "2026-02-17T05:48:13.755Z",
+    "language": "id"
+  },
+  "1342888675": {
+    "username": "OmarDP",
+    "first_name": "OmarDP",
+    "last_name": null,
+    "updated_at": "2026-02-15T12:15:52.473Z",
+    "created_at": "2026-02-15T12:15:29.869Z",
+    "language": "en"
+  },
+  "1382834902": {
+    "username": "ntpsbl",
+    "first_name": "Shoprem 🐨",
+    "last_name": null,
+    "updated_at": "2026-02-12T08:31:31.344Z",
+    "created_at": "2026-02-12T08:31:27.445Z",
+    "language": "id"
+  },
+  "1472779842": {
+    "username": "samsudiiin",
+    "first_name": "cybee",
+    "last_name": null,
+    "updated_at": "2026-02-12T08:52:55.005Z",
+    "created_at": "2026-02-12T08:52:42.712Z",
+    "language": "id"
+  },
+  "1575124611": {
+    "username": "egiapp",
+    "first_name": "Egi",
+    "last_name": null,
+    "updated_at": "2026-02-16T16:58:45.546Z",
+    "created_at": "2026-02-16T16:58:42.603Z",
+    "language": "id"
+  },
+  "1693706671": {
+    "username": "lisa_miss",
+    "first_name": "Lisa",
+    "last_name": null,
+    "updated_at": "2026-02-16T09:46:00.890Z",
+    "created_at": "2026-02-16T09:45:58.538Z",
+    "language": "en"
+  },
+  "1732476275": {
+    "username": "erladitia",
+    "first_name": "Erlangga",
+    "last_name": "Aditia",
+    "updated_at": "2026-02-17T05:32:25.386Z",
+    "created_at": "2026-02-17T05:32:23.511Z",
+    "language": "id"
+  },
+  "1908897261": {
+    "username": "yuriot",
+    "first_name": "Arvello",
+    "last_name": null,
+    "updated_at": "2026-02-17T18:12:29.121Z",
+    "created_at": "2026-02-09T14:56:51.704Z",
+    "language": "id"
+  },
+  "1999116364": {
+    "username": "feyyjvdx",
+    "first_name": "feyy",
+    "last_name": null,
+    "updated_at": "2026-02-12T12:15:17.983Z",
+    "created_at": "2026-02-12T12:15:14.840Z",
+    "language": "id"
+  },
+  "6492547068": {
+    "username": "Genfuka",
+    "first_name": "VortexMind",
+    "last_name": null,
+    "updated_at": "2026-02-17T18:50:04.151Z",
+    "created_at": "2026-02-09T15:42:40.889Z",
+    "language": "id"
+  },
+  "6211996664": {
+    "username": "ChaYunwook",
+    "first_name": "SalimStore | open prime bulk, scribd gp",
+    "last_name": null,
+    "updated_at": "2026-02-11T11:13:12.962Z",
+    "created_at": "2026-02-11T06:39:03.746Z",
+    "language": "id"
+  },
+  "8478729652": {
+    "username": "OwnerVixPedia",
+    "first_name": "Mark | Vix Pedia Owner",
+    "last_name": null,
+    "updated_at": "2026-02-12T07:33:24.430Z",
+    "created_at": "2026-02-12T07:33:22.247Z",
+    "language": "id"
+  },
+  "8185932092": {
+    "username": "Moodself_1",
+    "first_name": "Mood",
+    "last_name": null,
+    "updated_at": "2026-02-15T15:31:46.281Z",
+    "created_at": "2026-02-12T07:38:40.922Z",
+    "language": "id"
+  },
+  "8142557924": {
+    "username": "skeptisnew",
+    "first_name": "Cassius",
+    "last_name": null,
+    "updated_at": "2026-02-12T07:44:38.915Z",
+    "created_at": "2026-02-12T07:44:22.198Z",
+    "language": "id"
+  },
+  "5508113474": {
+    "username": "megatrons",
+    "first_name": "𝗔𝘆𝗱𝗼𝗼𝗻",
+    "last_name": null,
+    "updated_at": "2026-02-18T05:08:18.567Z",
+    "created_at": "2026-02-12T07:46:03.750Z",
+    "language": "id"
+  },
+  "5568156602": {
+    "username": "snowycrytalz",
+    "first_name": "Snowy",
+    "last_name": "Crystal",
+    "updated_at": "2026-02-12T08:01:10.740Z",
+    "created_at": "2026-02-12T08:01:08.607Z",
+    "language": "id"
+  },
+  "6466499098": {
+    "username": "familysetiawanfbgreen",
+    "first_name": "family",
+    "last_name": "setiawanfbgreen",
+    "updated_at": "2026-02-12T08:13:01.870Z",
+    "created_at": "2026-02-12T08:12:58.673Z",
+    "language": "id"
+  },
+  "8284274123": {
+    "username": "w4dewilson",
+    "first_name": "Cs monarking.id",
+    "last_name": null,
+    "updated_at": "2026-02-12T08:13:48.675Z",
+    "created_at": "2026-02-12T08:13:28.829Z",
+    "language": "id"
+  },
+  "7251635476": {
+    "username": "SzeiBjordhil",
+    "first_name": "Szei.",
+    "last_name": null,
+    "updated_at": "2026-02-12T09:18:34.989Z",
+    "created_at": "2026-02-12T09:18:32.737Z",
+    "language": "id"
+  },
+  "7789906496": {
+    "username": null,
+    "first_name": "Boldkhuu",
+    "last_name": "Bumerdene",
+    "updated_at": "2026-02-12T09:31:58.676Z",
+    "created_at": "2026-02-12T09:31:47.682Z",
+    "language": "en"
+  },
+  "6381035144": {
+    "username": "Devonsz",
+    "first_name": "Devonsz",
+    "last_name": null,
+    "updated_at": "2026-02-12T09:37:00.437Z",
+    "created_at": "2026-02-12T09:36:56.911Z",
+    "language": "en"
+  },
+  "6829868590": {
+    "username": null,
+    "first_name": "Belief",
+    "last_name": null,
+    "updated_at": "2026-02-12T09:56:22.951Z",
+    "created_at": "2026-02-12T09:56:05.251Z",
+    "language": "en"
+  },
+  "5705902934": {
+    "username": "Godnikka99",
+    "first_name": "inYourdreaM",
+    "last_name": null,
+    "updated_at": "2026-02-12T16:03:14.906Z",
+    "created_at": "2026-02-12T16:03:12.534Z",
+    "language": "id"
+  },
+  "5899359880": {
+    "username": "bebekgmail",
+    "first_name": "bastian",
+    "last_name": null,
+    "updated_at": "2026-02-13T06:14:23.375Z",
+    "created_at": "2026-02-13T06:14:21.108Z",
+    "language": "id"
+  },
+  "7132630322": {
+    "username": "Qween_shop1",
+    "first_name": "Qween",
+    "last_name": null,
+    "updated_at": "2026-02-13T09:59:00.540Z",
+    "created_at": "2026-02-13T09:58:40.126Z",
+    "language": "id"
+  },
+  "7566954582": {
+    "username": "DigiFlowStore",
+    "first_name": "DigiFlow",
+    "last_name": null,
+    "updated_at": "2026-02-21T05:04:06.963Z",
+    "created_at": "2026-02-13T10:13:44.808Z",
+    "language": "en"
+  },
+  "8547368723": {
+    "username": "HensxD",
+    "first_name": "Hens",
+    "last_name": null,
+    "updated_at": "2026-02-13T10:18:57.827Z",
+    "created_at": "2026-02-13T10:18:45.131Z",
+    "language": "id"
+  },
+  "6125673782": {
+    "username": "faraz00oo",
+    "first_name": "faͥraͣzͫ🎭",
+    "last_name": null,
+    "updated_at": "2026-02-13T10:38:26.491Z",
+    "created_at": "2026-02-13T10:38:09.980Z",
+    "language": "en"
+  },
+  "7995836718": {
+    "username": null,
+    "first_name": "A",
+    "last_name": null,
+    "updated_at": "2026-02-13T14:56:10.909Z",
+    "created_at": "2026-02-13T11:18:27.605Z",
+    "language": "id"
+  },
+  "5391575599": {
+    "username": "Douglasmc27",
+    "first_name": "Jazzydoug",
+    "last_name": null,
+    "updated_at": "2026-02-13T11:56:55.780Z",
+    "created_at": "2026-02-13T11:56:53.605Z",
+    "language": "id"
+  },
+  "7808642803": {
+    "username": "askldhajhdkad",
+    "first_name": "Drakor",
+    "last_name": null,
+    "updated_at": "2026-02-13T12:44:05.003Z",
+    "created_at": "2026-02-13T12:44:02.749Z",
+    "language": "id"
+  },
+  "5615270454": {
+    "username": "toetsuro",
+    "first_name": "luMine 2nd backup",
+    "last_name": null,
+    "updated_at": "2026-02-13T16:39:47.561Z",
+    "created_at": "2026-02-13T14:57:50.947Z",
+    "language": "id"
+  },
+  "6341798611": {
+    "username": "sisecto",
+    "first_name": "Rifky",
+    "last_name": "Ramadhani",
+    "updated_at": "2026-02-14T05:09:21.446Z",
+    "created_at": "2026-02-14T05:09:19.080Z",
+    "language": "id"
+  },
+  "6106285473": {
+    "username": "wanxxprst",
+    "first_name": "wanxzzy",
+    "last_name": null,
+    "updated_at": "2026-02-14T13:44:48.131Z",
+    "created_at": "2026-02-14T13:44:45.357Z",
+    "language": "id"
+  },
+  "6307259309": {
+    "username": "Naza4store",
+    "first_name": "NAZA",
+    "last_name": "Store",
+    "updated_at": "2026-02-14T17:59:21.164Z",
+    "created_at": "2026-02-14T17:59:15.629Z",
+    "language": "id"
+  },
+  "7270604709": {
+    "username": "smthbiy",
+    "first_name": "odyssey, rilley!",
+    "last_name": null,
+    "updated_at": "2026-02-15T03:40:05.755Z",
+    "created_at": "2026-02-15T03:40:05.755Z"
+  },
+  "8176008495": {
+    "username": "rexqqz",
+    "first_name": "XhaiBatosai",
+    "last_name": null,
+    "updated_at": "2026-02-15T04:53:38.953Z",
+    "created_at": "2026-02-15T04:53:36.100Z",
+    "language": "id"
+  },
+  "8576727656": {
+    "username": "Gad2200",
+    "first_name": "Master",
+    "last_name": "💎",
+    "updated_at": "2026-02-15T11:40:24.805Z",
+    "created_at": "2026-02-15T11:39:56.354Z",
+    "language": "en"
+  },
+  "5636976233": {
+    "username": "iykoou",
+    "first_name": "Canon",
+    "last_name": "♪ カノン",
+    "updated_at": "2026-02-15T23:18:39.026Z",
+    "created_at": "2026-02-15T23:18:36.830Z",
+    "language": "id"
+  },
+  "6158934867": {
+    "username": "arielboy19",
+    "first_name": "🆙 UXUY Ariel",
+    "last_name": "Septiadi 🦒 🐾 ✌️Yescoiner 🌱SEED",
+    "updated_at": "2026-02-18T10:47:43.355Z",
+    "created_at": "2026-02-16T14:36:29.407Z",
+    "language": "id"
+  },
+  "8229752657": {
+    "username": "alangpusingv2",
+    "first_name": "𝙂𝘼𝙇𝘼𝙉𝙂",
+    "last_name": "V2",
+    "updated_at": "2026-02-18T14:43:52.601Z",
+    "created_at": "2026-02-16T16:01:17.936Z",
+    "language": "id"
+  },
+  "7475939789": {
+    "username": "juy_market",
+    "first_name": "Juy [] open slow ress",
+    "last_name": null,
+    "updated_at": "2026-02-17T05:02:29.039Z",
+    "created_at": "2026-02-17T05:02:25.691Z",
+    "language": "id"
+  },
+  "5554857737": {
+    "username": "fauzy_aeros",
+    "first_name": "FAUZY AEROS | recovery",
+    "last_name": null,
+    "updated_at": "2026-02-17T07:31:20.031Z",
+    "created_at": "2026-02-17T07:31:17.561Z",
+    "language": "id"
+  },
+  "6506934696": {
+    "username": "Art123480",
+    "first_name": "𝐂𝐂",
+    "last_name": "𝕱𝐓 𝐇𝟐𝐇엘",
+    "updated_at": "2026-02-19T06:21:10.013Z",
+    "created_at": "2026-02-17T13:55:19.594Z",
+    "language": "id"
+  },
+  "7999563354": {
+    "username": "Navadigital",
+    "first_name": "NAVA",
+    "last_name": "DIGITAL",
+    "updated_at": "2026-02-17T15:37:53.611Z",
+    "created_at": "2026-02-17T15:37:51.083Z",
+    "language": "id"
+  },
+  "7041594356": {
+    "username": "Huansib",
+    "first_name": "Nicebah",
+    "last_name": null,
+    "updated_at": "2026-02-18T13:36:24.784Z",
+    "created_at": "2026-02-18T13:36:22.154Z",
+    "language": "id"
+  },
+  "5415853692": {
+    "username": "Gestun_SPL",
+    "first_name": "Git",
+    "last_name": null,
+    "updated_at": "2026-02-19T03:42:49.436Z",
+    "created_at": "2026-02-19T03:42:46.554Z",
+    "language": "id"
+  },
+  "6567373681": {
+    "username": "AstaStr",
+    "first_name": "Astaaa suka spo",
+    "last_name": null,
+    "updated_at": "2026-02-19T09:53:56.926Z",
+    "created_at": "2026-02-19T09:53:54.854Z",
+    "language": "id"
+  }
+}
