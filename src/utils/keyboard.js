@@ -14,14 +14,14 @@ const navButtons = (backCallback = 'admin_home') => {
 
 // Cancel button for input states
 const cancelButton = () => {
-    return [[Markup.button.callback('❌ Batal', 'admin_cancel')]];
+    return [[Markup.button.callback('✘ Batal', 'admin_cancel')]];
 };
 
 // Confirmation buttons
 const confirmButtons = (yesCallback, noCallback = 'admin_cancel') => {
     return [[
         Markup.button.callback('✅ Ya, Lanjut', yesCallback),
-        Markup.button.callback('❌ Batal', noCallback)
+        Markup.button.callback('✘ Batal', noCallback)
     ]];
 };
 
@@ -54,7 +54,7 @@ const adminDashboardKeyboard = () => {
             Markup.button.callback('💾 Backup DB', 'adm_backup')
         ],
         [
-            Markup.button.callback('🔄 Refresh', 'adm_refresh')
+            Markup.button.callback('⟲ Refresh', 'adm_refresh')
         ]
     ]);
 };
@@ -118,7 +118,7 @@ const categoryDeleteConfirmKeyboard = (categoryId, hasProducts) => {
         buttons.push([Markup.button.callback('✅ Ya, Hapus', `adm_cat_fixdel_${categoryId}`)]);
     }
 
-    buttons.push([Markup.button.callback('❌ Batal', `adm_cat_view_${categoryId}`)]);
+    buttons.push([Markup.button.callback('✘ Batal', `adm_cat_view_${categoryId}`)]);
     return Markup.inlineKeyboard(buttons);
 };
 
@@ -182,7 +182,7 @@ const productViewKeyboard = (productId, categoryId, product = null) => {
     if (isFlashActive) {
         buttons.push([
             Markup.button.callback('📣 Broadcast FS', `adm_fs_broadcast_${productId}`),
-            Markup.button.callback('❌ Stop Flash Sale', `adm_fs_stop_${productId}`)
+            Markup.button.callback('✘ Stop Flash Sale', `adm_fs_stop_${productId}`)
         ]);
     } else {
         buttons.push([Markup.button.callback('⚡ Flash Sale', `adm_fs_start_${productId}`)]);
@@ -230,7 +230,7 @@ const stockRemoveKeyboard = (productId) => {
 const stockClearConfirmKeyboard = (productId) => {
     return Markup.inlineKeyboard([
         [Markup.button.callback('⚠️ Ya, Hapus Semua Stok', `adm_stock_fixclear_${productId}`)],
-        [Markup.button.callback('❌ Batal', `adm_stock_prod_${productId}`)]
+        [Markup.button.callback('✘ Batal', `adm_stock_prod_${productId}`)]
     ]);
 };
 
@@ -241,7 +241,7 @@ const ordersListKeyboard = (orders = [], page = 1, totalPages = 1, filter = 'all
 
     // Order buttons (clickable list)
     orders.forEach(o => {
-        const statusIcon = { pending: '⏳', delivered: '✅', expired: '❌', cancelled: '🚫', refunded: '💸' };
+        const statusIcon = { pending: '⏳', delivered: '✅', expired: '✘', cancelled: '🚫', refunded: '💸' };
         const icon = statusIcon[o.status] || '❓';
         const shortId = o.id.replace('VTC-', '');
         const prodName = (o.product_name || 'Item');
@@ -280,7 +280,7 @@ const orderDetailKeyboard = (orderId, status) => {
 
     if (status === 'delivered') {
         buttons.push([
-            Markup.button.callback('🔄 Redeliver', `adm_order_redeliver_${orderId}`),
+            Markup.button.callback('⟲ Redeliver', `adm_order_redeliver_${orderId}`),
             Markup.button.callback('💸 Refund', `adm_order_refund_${orderId}`)
         ]);
         buttons.push([Markup.button.callback('🔁 Replace Account', `adm_order_replace_${orderId}`)]);
@@ -295,21 +295,21 @@ const orderDetailKeyboard = (orderId, status) => {
 const orderDeleteConfirmKeyboard = (orderId) => {
     return Markup.inlineKeyboard([
         [Markup.button.callback('✅ Ya, Hapus', `adm_order_confirm_delete_${orderId}`)],
-        [Markup.button.callback('❌ Batal', `adm_order_view_${orderId}`)]
+        [Markup.button.callback('✘ Batal', `adm_order_view_${orderId}`)]
     ]);
 };
 
 const orderRefundConfirmKeyboard = (orderId) => {
     return Markup.inlineKeyboard([
         [Markup.button.callback('✅ Ya, Refund', `adm_order_confirm_refund_${orderId}`)],
-        [Markup.button.callback('❌ Batal', `adm_order_view_${orderId}`)]
+        [Markup.button.callback('✘ Batal', `adm_order_view_${orderId}`)]
     ]);
 };
 
 const orderReplaceConfirmKeyboard = (orderId) => {
     return Markup.inlineKeyboard([
         [Markup.button.callback('✅ Ya, Replace', `adm_order_confirm_replace_${orderId}`)],
-        [Markup.button.callback('❌ Batal', `adm_order_view_${orderId}`)]
+        [Markup.button.callback('✘ Batal', `adm_order_view_${orderId}`)]
     ]);
 };
 
@@ -505,8 +505,8 @@ const paymentMethodKeyboard = (orderId, lang = 'id') => {
     const settings = db.getSettings();
 
     const texts = {
-        id: { qris: '📱 QRIS', saldo: '💰 Saldo', voucher: '🎟️ Pakai Voucher', removeVoucher: '❌ Hapus Voucher', cancel: '❌ Batalkan' },
-        en: { qris: '📱 QRIS (ID E-Wallet)', saldo: '💰 Balance', voucher: '🎟️ Apply Voucher', removeVoucher: '❌ Remove Voucher', cancel: '❌ Cancel' }
+        id: { qris: '📱 QRIS', saldo: '💰 Saldo', voucher: '🎟️ Pakai Voucher', removeVoucher: '🗑 Hapus Voucher', cancel: '✘ Batalkan' },
+        en: { qris: '📱 QRIS (ID E-Wallet)', saldo: '💰 Balance', voucher: '🎟️ Apply Voucher', removeVoucher: '🗑 Remove Voucher', cancel: '✘ Cancel' }
     };
     const t = texts[lang] || texts.id;
 
@@ -562,8 +562,8 @@ const topupNominalKeyboard = (lang = 'id') => {
 };
 
 const paymentPendingKeyboard = (orderId, lang = 'id') => {
-    const cancelText = lang === 'en' ? '❌ Cancel Order' : '❌ Batalkan Order';
-    const checkText = lang === 'en' ? '🔄 Check Status' : '🔄 Cek Status';
+    const cancelText = lang === 'en' ? '✘ Cancel Order' : '✘ Batalkan Order';
+    const checkText = lang === 'en' ? '⟲ Check Status' : '⟲ Cek Status';
 
     return Markup.inlineKeyboard([
         [Markup.button.callback(checkText, `pay_check_${orderId}`)],
