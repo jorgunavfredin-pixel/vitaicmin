@@ -1,5 +1,5 @@
 const db = require('../models/db');
-const { formatIDR, formatUSD, formatDateWIB, formatStockForUser, replacePlaceholders, notifyAdmins, escapeHtml, safeHtmlSnk } = require('../utils/helpers');
+const { formatIDR, formatUSD, formatDateWIB, formatStockForUser, formatStockForFile, replacePlaceholders, notifyAdmins, escapeHtml, safeHtmlSnk } = require('../utils/helpers');
 const { convertIDRtoUSD } = require('../payments/exchange');
 const log = require('../utils/logger');
 
@@ -85,7 +85,7 @@ const deliverOrder = async (bot, orderId) => {
             const path = require('path');
 
             const txtContent = stockToDeliver.map((stock, index) => {
-                const formatted = formatStockForUser(product.stock_type, stock.data, lang);
+                const formatted = formatStockForFile(product.stock_type, stock.data);
                 return `━━━ ${lang === 'en' ? 'Account' : 'Akun'} ${index + 1} ━━━\n${formatted}`;
             }).join('\n\n');
 
@@ -312,7 +312,7 @@ const handlePaymentSuccess = async (bot, orderId, paymentData = {}) => {
 
             // Build .txt content (accounts only)
             const txtContent = stockToDeliver.map((stock, index) => {
-                const formatted = formatStockForUser(product.stock_type, stock.data, lang);
+                const formatted = formatStockForFile(product.stock_type, stock.data);
                 return `━━━ ${lang === 'en' ? 'Account' : 'Akun'} ${index + 1} ━━━\n${formatted}`;
             }).join('\n\n');
 

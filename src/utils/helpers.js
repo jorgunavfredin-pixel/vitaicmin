@@ -118,6 +118,26 @@ const formatStockForUser = (stockType, data, lang = 'id') => {
     }
 };
 
+// Format stock for a plain-text file (.txt delivery) — NO HTML tags, no escaping
+const formatStockForFile = (stockType, data) => {
+    const parsed = parseStockData(stockType, data);
+
+    switch (stockType) {
+        case 'code':
+            return `🔑 Code: ${parsed.code}`;
+        case 'email_pass':
+            return `📧 Email: ${parsed.email}\n🔐 Password: ${parsed.password}`;
+        case 'email_pass_key':
+            return `📧 Email: ${parsed.email}\n🔐 Password: ${parsed.password}\n🔑 Key: ${parsed.key}`;
+        case 'vcc':
+            return `💳 Card: ${parsed.cardNumber}\n📅 Expiry: ${parsed.expiry}\n🔒 CVV: ${parsed.cvv}`;
+        case 'custom':
+            return parsed.custom.split('|').map(s => s.trim()).join('\n');
+        default:
+            return `📋 Data: ${parsed.raw}`;
+    }
+};
+
 // Template string replacer
 const replacePlaceholders = (template, data) => {
     let result = template;
@@ -376,6 +396,7 @@ module.exports = {
     getRemainingTime,
     parseStockData,
     formatStockForUser,
+    formatStockForFile,
     replacePlaceholders,
     escapeMarkdown,
     escapeHtml,
