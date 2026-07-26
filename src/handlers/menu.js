@@ -101,6 +101,10 @@ async function generateCheckoutMessage(product, quantity, lang) {
  * @param {Object} bot - Telegraf bot instance
  */
 const registerMenuHandler = (bot) => {
+    // Quantity typing states: userId -> { productId, chatId, messageId, categoryId }
+    // Set when user taps the "Ketik jumlah" button on the checkout screen.
+    const qtyInputStates = new Map();
+
     // Show categories / List Produk
     bot.action('menu_categories', async (ctx) => {
         const userId = ctx.from.id.toString();
@@ -432,6 +436,111 @@ const registerMenuHandler = (bot) => {
             parse_mode: 'HTML',
             ...require('../utils/keyboard').paymentMethodKeyboard(order.id, lang)
         });
+    });
+
+    // ===== TYPE QUANTITY (repurposed "Max" button) =====
+
+    // User taps "✍️ Ketik" — turn the checkout into a "type a number" prompt
+    bot.action(/^qtytype_(.+)_(\d+)$/, async (ctx) => {
+        const productId = ctx.match[1];
+        const currentQty = parseInt(ctx.match[2]);
+        const userId = ctx.from.id.toString();
+        const lang = db.getUserLanguage(userId);
+
+        const product = db.getProductById(productId);
+        if (!product) { await ctx.answerCbQuery(); return; }
+        const stockCount = db.getAvailableStockCount(productId);
+        const maxQty = product.stock_mode === 'unlimited' ? 999 : Math.min(stockCount, 999);
+
+        await ctx.answerCbQuery();
+
+        qtyInputStates.set(userId, {
+            productId,
+            chatId: ctx.chat.id,
+            messageId: ctx.callbackQuery.message.message_id,
+            categoryId: product.category_id,
+            prevQty: currentQty
+        });
+
+        const promptMsg = lang === 'en'
+            ? `🔢 <b>Type quantity</b>\n\nSend a number between <b>1</b> and <b>${maxQty}</b> in the chat.`
+            : `🔢 <b>Ketik Jumlah</b>\n\nKirim angka antara <b>1</b> sampai <b>${maxQty}</b> di chat.`;
+        const cancelText = lang === 'en' ? '❌ Cancel' : '❌ Batal';
+
+        try {
+            await ctx.editMessageText(promptMsg, {
+                parse_mode: 'HTML',
+                reply_markup: { inline_keyboard: [[{ text: cancelText, callback_data: `qtytypecancel_${productId}` }]] }
+            });
+        } catch (e) { }
+    });
+
+    // Cancel typing — restore the checkout form with the previous quantity
+    bot.action(/^qtytypecancel_(.+)$/, async (ctx) => {
+        const productId = ctx.match[1];
+        const userId = ctx.from.id.toString();
+        const lang = db.getUserLanguage(userId);
+        const state = qtyInputStates.get(userId);
+        qtyInputStates.delete(userId);
+
+        await ctx.answerCbQuery();
+
+        const product = db.getProductById(productId);
+        if (!product) return;
+        const stockCount = db.getAvailableStockCount(productId);
+        const maxQty = product.stock_mode === 'unlimited' ? 999 : Math.min(stockCount, 999);
+        const qty = Math.min(Math.max(state?.prevQty || 1, 1), maxQty) || 1;
+
+        const message = await generateCheckoutMessage(product, qty, lang);
+        try {
+            await ctx.editMessageText(message, {
+                parse_mode: 'HTML',
+                ...quantityKeyboard(maxQty, productId, qty, product.category_id, lang)
+            });
+        } catch (e) { }
+    });
+
+    // Capture the typed number and update the checkout (deletes the typed message for a clean chat)
+    bot.on('text', async (ctx, next) => {
+        const userId = ctx.from.id.toString();
+        const state = qtyInputStates.get(userId);
+        if (!state) return next();
+
+        const raw = ctx.message.text.trim();
+        // Only consume pure numbers; let anything else (menu text, etc.) fall through
+        if (!/^\d+$/.test(raw)) return next();
+
+        const lang = db.getUserLanguage(userId);
+        const qty = parseInt(raw, 10);
+
+        // Delete the user's typed number for a clean chat
+        try { await ctx.deleteMessage(); } catch (e) { }
+
+        const product = db.getProductById(state.productId);
+        if (!product) { qtyInputStates.delete(userId); return; }
+        const stockCount = db.getAvailableStockCount(state.productId);
+        const maxQty = product.stock_mode === 'unlimited' ? 999 : Math.min(stockCount, 999);
+
+        if (qty < 1 || qty > maxQty) {
+            const errText = lang === 'en'
+                ? `⚠️ Enter a number between 1 and ${maxQty}.`
+                : `⚠️ Masukkan angka 1 sampai ${maxQty}.`;
+            try {
+                const warn = await ctx.reply(errText);
+                setTimeout(() => ctx.telegram.deleteMessage(ctx.chat.id, warn.message_id).catch(() => { }), 2500);
+            } catch (e) { }
+            return; // stay in state so the user can retry
+        }
+
+        // Valid — clear state and edit the checkout form to the typed quantity
+        qtyInputStates.delete(userId);
+        const message = await generateCheckoutMessage(product, qty, lang);
+        try {
+            await ctx.telegram.editMessageText(state.chatId, state.messageId, undefined, message, {
+                parse_mode: 'HTML',
+                ...quantityKeyboard(maxQty, state.productId, qty, product.category_id, lang)
+            });
+        } catch (e) { }
     });
 };
 

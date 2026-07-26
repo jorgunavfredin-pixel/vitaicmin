@@ -476,7 +476,9 @@ const quantityKeyboard = (maxQty, productId, currentQty = 1, categoryId, lang = 
         fastRow.push(Markup.button.callback('-5', 'noop'));
     }
     const maxLabel = maxQty >= 999 ? '♾' : maxQty;
-    fastRow.push(Markup.button.callback(`📦 Max: ${maxLabel}`, 'noop'));
+    // Clickable: prompts the user to type a quantity (1..maxQty) instead of tapping +/-
+    const typeLabel = lang === 'en' ? `✍️ Type (max ${maxLabel})` : `✍️ Ketik (max ${maxLabel})`;
+    fastRow.push(Markup.button.callback(typeLabel, `qtytype_${productId}_${currentQty}`));
     if (currentQty + 5 <= maxQty) {
         fastRow.push(Markup.button.callback('+5', `qty_inc5_${productId}_${currentQty}`));
     } else {
