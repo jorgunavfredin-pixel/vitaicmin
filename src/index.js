@@ -144,7 +144,8 @@ bot.catch(async (err, ctx) => {
 
 // Initialize Express for webhooks
 const app = express();
-app.use(express.json());
+// Limit 12mb: broadcast web bisa kirim foto sebagai base64 data URL (default 100kb kekecilan).
+app.use(express.json({ limit: '12mb' }));
 
 // Health check endpoint
 app.get('/', (req, res) => {

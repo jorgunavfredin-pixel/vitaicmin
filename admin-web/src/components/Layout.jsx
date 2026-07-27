@@ -9,9 +9,8 @@ const NAV = [
   { to: '/products', label: 'Produk', icon: 'package' },
   { to: '/stock', label: 'Stok', icon: 'box' },
   { to: '/users', label: 'Users', icon: 'users' },
-  { label: 'Saldo', icon: 'wallet', soon: true },
-  { label: 'Voucher', icon: 'ticket', soon: true },
-  { label: 'Broadcast', icon: 'speakerphone', soon: true },
+  { to: '/vouchers', label: 'Voucher', icon: 'ticket' },
+  { to: '/broadcast', label: 'Broadcast', icon: 'speakerphone' },
   { label: 'Settings', icon: 'settings', soon: true }
 ];
 

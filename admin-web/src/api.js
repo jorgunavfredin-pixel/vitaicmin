@@ -122,3 +122,16 @@ export const fetchUserDetail = (id) => apiFetch(`/users/${encodeURIComponent(id)
 export const toggleBanUser = (id) => apiFetch(`/users/${encodeURIComponent(id)}/ban`, { method: 'PATCH' });
 export const adjustUserBalance = (id, action, amount, note) =>
   apiFetch(`/users/${encodeURIComponent(id)}/balance`, { method: 'POST', body: JSON.stringify({ action, amount, note }) });
+
+// ---- Vouchers ----
+export const fetchVouchers = () => apiFetch('/vouchers');
+export const createVoucher = (data) => apiFetch('/vouchers', { method: 'POST', body: JSON.stringify(data) });
+export const deleteVoucher = (id) => apiFetch(`/vouchers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+// ---- Broadcast ----
+export const fetchBroadcastTargets = () => apiFetch('/broadcast/targets');
+export const previewBroadcast = (target, categoryId) =>
+  apiFetch('/broadcast/preview', { method: 'POST', body: JSON.stringify({ target, categoryId }) });
+export const startBroadcast = (payload) =>
+  apiFetch('/broadcast', { method: 'POST', body: JSON.stringify(payload) });
+export const fetchBroadcastStatus = (jobId) => apiFetch(`/broadcast/status/${encodeURIComponent(jobId)}`);
