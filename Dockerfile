@@ -15,6 +15,16 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # ================================
+# Frontend build stage — compiles the React admin panel to static files
+FROM node:18-alpine AS webbuilder
+
+WORKDIR /web
+COPY admin-web/package*.json ./
+RUN npm install
+COPY admin-web/ ./
+RUN npm run build
+
+# ================================
 FROM node:18-alpine
 
 # Runtime dependencies for sharp, better-sqlite3, and SVG font rendering
@@ -29,6 +39,9 @@ COPY --from=builder /app/node_modules ./node_modules
 # Copy application code
 COPY package.json ./
 COPY src/ ./src/
+
+# Copy the built admin panel (served by Express at /admin)
+COPY --from=webbuilder /web/dist ./admin-web/dist
 
 # Create directories for volumes
 RUN mkdir -p /app/src/database /app/assets /app/logs

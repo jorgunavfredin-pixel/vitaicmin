@@ -42,7 +42,8 @@ const validateConfig = () => {
         { key: 'PAKASIR_SLUG', label: 'PaKasir Project Slug (untuk QRIS payment)' },
         { key: 'STORE_NAME', label: 'Nama toko (default: "Bot")' },
         { key: 'SUPPORT_USERNAME', label: 'Username support Telegram' },
-        { key: 'ORDER_PREFIX', label: 'Prefix order ID (default: "ORD")' }
+        { key: 'ORDER_PREFIX', label: 'Prefix order ID (default: "ORD")' },
+        { key: 'ADMIN_PANEL_PASSWORD', label: 'Password login web admin panel (/admin)' }
     ];
 
     optional.forEach(({ key, label }) => {
