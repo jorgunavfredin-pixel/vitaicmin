@@ -783,8 +783,9 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
 }
 
 // ---- STOCK MANAGEMENT DRAWER ----
+// Diekspor agar bisa dipakai ulang di halaman Stok (Stock Control Center).
 
-function StockDrawer({ prod, onClose, toast, onChanged }) {
+export function StockDrawer({ prod, onClose, toast, onChanged }) {
   const [data, setData] = useState(null);
   const [filter, setFilter] = useState('available'); // available | reserved | sold | all
   const [q, setQ] = useState('');

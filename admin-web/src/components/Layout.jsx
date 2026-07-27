@@ -7,7 +7,7 @@ const NAV = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
   { to: '/orders', label: 'Orders', icon: 'receipt' },
   { to: '/products', label: 'Produk', icon: 'package' },
-  { label: 'Stok', icon: 'box', soon: true },
+  { to: '/stock', label: 'Stok', icon: 'box' },
   { label: 'Users', icon: 'users', soon: true },
   { label: 'Saldo', icon: 'wallet', soon: true },
   { label: 'Voucher', icon: 'ticket', soon: true },

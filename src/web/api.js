@@ -9,6 +9,7 @@ const { login, requireAuth } = require('./auth');
 const { getDashboard } = require('./routes/dashboard');
 const { registerOrderRoutes } = require('./routes/orders');
 const { registerProductRoutes } = require('./routes/products');
+const { registerStockRoutes } = require('./routes/stock');
 const { dbEvents } = require('../models/db');
 
 let sseClients = [];
@@ -95,6 +96,7 @@ const registerAdminApi = (app, bot) => {
     adminRouter.get('/dashboard', getDashboard);
     registerOrderRoutes(adminRouter, bot);
     registerProductRoutes(adminRouter);
+    registerStockRoutes(adminRouter);
 
     api.use(adminRouter);
 

@@ -91,3 +91,24 @@ export const deleteStockItem = (productId, stockId) => apiFetch(`/products/${enc
 export const removeLastStock = (productId, count) => apiFetch(`/products/${encodeURIComponent(productId)}/stock/remove-last`, { method: 'POST', body: JSON.stringify({ count }) });
 export const clearStock = (productId) => apiFetch(`/products/${encodeURIComponent(productId)}/stock`, { method: 'DELETE' });
 export const removeStockByData = (productId, lines) => apiFetch(`/products/${encodeURIComponent(productId)}/stock/remove-by-data`, { method: 'POST', body: JSON.stringify({ lines }) });
+
+// ---- Stock Control Center ----
+export const fetchStockOverview = () => apiFetch('/stock/overview');
+export const fetchReservedDetail = (productId) => apiFetch(`/stock/${encodeURIComponent(productId)}/reserved`);
+export const bulkRestock = (items) => apiFetch('/stock/bulk-restock', { method: 'POST', body: JSON.stringify({ items }) });
+
+export async function downloadStockCsv() {
+  const res = await fetch(BASE + '/stock/export.csv', {
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+  if (!res.ok) throw new Error('Export gagal');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `stock_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
