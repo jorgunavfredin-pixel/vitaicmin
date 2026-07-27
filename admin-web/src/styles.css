@@ -98,6 +98,8 @@ button { font-family: inherit; cursor: pointer; }
 }
 .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 30px rgba(91,140,255,0.45); }
 .btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+/* Di page-head (aksi header), btn-primary jangan full-width — proporsional & sejajar judul */
+.page-head .btn-primary { width: auto; margin-top: 0; padding: 10px 16px; font-size: 13.5px; flex-shrink: 0; }
 
 /* ============ APP SHELL ============ */
 .app { display: flex; min-height: 100%; }
@@ -1016,3 +1018,33 @@ input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
   .bc-grid { grid-template-columns: 1fr; }
   .bc-preview-panel { position: static; }
 }
+
+
+/* ============ BROADCAST FLOATING INDICATOR (global, semua menu) ============ */
+.bc-float {
+  position: fixed; bottom: 20px; right: 20px; z-index: 70;
+  width: 300px; max-width: calc(100vw - 40px);
+  background: var(--panel-2); border: 1px solid var(--border-strong);
+  border-radius: 14px; box-shadow: var(--shadow); padding: 13px 14px;
+  animation: rise .25s ease;
+}
+.bc-float.done { border-color: rgba(55,211,153,0.4); }
+.bc-float.err { border-color: rgba(255,107,107,0.4); }
+.bc-float-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.bc-float-title { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--text); }
+.bc-float.done .bc-float-title { color: var(--green); }
+.bc-float.err .bc-float-title { color: var(--red); }
+.bc-float-actions { display: inline-flex; gap: 4px; }
+.bc-float-btn {
+  background: transparent; border: none; color: var(--muted); cursor: pointer;
+  padding: 4px; border-radius: 7px; display: grid; place-items: center; transition: background .15s, color .15s;
+}
+.bc-float-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+.bc-float-bar-wrap { height: 8px; border-radius: 20px; background: var(--panel); overflow: hidden; border: 1px solid var(--border); }
+.bc-float-bar {
+  height: 100%; border-radius: 20px;
+  background: linear-gradient(90deg, var(--brand), var(--brand-2)); transition: width .5s ease;
+}
+.bc-float-bar.err { background: var(--red); }
+.bc-float-stats { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.bc-float-rep { display: inline-flex; gap: 10px; }

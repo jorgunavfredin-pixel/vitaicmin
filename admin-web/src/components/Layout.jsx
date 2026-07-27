@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { clearToken, getToken } from '../api.js';
 import Icon from './Icons.jsx';
+import { useBroadcast } from '../context/BroadcastContext.jsx';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
@@ -20,7 +21,9 @@ export default function Layout() {
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [orderNotif, setOrderNotif] = useState(null);
+  const { job: bcJob, running: bcRunning, clear: bcClear } = useBroadcast();
   const current = NAV.find((n) => n.to === location.pathname) || NAV[0];
+  const onBroadcastPage = location.pathname === '/broadcast';
 
   const showToast = (msg, kind = 'ok') => {
     setToast({ msg, kind });
@@ -150,6 +153,36 @@ export default function Layout() {
       </div>
 
       {toast && <div className={`toast ${toast.kind}`}>{toast.msg}</div>}
+
+      {/* Indikator broadcast global — muncul di semua menu kecuali halaman Broadcast sendiri */}
+      {bcJob && !onBroadcastPage && (
+        <div className={`bc-float ${bcJob.status === 'error' ? 'err' : ''} ${bcJob.status === 'done' ? 'done' : ''}`}>
+          <div className="bc-float-head">
+            <span className="bc-float-title">
+              <Icon name="speakerphone" size={14} />
+              {bcRunning ? 'Broadcast berjalan…' : bcJob.status === 'done' ? 'Broadcast selesai' : 'Broadcast gagal'}
+            </span>
+            <span className="bc-float-actions">
+              <button className="bc-float-btn" title="Buka halaman Broadcast" onClick={() => navigate('/broadcast')}>
+                <Icon name="eye" size={14} />
+              </button>
+              {!bcRunning && (
+                <button className="bc-float-btn" title="Tutup" onClick={bcClear}><Icon name="x" size={14} /></button>
+              )}
+            </span>
+          </div>
+          <div className="bc-float-bar-wrap">
+            <div className={`bc-float-bar ${bcJob.status === 'error' ? 'err' : ''}`} style={{ width: `${bcJob.pct || 0}%` }} />
+          </div>
+          <div className="bc-float-stats">
+            <span>{bcJob.pct || 0}% · {bcJob.processed || 0}/{bcJob.total}</span>
+            <span className="bc-float-rep">
+              <span className="bc-rep-ok">✓ {bcJob.sent || 0}</span>
+              <span className="bc-rep-fail">✕ {bcJob.failed || 0}</span>
+            </span>
+          </div>
+        </div>
+      )}
 
       {orderNotif && (
         <div className="order-notif">

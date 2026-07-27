@@ -1,14 +1,10 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import {
-  fetchBroadcastTargets, previewBroadcast, startBroadcast, fetchBroadcastStatus
-} from '../api.js';
+import { fetchBroadcastTargets, previewBroadcast } from '../api.js';
 import Icon from '../components/Icons.jsx';
+import { useBroadcast } from '../context/BroadcastContext.jsx';
 
 const DEFAULT_HEADER = '📢 BROADCAST MESSAGE';
 const MAX_PHOTO_MB = 8;
-
-// Escape teks header buat preview (biar konsisten sama backend yg bold + escape header).
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export default function Broadcast() {
   const [targets, setTargets] = useState(null);
@@ -21,10 +17,11 @@ export default function Broadcast() {
   const [photo, setPhoto] = useState(null);           // { dataUrl, name }
 
   const [confirm, setConfirm] = useState(false);
-  const [job, setJob] = useState(null);               // { pct, sent, failed, processed, total, status }
   const [toast, setToast] = useState(null);
   const bodyRef = useRef(null);
-  const pollRef = useRef(null);
+
+  // Job broadcast hidup di context (global) — tetap jalan meski pindah menu.
+  const { job, running, start, clear } = useBroadcast();
 
   const showToast = (msg, kind = 'ok') => {
     setToast({ msg, kind });
@@ -45,9 +42,6 @@ export default function Broadcast() {
   }, [target, categoryId]);
 
   useEffect(() => { refreshCount(); }, [refreshCount]);
-
-  // Cleanup polling saat unmount
-  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const onPickPhoto = (e) => {
     const file = e.target.files?.[0];
@@ -72,32 +66,15 @@ export default function Broadcast() {
   };
 
   const previewHeader = (header.trim() || DEFAULT_HEADER);
-  const canSend = (body.trim() || photo) && count > 0 && (!job || job.status === 'done' || job.status === 'error');
+  const canSend = (body.trim() || photo) && count > 0 && !running;
 
   const doStart = async () => {
     setConfirm(false);
     try {
       const payload = { target, categoryId: target === 'category' ? categoryId : undefined, header, body, photo: photo?.dataUrl };
-      const r = await startBroadcast(payload);
-      setJob({ pct: 0, sent: 0, failed: 0, processed: 0, total: r.total, status: 'queued', label: r.label });
-      // Poll status tiap 1 detik
-      pollRef.current = setInterval(async () => {
-        try {
-          const st = await fetchBroadcastStatus(r.jobId);
-          setJob(st);
-          if (st.status === 'done' || st.status === 'error') {
-            clearInterval(pollRef.current); pollRef.current = null;
-            if (st.status === 'done') showToast(`Broadcast selesai: ${st.sent} terkirim, ${st.failed} gagal`);
-          }
-        } catch (e) {
-          clearInterval(pollRef.current); pollRef.current = null;
-          showToast('Gagal cek status broadcast: ' + e.message, 'err');
-        }
-      }, 1000);
+      await start(payload);
     } catch (e) { showToast(e.message, 'err'); }
   };
-
-  const running = job && (job.status === 'queued' || job.status === 'running');
 
   return (
     <div className="broadcast-page">
@@ -202,7 +179,7 @@ export default function Broadcast() {
               </div>
               {(job.status === 'done' || job.status === 'error') && (
                 <button className="btn-ghost btn-icon" style={{ marginTop: 12, width: '100%', justifyContent: 'center' }}
-                  onClick={() => setJob(null)}>Broadcast Lagi</button>
+                  onClick={clear}>Broadcast Lagi</button>
               )}
             </div>
           ) : (
