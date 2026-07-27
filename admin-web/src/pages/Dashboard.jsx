@@ -1,9 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
+  ComposedChart, Area, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from 'recharts';
 import { fetchDashboard } from '../api.js';
 import Icon from '../components/Icons.jsx';
+
+const PERIODS = [
+  { key: 7, label: '7 Hari' },
+  { key: 14, label: '14 Hari' },
+  { key: 30, label: '30 Hari' }
+];
 
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const compact = (n) => new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(n || 0);
@@ -35,6 +41,7 @@ function StatCard({ icon, label, value, sub, accent }) {
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [period, setPeriod] = useState(14);
 
   const load = useCallback(() => {
     fetchDashboard().then(setData).catch((e) => setError(e.message));
@@ -56,6 +63,10 @@ export default function Dashboard() {
   if (!data) return <div className="skeleton-grid">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton-card" />)}</div>;
 
   const c = data.cards;
+  // Series datang 30 hari dari backend; potong sesuai periode terpilih (tampil di client, tanpa refetch).
+  const series = (data.revenueSeries || []).slice(-period);
+  const periodRevenue = series.reduce((sum, d) => sum + (d.revenue || 0), 0);
+  const periodOrders = series.reduce((sum, d) => sum + (d.orders || 0), 0);
 
   return (
     <div className="dash">
@@ -69,11 +80,25 @@ export default function Dashboard() {
       <div className="grid-2">
         <div className="panel chart-panel">
           <div className="panel-head">
-            <h3>Omzet 14 Hari Terakhir</h3>
-            <span className="panel-tag">{rupiah(c.revenueAllTime)} total</span>
+            <h3>Omzet & Order</h3>
+            <div className="chips">
+              {PERIODS.map((p) => (
+                <button
+                  key={p.key}
+                  className={`chip ${period === p.key ? 'active' : ''}`}
+                  onClick={() => setPeriod(p.key)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="chart-summary">
+            <span className="hint-icon"><Icon name="cash" size={14} /> {rupiah(periodRevenue)} omzet</span>
+            <span className="hint-icon"><Icon name="receipt" size={14} /> {periodOrders} order</span>
           </div>
           <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={data.revenueSeries} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+            <ComposedChart data={series} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
               <defs>
                 <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#5b8cff" stopOpacity={0.5} />
@@ -82,14 +107,16 @@ export default function Dashboard() {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
               <XAxis dataKey="label" tick={{ fill: '#8a93a6', fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#8a93a6', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => compact(v)} width={48} />
+              <YAxis yAxisId="rev" tick={{ fill: '#8a93a6', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v) => compact(v)} width={48} />
+              <YAxis yAxisId="ord" orientation="right" tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
               <Tooltip
                 contentStyle={{ background: '#141a29', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, color: '#e7ecf5' }}
                 formatter={(v, name) => name === 'revenue' ? [rupiah(v), 'Omzet'] : [v, 'Order']}
                 labelStyle={{ color: '#8a93a6' }}
               />
-              <Area type="monotone" dataKey="revenue" stroke="#5b8cff" strokeWidth={2.5} fill="url(#rev)" />
-            </AreaChart>
+              <Bar yAxisId="ord" dataKey="orders" fill="#37d399" opacity={0.25} radius={[3, 3, 0, 0]} maxBarSize={22} />
+              <Area yAxisId="rev" type="monotone" dataKey="revenue" stroke="#5b8cff" strokeWidth={2.5} fill="url(#rev)" />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
 

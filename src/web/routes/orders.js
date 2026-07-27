@@ -53,8 +53,15 @@ const listOrders = (req, res) => {
         const q = (req.query.q || '').trim().toLowerCase();
         const page = Math.max(1, parseInt(req.query.page) || 1);
         const pageSize = Math.min(100, Math.max(5, parseInt(req.query.pageSize) || 20));
+        // Filter rentang tanggal (YYYY-MM-DD, waktu lokal WIB). Basis: created_at order.
+        const from = (req.query.from || '').trim();  // inklusif dari awal hari
+        const to = (req.query.to || '').trim();      // inklusif sampai akhir hari
+        const fromISO = /^\d{4}-\d{2}-\d{2}$/.test(from) ? new Date(from + 'T00:00:00+07:00').toISOString() : null;
+        const toISO = /^\d{4}-\d{2}-\d{2}$/.test(to) ? new Date(to + 'T23:59:59.999+07:00').toISOString() : null;
 
         let orders = db.getOrders().sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+        if (fromISO) orders = orders.filter(o => (o.created_at || '') >= fromISO);
+        if (toISO) orders = orders.filter(o => (o.created_at || '') <= toISO);
 
         // Enrich for display + search
         const enriched = orders.map(o => {

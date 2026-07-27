@@ -622,7 +622,9 @@ const getDetailedStats = () => {
   const weekOrders = salesOrders.filter(o => o.paid_at && o.paid_at >= weekStart);
   const monthOrders = salesOrders.filter(o => o.paid_at && o.paid_at >= monthStart);
 
-  const totalTx = db.prepare('SELECT COUNT(*) as cnt FROM orders').get().cnt;
+  // Transaksi NYATA = kecualikan 'init' (draft ditinggalkan di layar konfirmasi) & 'processing' (transisi).
+  // Order draft bukan transaksi sungguhan; kalau ikut denominator, success rate jadi terlihat lebih buruk dari kenyataan.
+  const totalTx = db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status NOT IN ('init', 'processing')").get().cnt;
   const pendingTx = db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status = 'pending'").get().cnt;
   const successTx = paidOrders.length;
   const failedTx = db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status IN ('cancelled', 'expired')").get().cnt;

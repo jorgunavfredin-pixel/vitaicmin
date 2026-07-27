@@ -22,11 +22,11 @@ const getDashboard = (req, res) => {
         // Revenue & chart hanya dari penjualan produk — TOPUP saldo bukan pendapatan (hindari double-count).
         const paidOrders = orders.filter(o => paidStatuses.includes(o.status) && o.product_id !== 'TOPUP');
 
-        // ---- Revenue series: last 14 days (WIB) ----
+        // ---- Revenue series: last 30 days (WIB). Frontend bisa toggle tampil 7/14/30 hari. ----
         const { todayWIB } = getWIBDateRange();
         const days = [];
         const base = new Date(todayWIB + 'T00:00:00+07:00');
-        for (let i = 13; i >= 0; i--) {
+        for (let i = 29; i >= 0; i--) {
             const d = new Date(base.getTime() - i * 24 * 60 * 60 * 1000);
             days.push(d.toISOString().split('T')[0]);
         }
