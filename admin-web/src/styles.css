@@ -1048,3 +1048,19 @@ input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
 .bc-float-bar.err { background: var(--red); }
 .bc-float-stats { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11.5px; color: var(--muted); font-weight: 600; }
 .bc-float-rep { display: inline-flex; gap: 10px; }
+
+
+/* ============ BROADCAST EDITOR LOCKED (saat broadcast berjalan/selesai) ============ */
+.bc-editor.bc-locked { position: relative; }
+.bc-editor.bc-locked .qty-field,
+.bc-editor.bc-locked .select-field,
+.bc-editor.bc-locked .chip,
+.bc-editor.bc-locked .bc-fmt {
+  opacity: .6; cursor: not-allowed;
+}
+.bc-lock-note {
+  display: flex; align-items: flex-start; gap: 7px;
+  background: rgba(255,180,84,0.1); border: 1px solid rgba(255,180,84,0.28);
+  color: var(--amber); font-size: 12px; line-height: 1.45;
+  padding: 9px 12px; border-radius: 10px; margin-bottom: 16px;
+}

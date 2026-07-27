@@ -21,7 +21,14 @@ export default function Broadcast() {
   const bodyRef = useRef(null);
 
   // Job broadcast hidup di context (global) — tetap jalan meski pindah menu.
-  const { job, running, start, clear } = useBroadcast();
+  const { job, running, snapshot, start, clear } = useBroadcast();
+
+  // Saat job aktif ada, editor di-lock & preview render dari snapshot (bukan form lokal),
+  // supaya konten yang lagi/selesai di-broadcast tetap kelihatan meski bolak-balik menu.
+  const locked = !!job;
+  const showHeader = (locked ? snapshot.header : header).trim() || DEFAULT_HEADER;
+  const showBody = locked ? snapshot.body : body;
+  const showPhotoUrl = locked ? snapshot.photoUrl : photo?.dataUrl;
 
   const showToast = (msg, kind = 'ok') => {
     setToast({ msg, kind });
@@ -65,7 +72,6 @@ export default function Broadcast() {
     setTimeout(() => { ta.focus(); ta.selectionStart = start + tag.length + 2; ta.selectionEnd = start + tag.length + 2 + sel.length; }, 0);
   };
 
-  const previewHeader = (header.trim() || DEFAULT_HEADER);
   const canSend = (body.trim() || photo) && count > 0 && !running;
 
   const doStart = async () => {
@@ -87,16 +93,21 @@ export default function Broadcast() {
 
       <div className="bc-grid">
         {/* ---- Editor ---- */}
-        <div className="panel bc-editor">
+        <div className={`panel bc-editor ${locked ? 'bc-locked' : ''}`}>
+          {locked && (
+            <div className="bc-lock-note hint-icon">
+              <Icon name="warning" size={14} /> Editor terkunci selama broadcast berjalan. Klik "Broadcast Lagi" setelah selesai untuk menyusun pesan baru.
+            </div>
+          )}
           {/* Target */}
           <label className="field-label">Target Penerima</label>
           <div className="chips" style={{ marginBottom: 12 }}>
-            <button className={`chip ${target === 'all' ? 'active' : ''}`} onClick={() => setTarget('all')}>Semua User</button>
-            <button className={`chip ${target === 'category' ? 'active' : ''}`} onClick={() => setTarget('category')}>Per Kategori</button>
+            <button className={`chip ${target === 'all' ? 'active' : ''}`} disabled={locked} onClick={() => setTarget('all')}>Semua User</button>
+            <button className={`chip ${target === 'category' ? 'active' : ''}`} disabled={locked} onClick={() => setTarget('category')}>Per Kategori</button>
           </div>
 
           {target === 'category' && (
-            <select className="select-field" style={{ width: '100%', marginBottom: 12 }}
+            <select className="select-field" style={{ width: '100%', marginBottom: 12 }} disabled={locked}
               value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
               <option value="">— Pilih kategori —</option>
               {targets?.categories.map((c) => (
@@ -114,32 +125,34 @@ export default function Broadcast() {
 
           {/* Header opsional */}
           <label className="field-label" style={{ marginTop: 16 }}>Header (opsional)</label>
-          <input type="text" className="qty-field" placeholder={DEFAULT_HEADER}
-            value={header} onChange={(e) => setHeader(e.target.value)} />
+          <input type="text" className="qty-field" placeholder={DEFAULT_HEADER} disabled={locked}
+            value={locked ? snapshot.header : header} onChange={(e) => setHeader(e.target.value)} />
           <div className="bc-hint">Kosongkan untuk pakai header default: <code>{DEFAULT_HEADER}</code></div>
 
           {/* Body + toolbar format */}
           <label className="field-label" style={{ marginTop: 16 }}>Isi Pesan (format HTML)</label>
           <div className="bc-toolbar">
-            <button className="bc-fmt" title="Bold" onClick={() => wrapSelection('b')}><b>B</b></button>
-            <button className="bc-fmt" title="Italic" onClick={() => wrapSelection('i')}><i>I</i></button>
-            <button className="bc-fmt" title="Underline" onClick={() => wrapSelection('u')}><u>U</u></button>
-            <button className="bc-fmt" title="Strikethrough" onClick={() => wrapSelection('s')}><s>S</s></button>
-            <button className="bc-fmt" title="Monospace" onClick={() => wrapSelection('code')}>{'</>'}</button>
+            <button className="bc-fmt" title="Bold" disabled={locked} onClick={() => wrapSelection('b')}><b>B</b></button>
+            <button className="bc-fmt" title="Italic" disabled={locked} onClick={() => wrapSelection('i')}><i>I</i></button>
+            <button className="bc-fmt" title="Underline" disabled={locked} onClick={() => wrapSelection('u')}><u>U</u></button>
+            <button className="bc-fmt" title="Strikethrough" disabled={locked} onClick={() => wrapSelection('s')}><s>S</s></button>
+            <button className="bc-fmt" title="Monospace" disabled={locked} onClick={() => wrapSelection('code')}>{'</>'}</button>
           </div>
-          <textarea ref={bodyRef} rows={7} className="qty-field bc-body"
+          <textarea ref={bodyRef} rows={7} className="qty-field bc-body" disabled={locked}
             placeholder={"Tulis pesan di sini…\nContoh: <b>Promo!</b> Diskon <i>50%</i> hari ini."}
-            value={body} onChange={(e) => setBody(e.target.value)} />
+            value={locked ? snapshot.body : body} onChange={(e) => setBody(e.target.value)} />
           <div className="bc-hint">Tag didukung Telegram: <code>&lt;b&gt; &lt;i&gt; &lt;u&gt; &lt;s&gt; &lt;code&gt; &lt;a href&gt;</code></div>
 
           {/* Foto */}
           <label className="field-label" style={{ marginTop: 16 }}>Foto (opsional)</label>
-          {photo ? (
+          {showPhotoUrl ? (
             <div className="bc-photo-picked">
-              <img src={photo.dataUrl} alt="preview" />
-              <span className="bc-photo-name">{photo.name}</span>
-              <button className="ic-btn ic-danger" onClick={() => setPhoto(null)}><Icon name="trash" size={15} /></button>
+              <img src={showPhotoUrl} alt="preview" />
+              <span className="bc-photo-name">{locked ? 'Foto terlampir' : photo?.name}</span>
+              {!locked && <button className="ic-btn ic-danger" onClick={() => setPhoto(null)}><Icon name="trash" size={15} /></button>}
             </div>
+          ) : locked ? (
+            <div className="bc-hint">Tidak ada foto.</div>
           ) : (
             <label className="bc-upload">
               <Icon name="upload" size={16} /> Pilih Foto (maks {MAX_PHOTO_MB}MB)
@@ -152,11 +165,11 @@ export default function Broadcast() {
         <div className="panel bc-preview-panel">
           <div className="panel-head"><h3>Preview</h3></div>
           <div className="bc-preview">
-            {photo && <img className="bc-preview-img" src={photo.dataUrl} alt="broadcast" />}
+            {showPhotoUrl && <img className="bc-preview-img" src={showPhotoUrl} alt="broadcast" />}
             <div className="bc-bubble">
-              <div className="bc-bubble-header">{previewHeader}</div>
-              {(body.trim() || !photo) && (
-                <div className="bc-bubble-body" dangerouslySetInnerHTML={{ __html: body || '<span style="opacity:.5">(pesan kosong)</span>' }} />
+              <div className="bc-bubble-header">{showHeader}</div>
+              {(showBody.trim() || !showPhotoUrl) && (
+                <div className="bc-bubble-body" dangerouslySetInnerHTML={{ __html: showBody || '<span style="opacity:.5">(pesan kosong)</span>' }} />
               )}
             </div>
           </div>

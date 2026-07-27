@@ -13,6 +13,8 @@ const BroadcastContext = createContext(null);
 
 export function BroadcastProvider({ children }) {
   const [job, setJob] = useState(null);   // { jobId, pct, sent, failed, processed, total, status, label }
+  // Snapshot konten yang sedang di-broadcast, biar preview tetap tampil meski pindah menu.
+  const [snapshot, setSnapshot] = useState(null); // { header, body, photoUrl }
   const pollRef = useRef(null);
 
   const stopPoll = useCallback(() => {
@@ -37,19 +39,27 @@ export function BroadcastProvider({ children }) {
   const start = useCallback(async (payload) => {
     const r = await apiStart(payload);
     setJob({ jobId: r.jobId, pct: 0, sent: 0, failed: 0, processed: 0, total: r.total, status: 'queued', label: r.label });
+    // Simpan snapshot konten (header/body/foto) supaya preview tetap ada saat bolak-balik menu.
+    setSnapshot({
+      header: payload.header || '',
+      body: payload.body || '',
+      photoUrl: payload.photo || null,
+      target: payload.target,
+      label: r.label
+    });
     poll(r.jobId);
     return r;
   }, [poll]);
 
   // Bersihkan job selesai (dipanggil saat user klik "Broadcast Lagi" / tutup indikator)
-  const clear = useCallback(() => { stopPoll(); setJob(null); }, [stopPoll]);
+  const clear = useCallback(() => { stopPoll(); setJob(null); setSnapshot(null); }, [stopPoll]);
 
   useEffect(() => () => stopPoll(), [stopPoll]);
 
   const running = !!job && (job.status === 'queued' || job.status === 'running');
 
   return (
-    <BroadcastContext.Provider value={{ job, running, start, clear }}>
+    <BroadcastContext.Provider value={{ job, running, snapshot, start, clear }}>
       {children}
     </BroadcastContext.Provider>
   );
