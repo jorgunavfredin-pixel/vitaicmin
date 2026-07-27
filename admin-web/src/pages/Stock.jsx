@@ -64,6 +64,7 @@ export default function Stock() {
   const [reservedProd, setReservedProd] = useState(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
+  const [reservedOpen, setReservedOpen] = useState(false);
 
   const showToast = (msg, kind = 'ok') => {
     setToast({ msg, kind });
@@ -126,6 +127,12 @@ export default function Stock() {
   }, [data, statusFilter, catFilter, q, sortBy, sortDir]);
 
   const sortIcon = (key) => sortBy === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+
+  // Produk yang punya stok ter-reserve (untuk panel collapsible di bawah), urut reserved terbanyak.
+  const reservedRows = useMemo(
+    () => (data?.products || []).filter((p) => p.reserved > 0).sort((a, b) => b.reserved - a.reserved),
+    [data]
+  );
 
   if (error) return <div className="panel error-panel hint-icon"><Icon name="warning" size={16} /> {error}</div>;
 
@@ -204,7 +211,6 @@ export default function Stock() {
                       <th>Kategori</th>
                       <th>Tipe</th>
                       <th className="th-sort" onClick={() => toggleSort('available')}>Tersedia{sortIcon('available')}</th>
-                      <th>Reserved</th>
                       <th className="th-sort" onClick={() => toggleSort('sold_30d')}>Terjual (30h){sortIcon('sold_30d')}</th>
                       <th className="th-sort" onClick={() => toggleSort('inventory_value')}>Nilai{sortIcon('inventory_value')}</th>
                       <th style={{ textAlign: 'right' }}>Aksi</th>
@@ -220,13 +226,6 @@ export default function Stock() {
                         <td><span className="badge st-muted">{p.category_name}</span></td>
                         <td style={{ fontSize: 12, color: '#8a93a6' }}>{stockTypeLabel(p.stock_type)}</td>
                         <td><StatusPill status={p.stock_status} available={p.available} /></td>
-                        <td>
-                          {p.reserved > 0 ? (
-                            <button className="link-reserved hint-icon" onClick={() => setReservedProd(p)} title="Lihat order yang menahan stok">
-                              <Icon name="clock" size={13} /> {p.reserved}
-                            </button>
-                          ) : <span className="muted">0</span>}
-                        </td>
                         <td><b>{p.sold_30d}</b> <span className="muted">pcs</span></td>
                         <td>{formatIDR(p.inventory_value)}</td>
                         <td style={{ textAlign: 'right' }}>
@@ -244,32 +243,66 @@ export default function Stock() {
         </div>
       </div>
 
-      {/* Panel Perlu Restock — collapsible, di bawah, default tergulung */}
-      {data && data.alerts.length > 0 && (
-        <div className="panel alert-panel collapsible">
-          <button className="alert-toggle" onClick={() => setAlertOpen((v) => !v)}>
-            <span className="h3-icon"><Icon name="warning" size={17} /> Perlu Restock ({data.alerts.length})</span>
-            <Icon name="chevron" size={18} className={`chev ${alertOpen ? 'open' : ''}`} />
-          </button>
-          {alertOpen && (
-            <div className="alert-list">
-              {data.alerts.map((a) => (
-                <div key={a.id} className={`alert-item ${a.stock_status}`}>
-                  <div className="alert-info">
-                    <span className={`alert-dot ${a.stock_status}`} />
-                    <div>
-                      <div className="alert-name">{a.name_id}</div>
-                      <div className="alert-meta">{a.category_name} · {stockTypeLabel(a.stock_type)}</div>
+      {/* Panel bawah — collapsible, sejajar: Perlu Restock + Ter-reserve */}
+      {data && (data.alerts.length > 0 || reservedRows.length > 0) && (
+        <div className="stock-bottom-panels">
+          {data.alerts.length > 0 && (
+            <div className="panel alert-panel collapsible">
+              <button className="alert-toggle" onClick={() => setAlertOpen((v) => !v)}>
+                <span className="h3-icon"><Icon name="warning" size={17} /> Perlu Restock ({data.alerts.length})</span>
+                <Icon name="chevron" size={18} className={`chev ${alertOpen ? 'open' : ''}`} />
+              </button>
+              {alertOpen && (
+                <div className="alert-list">
+                  {data.alerts.map((a) => (
+                    <div key={a.id} className={`alert-item ${a.stock_status}`}>
+                      <div className="alert-info">
+                        <span className={`alert-dot ${a.stock_status}`} />
+                        <div>
+                          <div className="alert-name">{a.name_id}</div>
+                          <div className="alert-meta">{a.category_name} · {stockTypeLabel(a.stock_type)}</div>
+                        </div>
+                      </div>
+                      <div className="alert-right">
+                        <StatusPill status={a.stock_status} available={a.available} />
+                        <button className="a-btn a-green btn-icon" onClick={() => setDrawerProd(a)}>
+                          <Icon name="plus" size={14} /> Tambah
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="alert-right">
-                    <StatusPill status={a.stock_status} available={a.available} />
-                    <button className="a-btn a-green btn-icon" onClick={() => setDrawerProd(a)}>
-                      <Icon name="plus" size={14} /> Tambah
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
+            </div>
+          )}
+
+          {reservedRows.length > 0 && (
+            <div className="panel alert-panel reserved-panel collapsible">
+              <button className="alert-toggle" onClick={() => setReservedOpen((v) => !v)}>
+                <span className="h3-icon"><Icon name="clock" size={17} /> Stok Ter-reserve ({reservedRows.length})</span>
+                <Icon name="chevron" size={18} className={`chev ${reservedOpen ? 'open' : ''}`} />
+              </button>
+              {reservedOpen && (
+                <div className="alert-list">
+                  {reservedRows.map((p) => (
+                    <div key={p.id} className="alert-item">
+                      <div className="alert-info">
+                        <span className="alert-dot reserved" />
+                        <div>
+                          <div className="alert-name">{p.name_id}</div>
+                          <div className="alert-meta">{p.category_name} · {stockTypeLabel(p.stock_type)}</div>
+                        </div>
+                      </div>
+                      <div className="alert-right">
+                        <b className="hint-icon" style={{ color: '#ffb454' }}><Icon name="clock" size={13} /> {p.reserved} ditahan</b>
+                        <button className="a-btn a-blue btn-icon" onClick={() => setReservedProd(p)}>
+                          <Icon name="eye" size={14} /> Detail
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
