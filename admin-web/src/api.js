@@ -135,3 +135,26 @@ export const previewBroadcast = (target, categoryId) =>
 export const startBroadcast = (payload) =>
   apiFetch('/broadcast', { method: 'POST', body: JSON.stringify(payload) });
 export const fetchBroadcastStatus = (jobId) => apiFetch(`/broadcast/status/${encodeURIComponent(jobId)}`);
+
+// ---- Settings ----
+export const fetchSettings = () => apiFetch('/settings');
+export const toggleSetting = (key, value) =>
+  apiFetch('/settings/toggle', { method: 'PATCH', body: JSON.stringify({ key, value }) });
+export const changeAdminPassword = (currentPassword, newPassword) =>
+  apiFetch('/settings/password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+
+export async function downloadBackup() {
+  const res = await fetch(BASE + '/settings/backup', {
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+  if (!res.ok) throw new Error('Backup gagal');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `backup_${new Date().toISOString().slice(0, 10)}.db`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

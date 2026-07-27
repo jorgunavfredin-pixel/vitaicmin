@@ -9,6 +9,7 @@ import Stock from './pages/Stock.jsx';
 import Users from './pages/Users.jsx';
 import Vouchers from './pages/Vouchers.jsx';
 import Broadcast from './pages/Broadcast.jsx';
+import Settings from './pages/Settings.jsx';
 
 function Protected({ children }) {
   return isAuthed() ? children : <Navigate to="/login" replace />;
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="users" element={<Users />} />
         <Route path="vouchers" element={<Vouchers />} />
         <Route path="broadcast" element={<Broadcast />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

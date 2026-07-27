@@ -13,6 +13,7 @@ const { registerStockRoutes } = require('./routes/stock');
 const { registerUserRoutes } = require('./routes/users');
 const { registerVoucherRoutes } = require('./routes/vouchers');
 const { registerBroadcastRoutes } = require('./routes/broadcast');
+const { registerSettingsRoutes } = require('./routes/settings');
 const { dbEvents } = require('../models/db');
 
 let sseClients = [];
@@ -103,6 +104,7 @@ const registerAdminApi = (app, bot) => {
     registerUserRoutes(adminRouter);
     registerVoucherRoutes(adminRouter);
     registerBroadcastRoutes(adminRouter, bot);
+    registerSettingsRoutes(adminRouter);
 
     api.use(adminRouter);
 

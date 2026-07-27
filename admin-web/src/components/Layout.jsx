@@ -12,7 +12,7 @@ const NAV = [
   { to: '/users', label: 'Users', icon: 'users' },
   { to: '/vouchers', label: 'Voucher', icon: 'ticket' },
   { to: '/broadcast', label: 'Broadcast', icon: 'speakerphone' },
-  { label: 'Settings', icon: 'settings', soon: true }
+  { to: '/settings', label: 'Settings', icon: 'settings' }
 ];
 
 export default function Layout() {
