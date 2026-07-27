@@ -4,6 +4,7 @@ import {
   refundOrder, deleteOrder, downloadOrdersCsv
 } from '../api.js';
 import Icon from '../components/Icons.jsx';
+import { SkeletonTable } from '../components/Skeleton.jsx';
 
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('id-ID', {
@@ -112,6 +113,8 @@ export default function Orders() {
       <div className="panel no-pad">
         {error ? (
           <div className="empty error-panel hint-icon"><Icon name="warning" size={16} /> {error}</div>
+        ) : loading && !data ? (
+          <SkeletonTable rows={8} cols={8} />
         ) : (
           <div className="table-wrap">
             <table className="table">
@@ -122,9 +125,7 @@ export default function Orders() {
                 </tr>
               </thead>
               <tbody>
-                {loading && !data ? (
-                  <tr><td colSpan={8} className="empty">Memuat…</td></tr>
-                ) : data && data.orders.length === 0 ? (
+                {data && data.orders.length === 0 ? (
                   <tr><td colSpan={8} className="empty">Tidak ada order</td></tr>
                 ) : (
                   data?.orders.map((o) => (

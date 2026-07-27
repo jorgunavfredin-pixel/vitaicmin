@@ -4,6 +4,7 @@ import {
 } from '../api.js';
 import { StockDrawer } from './Products.jsx';
 import Icon from '../components/Icons.jsx';
+import { SkeletonTable } from '../components/Skeleton.jsx';
 
 const formatIDR = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const compact = (n) => new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(n || 0);
@@ -199,7 +200,7 @@ export default function Stock() {
 
           <div className="panel no-pad">
             {loading && !data ? (
-              <div className="empty">Memuat stok…</div>
+              <SkeletonTable rows={8} cols={6} />
             ) : rows.length === 0 ? (
               <div className="empty">Tidak ada produk pada filter ini.</div>
             ) : (

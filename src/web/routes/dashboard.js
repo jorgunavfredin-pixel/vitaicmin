@@ -60,12 +60,18 @@ const getDashboard = (req, res) => {
 
         // ---- Stock health ----
         let totalStock = 0, lowStockCount = 0;
+        const lowStockProducts = [];
         for (const p of products) {
             if (p.stock_mode === 'unlimited') continue;
             const cnt = db.getAvailableStockCount(p.id);
             totalStock += cnt;
-            if (cnt < 3) lowStockCount += 1;
+            if (cnt < 3) {
+                lowStockCount += 1;
+                lowStockProducts.push({ id: p.id, name: p.name_id || p.id, qty: cnt });
+            }
         }
+        // Urut dari yang paling kritis (stok paling sedikit dulu)
+        lowStockProducts.sort((a, b) => a.qty - b.qty);
 
         // ---- Recent orders (last 6) ----
         const recentOrders = [...orders]
@@ -95,6 +101,7 @@ const getDashboard = (req, res) => {
                 totalStock,
                 lowStockCount
             },
+            lowStockProducts,
             revenueSeries,
             topProducts,
             recentOrders

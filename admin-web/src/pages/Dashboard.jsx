@@ -42,6 +42,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [period, setPeriod] = useState(14);
+  const [lowStockOpen, setLowStockOpen] = useState(false);
 
   const load = useCallback(() => {
     fetchDashboard().then(setData).catch((e) => setError(e.message));
@@ -137,7 +138,38 @@ export default function Dashboard() {
           )}
           <div className="stock-note">
             <span className="hint-icon"><Icon name="box" size={15} /> Stok tersedia: <b>{c.totalStock}</b></span>
-            {c.lowStockCount > 0 && <span className="low-badge hint-icon"><Icon name="warning" size={14} /> {c.lowStockCount} produk menipis</span>}
+            {c.lowStockCount > 0 && (
+              <span className="low-stock-wrap">
+                <button
+                  className="low-badge low-badge-btn hint-icon"
+                  onClick={() => setLowStockOpen((v) => !v)}
+                  aria-expanded={lowStockOpen}
+                >
+                  <Icon name="warning" size={14} /> {c.lowStockCount} produk menipis
+                  <Icon name={lowStockOpen ? 'chevron-up' : 'chevron-down'} size={13} />
+                </button>
+                {lowStockOpen && (
+                  <>
+                    <div className="popover-scrim" onClick={() => setLowStockOpen(false)} />
+                    <div className="low-stock-pop" role="dialog">
+                      <div className="low-stock-pop-head">
+                        <Icon name="warning" size={13} /> Produk Stok Menipis
+                      </div>
+                      <ul className="low-stock-list">
+                        {(data.lowStockProducts || []).map((p) => (
+                          <li key={p.id}>
+                            <span className="lsp-name">{p.name}</span>
+                            <span className={`lsp-qty ${p.qty === 0 ? 'lsp-zero' : ''}`}>
+                              {p.qty === 0 ? 'Habis' : `${p.qty} tersisa`}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </>
+                )}
+              </span>
+            )}
           </div>
         </div>
       </div>

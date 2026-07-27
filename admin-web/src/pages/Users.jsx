@@ -3,6 +3,7 @@ import {
   fetchUsers, fetchUserDetail, toggleBanUser, adjustUserBalance
 } from '../api.js';
 import Icon from '../components/Icons.jsx';
+import { SkeletonTable } from '../components/Skeleton.jsx';
 
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const compact = (n) => new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(n || 0);
@@ -133,7 +134,7 @@ export default function Users() {
         {error ? (
           <div className="empty error-panel hint-icon"><Icon name="warning" size={16} /> {error}</div>
         ) : loading && !data ? (
-          <div className="empty">Memuat user…</div>
+          <SkeletonTable rows={8} cols={7} />
         ) : data && data.users.length === 0 ? (
           <div className="empty">Tidak ada user pada filter ini.</div>
         ) : (
