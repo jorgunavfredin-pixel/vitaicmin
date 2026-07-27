@@ -220,7 +220,7 @@ app.post('/webhook/telegram', (req, res) => {
 
 // Web admin panel (REST API + SPA) — same Express app, same DB
 const { registerAdminApi } = require('./web/api');
-registerAdminApi(app);
+registerAdminApi(app, bot);
 
 // Start the bot
 let server;

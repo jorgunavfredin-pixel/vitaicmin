@@ -1,0 +1,275 @@
+import { useEffect, useState, useCallback } from 'react';
+import {
+  fetchOrders, fetchOrder, redeliverOrder, replaceOrder,
+  refundOrder, deleteOrder, downloadOrdersCsv
+} from '../api.js';
+
+const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
+const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('id-ID', {
+  timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+}) : '-';
+
+const STATUS = {
+  pending: { label: 'Pending', cls: 'st-pending' },
+  paid: { label: 'Dibayar', cls: 'st-paid' },
+  delivered: { label: 'Terkirim', cls: 'st-delivered' },
+  cancelled: { label: 'Batal', cls: 'st-cancelled' },
+  expired: { label: 'Kadaluarsa', cls: 'st-expired' },
+  refunded: { label: 'Refund', cls: 'st-cancelled' },
+  init: { label: 'Draft', cls: 'st-muted' },
+  processing: { label: 'Proses', cls: 'st-pending' }
+};
+const badge = (s) => {
+  const m = STATUS[s] || { label: s, cls: 'st-muted' };
+  return <span className={`badge ${m.cls}`}>{m.label}</span>;
+};
+
+const FILTERS = [
+  { key: 'all', label: 'Semua' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'delivered', label: 'Terkirim' },
+  { key: 'expired', label: 'Kadaluarsa' },
+  { key: 'cancelled', label: 'Batal' },
+  { key: 'refunded', label: 'Refund' }
+];
+
+export default function Orders() {
+  const [status, setStatus] = useState('all');
+  const [q, setQ] = useState('');
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, kind = 'ok') => {
+    setToast({ msg, kind });
+    setTimeout(() => setToast(null), 3200);
+  };
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetchOrders({ status, q, page, pageSize: 20 })
+      .then((d) => { setData(d); setError(''); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [status, q, page]);
+
+  useEffect(() => {
+    const t = setTimeout(load, q ? 300 : 0); // debounce search
+    return () => clearTimeout(t);
+  }, [load, q]);
+
+  const onExport = async () => {
+    try { await downloadOrdersCsv(); } catch (e) { showToast(e.message, 'err'); }
+  };
+
+  const counts = data?.counts || {};
+
+  return (
+    <div className="orders">
+      <div className="page-head">
+        <div>
+          <h2 className="page-title">Orders</h2>
+          <p className="page-sub">{data ? `${data.total} order` : 'Memuat…'}</p>
+        </div>
+        <button className="btn-ghost" onClick={onExport}>⬇️ Export CSV</button>
+      </div>
+
+      <div className="toolbar">
+        <div className="chips">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              className={`chip ${status === f.key ? 'active' : ''}`}
+              onClick={() => { setStatus(f.key); setPage(1); }}
+            >
+              {f.label}
+              {counts[f.key] != null && <span className="chip-count">{counts[f.key]}</span>}
+            </button>
+          ))}
+        </div>
+        <div className="search">
+          <span className="search-icon">🔎</span>
+          <input
+            placeholder="Cari ID / user / produk…"
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setPage(1); }}
+          />
+        </div>
+      </div>
+
+      <div className="panel no-pad">
+        {error ? (
+          <div className="empty error-panel">⚠️ {error}</div>
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Order ID</th><th>User</th><th>Produk</th><th>Qty</th>
+                  <th>Total</th><th>Metode</th><th>Status</th><th>Tanggal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading && !data ? (
+                  <tr><td colSpan={8} className="empty">Memuat…</td></tr>
+                ) : data && data.orders.length === 0 ? (
+                  <tr><td colSpan={8} className="empty">Tidak ada order</td></tr>
+                ) : (
+                  data?.orders.map((o) => (
+                    <tr key={o.id} className="row-click" onClick={() => setSelected(o.id)}>
+                      <td className="mono">{o.id}</td>
+                      <td>{o.username ? '@' + o.username : (o.first_name || o.user_id)}</td>
+                      <td className="ellip">{o.product}</td>
+                      <td>{o.quantity}</td>
+                      <td>{rupiah(o.total_idr)}</td>
+                      <td className="up">{o.method || '-'}</td>
+                      <td>{badge(o.status)}</td>
+                      <td className="muted-cell">{fmtDate(o.created_at)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {data && data.totalPages > 1 && (
+        <div className="pager">
+          <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>‹ Prev</button>
+          <span>Hal {data.page} / {data.totalPages}</span>
+          <button disabled={page >= data.totalPages} onClick={() => setPage((p) => p + 1)}>Next ›</button>
+        </div>
+      )}
+
+      {selected && (
+        <OrderDrawer
+          id={selected}
+          onClose={() => setSelected(null)}
+          onChanged={() => { load(); }}
+          toast={showToast}
+        />
+      )}
+
+      {toast && <div className={`toast ${toast.kind}`}>{toast.msg}</div>}
+    </div>
+  );
+}
+
+function OrderDrawer({ id, onClose, onChanged, toast }) {
+  const [order, setOrder] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState('');
+  const [confirm, setConfirm] = useState(null); // { action, label }
+
+  const load = useCallback(() => {
+    fetchOrder(id).then(setOrder).catch((e) => setErr(e.message));
+  }, [id]);
+  useEffect(() => { load(); }, [load]);
+
+  const run = async (action, fn) => {
+    setBusy(action);
+    try {
+      const r = await fn(id);
+      toast(r.message || 'Berhasil');
+      setConfirm(null);
+      load();
+      onChanged();
+      if (action === 'delete') onClose();
+    } catch (e) {
+      toast(e.message, 'err');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const actions = order ? [
+    { key: 'redeliver', label: '🔄 Kirim Ulang', fn: redeliverOrder, show: order.delivered_data?.length > 0, cls: 'a-blue' },
+    { key: 'replace', label: '🔁 Replace Akun', fn: replaceOrder, show: order.status === 'delivered', cls: 'a-violet' },
+    { key: 'refund', label: '💸 Refund', fn: refundOrder, show: ['delivered', 'paid'].includes(order.status), danger: true, cls: 'a-amber' },
+    { key: 'delete', label: '🗑 Hapus', fn: deleteOrder, show: true, danger: true, cls: 'a-red' }
+  ].filter(a => a.show) : [];
+
+  return (
+    <>
+      <div className="scrim" onClick={onClose} />
+      <aside className="drawer">
+        <div className="drawer-head">
+          <h3>Detail Order</h3>
+          <button className="x" onClick={onClose}>✕</button>
+        </div>
+
+        {err && <div className="empty error-panel">⚠️ {err}</div>}
+        {!order && !err && <div className="empty">Memuat…</div>}
+
+        {order && (
+          <div className="drawer-body">
+            <div className="d-row"><span>Order ID</span><b className="mono">{order.id}</b></div>
+            <div className="d-row"><span>Status</span>{badge(order.status)}</div>
+            <div className="d-row"><span>Produk</span><b>{order.product_name}</b></div>
+            {order.product_id !== 'TOPUP' && <div className="d-row"><span>Qty</span><b>{order.quantity}</b></div>}
+            <div className="d-row"><span>Total</span><b>{rupiah(order.total_idr)} <span className="muted">(~${order.total_usd})</span></b></div>
+            <div className="d-row"><span>Metode</span><b className="up">{order.payment_method || '-'}</b></div>
+            <div className="d-divider" />
+            <div className="d-row"><span>User</span><b>{order.user?.first_name || 'Unknown'}</b></div>
+            {order.user?.username && <div className="d-row"><span>Username</span><b>@{order.user.username}</b></div>}
+            <div className="d-row"><span>User ID</span><b className="mono">{order.user_id}</b></div>
+            <div className="d-divider" />
+            <div className="d-row"><span>Dibuat</span><b>{fmtDate(order.created_at)}</b></div>
+            {order.paid_at && <div className="d-row"><span>Dibayar</span><b>{fmtDate(order.paid_at)}</b></div>}
+            {order.delivered_at && <div className="d-row"><span>Terkirim</span><b>{fmtDate(order.delivered_at)}</b></div>}
+
+            {order.delivered_data?.length > 0 && (
+              <>
+                <div className="d-divider" />
+                <div className="d-label">📋 Data Terkirim ({order.delivered_data.length})</div>
+                <div className="d-accounts">
+                  {order.delivered_data.map((d, i) => <code key={i}>{d}</code>)}
+                </div>
+              </>
+            )}
+
+            {order.status === 'delivered' && (
+              <div className="d-hint">🧰 Stok tersedia untuk replace: <b>{order.available_stock}</b></div>
+            )}
+
+            <div className="d-actions">
+              {actions.map((a) => (
+                <button
+                  key={a.key}
+                  className={`a-btn ${a.cls}`}
+                  disabled={!!busy}
+                  onClick={() => a.danger ? setConfirm(a) : run(a.key, a.fn)}
+                >
+                  {busy === a.key ? '…' : a.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </aside>
+
+      {confirm && (
+        <div className="modal-scrim" onClick={() => setConfirm(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-icon">⚠️</div>
+            <h4>{confirm.label}?</h4>
+            <p>
+              {confirm.key === 'refund' && 'Stok akan dikembalikan & user diberi notifikasi refund.'}
+              {confirm.key === 'delete' && 'Order dihapus permanen. Aksi ini tidak bisa dibatalkan.'}
+            </p>
+            <div className="modal-actions">
+              <button className="btn-ghost" onClick={() => setConfirm(null)}>Batal</button>
+              <button className="btn-danger" disabled={!!busy} onClick={() => run(confirm.key, confirm.fn)}>
+                {busy ? 'Memproses…' : 'Ya, Lanjut'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

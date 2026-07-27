@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { clearToken } from '../api.js';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '📊', end: true },
-  { label: 'Orders', icon: '🧾', soon: true },
+  { to: '/orders', label: 'Orders', icon: '🧾' },
   { label: 'Produk', icon: '📦', soon: true },
   { label: 'Stok', icon: '🧰', soon: true },
   { label: 'Users', icon: '👥', soon: true },
@@ -16,7 +16,9 @@ const NAV = [
 
 export default function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
+  const current = NAV.find((n) => n.to === location.pathname) || NAV[0];
 
   const logout = () => {
     clearToken();
@@ -62,7 +64,7 @@ export default function Layout() {
       <div className="main">
         <header className="topbar">
           <button className="hamburger" onClick={() => setOpen((v) => !v)} aria-label="Menu">☰</button>
-          <div className="topbar-title">Dashboard</div>
+          <div className="topbar-title">{current.label}</div>
           <div className="topbar-right">
             <span className="dot" /> Online
           </div>

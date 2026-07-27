@@ -30,3 +30,30 @@ export const login = (password) =>
   apiFetch('/login', { method: 'POST', body: JSON.stringify({ password }) });
 
 export const fetchDashboard = () => apiFetch('/dashboard');
+
+// ---- Orders ----
+export const fetchOrders = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return apiFetch('/orders' + (qs ? `?${qs}` : ''));
+};
+export const fetchOrder = (id) => apiFetch(`/orders/${encodeURIComponent(id)}`);
+export const redeliverOrder = (id) => apiFetch(`/orders/${encodeURIComponent(id)}/redeliver`, { method: 'POST' });
+export const replaceOrder = (id) => apiFetch(`/orders/${encodeURIComponent(id)}/replace`, { method: 'POST' });
+export const refundOrder = (id) => apiFetch(`/orders/${encodeURIComponent(id)}/refund`, { method: 'POST' });
+export const deleteOrder = (id) => apiFetch(`/orders/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export async function downloadOrdersCsv() {
+  const res = await fetch(BASE + '/orders/export.csv', {
+    headers: { Authorization: `Bearer ${getToken()}` }
+  });
+  if (!res.ok) throw new Error('Export gagal');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `orders_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

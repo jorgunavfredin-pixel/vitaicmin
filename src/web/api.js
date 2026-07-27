@@ -7,8 +7,9 @@ const path = require('path');
 const fs = require('fs');
 const { login, requireAuth } = require('./auth');
 const { getDashboard } = require('./routes/dashboard');
+const { registerOrderRoutes } = require('./routes/orders');
 
-const registerAdminApi = (app) => {
+const registerAdminApi = (app, bot) => {
     const api = express.Router();
 
     // --- Public ---
@@ -17,6 +18,7 @@ const registerAdminApi = (app) => {
     // --- Protected ---
     api.get('/me', requireAuth, (req, res) => res.json({ ok: true }));
     api.get('/dashboard', requireAuth, getDashboard);
+    registerOrderRoutes(api, bot);
 
     app.use('/api/admin', api);
 
