@@ -6,6 +6,7 @@ import {
   setBulkDiscount, deleteProduct,
   fetchStock, addStock, deleteStockItem, removeLastStock, clearStock, removeStockByData
 } from '../api.js';
+import Icon from '../components/Icons.jsx';
 
 const formatIDR = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const compact = (n) => new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(n || 0);
@@ -14,11 +15,11 @@ const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('id-ID', {
 }) : '-';
 
 const STOCK_TYPES = [
-  { id: 'email_pass', label: '👤 Email|Pass' },
-  { id: 'email_pass_key', label: '🔑 Email|Pass|2FA' },
-  { id: 'code', label: '🎫 Code / Pin' },
-  { id: 'vcc', label: '💳 Card|Exp|CVV' },
-  { id: 'custom', label: '📦 Custom Text' }
+  { id: 'email_pass', label: 'Email | Pass' },
+  { id: 'email_pass_key', label: 'Email | Pass | 2FA' },
+  { id: 'code', label: 'Code / Pin' },
+  { id: 'vcc', label: 'Card | Exp | CVV' },
+  { id: 'custom', label: 'Custom Text' }
 ];
 const stockTypeLabel = (t) => (STOCK_TYPES.find((s) => s.id === t)?.label || t);
 
@@ -104,12 +105,12 @@ export default function Products() {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           {activeTab === 'products' ? (
-            <button className="btn-primary" style={{ width: 'auto', padding: '10px 18px' }} onClick={() => setEditingProduct('new')}>
-              ➕ Tambah Produk
+            <button className="btn-primary btn-icon" style={{ width: 'auto', padding: '10px 18px' }} onClick={() => setEditingProduct('new')}>
+              <Icon name="plus" /> Tambah Produk
             </button>
           ) : (
-            <button className="btn-primary" style={{ width: 'auto', padding: '10px 18px' }} onClick={() => setCategoryModal({ mode: 'add' })}>
-              ➕ Tambah Kategori
+            <button className="btn-primary btn-icon" style={{ width: 'auto', padding: '10px 18px' }} onClick={() => setCategoryModal({ mode: 'add' })}>
+              <Icon name="plus" /> Tambah Kategori
             </button>
           )}
         </div>
@@ -118,25 +119,25 @@ export default function Products() {
       {/* Stat Cards */}
       {stats && activeTab === 'products' && (
         <div className="prod-stat-grid">
-          <ProdStat icon="📦" accent="blue" label="Total Produk" value={stats.totalProducts}
-            sub={`${stats.activeProducts} aktif • ${stats.pausedProducts} paused`} />
-          <ProdStat icon="🧰" accent="green" label="Stok Tersedia" value={compact(stats.totalStock)}
+          <ProdStat icon="package" accent="blue" label="Total Produk" value={stats.totalProducts}
+            sub={`${stats.activeProducts} aktif · ${stats.pausedProducts} paused`} />
+          <ProdStat icon="box" accent="green" label="Stok Tersedia" value={compact(stats.totalStock)}
             sub={stats.unlimitedCount > 0 ? `+${stats.unlimitedCount} produk unlimited` : `${stats.totalSold} terjual total`} />
-          <ProdStat icon="💰" accent="violet" label="Nilai Inventory" value={formatIDR(stats.inventoryValue)}
+          <ProdStat icon="wallet" accent="violet" label="Nilai Inventory" value={formatIDR(stats.inventoryValue)}
             sub="Estimasi nilai stok tersedia" />
-          <ProdStat icon="⚠️" accent={stats.outOfStockCount > 0 ? 'red' : 'amber'} label="Perlu Restock"
+          <ProdStat icon="warning" accent={stats.outOfStockCount > 0 ? 'red' : 'amber'} label="Perlu Restock"
             value={stats.lowStockCount + stats.outOfStockCount}
-            sub={`${stats.outOfStockCount} habis • ${stats.lowStockCount} menipis`} />
+            sub={`${stats.outOfStockCount} habis · ${stats.lowStockCount} menipis`} />
         </div>
       )}
 
       {/* Main Tabs */}
       <div className="tab-bar">
-        <button className={`tab-item ${activeTab === 'products' ? 'active' : ''}`} onClick={() => setActiveTab('products')}>
-          📦 Produk ({counts.all || 0})
+        <button className={`tab-item tab-icon ${activeTab === 'products' ? 'active' : ''}`} onClick={() => setActiveTab('products')}>
+          <Icon name="package" size={16} /> Produk ({counts.all || 0})
         </button>
-        <button className={`tab-item ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>
-          📂 Kategori ({categories.length})
+        <button className={`tab-item tab-icon ${activeTab === 'categories' ? 'active' : ''}`} onClick={() => setActiveTab('categories')}>
+          <Icon name="category" size={16} /> Kategori ({categories.length})
         </button>
       </div>
 
@@ -148,23 +149,23 @@ export default function Products() {
               <button className={`chip ${statusFilter === 'all' ? 'active' : ''}`} onClick={() => setStatusFilter('all')}>
                 Semua <span className="chip-count">{counts.all || 0}</span>
               </button>
-              <button className={`chip ${statusFilter === 'active' ? 'active' : ''}`} onClick={() => setStatusFilter('active')}>
-                ✅ Aktif <span className="chip-count">{counts.active || 0}</span>
+              <button className={`chip chip-icon ${statusFilter === 'active' ? 'active' : ''}`} onClick={() => setStatusFilter('active')}>
+                <Icon name="check" size={15} /> Aktif <span className="chip-count">{counts.active || 0}</span>
               </button>
-              <button className={`chip ${statusFilter === 'paused' ? 'active' : ''}`} onClick={() => setStatusFilter('paused')}>
-                ⏸️ Nonaktif <span className="chip-count">{counts.paused || 0}</span>
+              <button className={`chip chip-icon ${statusFilter === 'paused' ? 'active' : ''}`} onClick={() => setStatusFilter('paused')}>
+                <Icon name="pause" size={15} /> Nonaktif <span className="chip-count">{counts.paused || 0}</span>
               </button>
-              <button className={`chip ${statusFilter === 'flash' ? 'active' : ''}`} onClick={() => setStatusFilter('flash')}>
-                ⚡ Flash <span className="chip-count">{counts.flash || 0}</span>
+              <button className={`chip chip-icon ${statusFilter === 'flash' ? 'active' : ''}`} onClick={() => setStatusFilter('flash')}>
+                <Icon name="flash" size={15} /> Flash <span className="chip-count">{counts.flash || 0}</span>
               </button>
-              <button className={`chip ${statusFilter === 'outofstock' ? 'active' : ''}`} onClick={() => setStatusFilter('outofstock')}>
-                ⚠️ Stok Habis
+              <button className={`chip chip-icon ${statusFilter === 'outofstock' ? 'active' : ''}`} onClick={() => setStatusFilter('outofstock')}>
+                <Icon name="warning" size={15} /> Stok Habis
               </button>
             </div>
 
             <div className="toolbar-right">
               <div className="search" style={{ flex: 1, minWidth: 220 }}>
-                <span className="search-icon">🔎</span>
+                <span className="search-icon"><Icon name="search" size={15} /></span>
                 <input
                   placeholder="Cari nama / ID produk..."
                   value={searchQuery}
@@ -173,22 +174,22 @@ export default function Products() {
               </div>
 
               <select className="select-field" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
-                <option value="all">📁 Semua Kategori</option>
+                <option value="all">Semua Kategori</option>
                 {categories.map((c) => (
-                  <option key={c.id} value={c.id}>📁 {c.name_id} ({c.product_count})</option>
+                  <option key={c.id} value={c.id}>{c.name_id} ({c.product_count})</option>
                 ))}
               </select>
 
               <div className="view-toggle">
-                <button className={view === 'table' ? 'active' : ''} onClick={() => setViewPersist('table')} title="Tampilan Tabel">☰</button>
-                <button className={view === 'grid' ? 'active' : ''} onClick={() => setViewPersist('grid')} title="Tampilan Grid">▦</button>
+                <button className={view === 'table' ? 'active' : ''} onClick={() => setViewPersist('table')} title="Tampilan Tabel"><Icon name="list" /></button>
+                <button className={view === 'grid' ? 'active' : ''} onClick={() => setViewPersist('grid')} title="Tampilan Grid"><Icon name="grid" /></button>
               </div>
             </div>
           </div>
 
           {/* Content */}
           {error ? (
-            <div className="panel"><div className="empty error-panel">⚠️ {error}</div></div>
+            <div className="panel"><div className="empty error-panel">{error}</div></div>
           ) : loading && !productsData ? (
             <div className="prod-grid">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton-card" style={{ height: 190 }} />)}</div>
           ) : productsData && productsData.products.length === 0 ? (
@@ -226,26 +227,26 @@ export default function Products() {
                       <tr key={p.id}>
                         <td>
                           <div style={{ fontWeight: 600, color: '#fff' }}>{p.name_id}</div>
-                          <div style={{ fontSize: 12, color: '#8a93a6' }}>{p.name_en || '-'} • <code style={{ fontSize: 11 }}>{p.id}</code></div>
+                          <div style={{ fontSize: 12, color: '#8a93a6' }}>{p.name_en || '-'} · <code style={{ fontSize: 11 }}>{p.id}</code></div>
                         </td>
-                        <td><span className="badge st-muted">📁 {p.category_name_id}</span></td>
+                        <td><span className="badge st-muted">{p.category_name_id}</span></td>
                         <td>
                           {p.is_flash_active ? (
                             <div>
                               <span style={{ textDecoration: 'line-through', color: '#8a93a6', fontSize: 12, marginRight: 6 }}>{formatIDR(p.price_idr)}</span>
                               <b style={{ color: '#ff6b6b' }}>{formatIDR(p.flash_price)}</b>
-                              <span className="badge-flash">⚡</span>
+                              <span className="badge-flash badge-icon"><Icon name="flash" size={12} /></span>
                             </div>
                           ) : (
                             <b>{formatIDR(p.price_idr)}</b>
                           )}
                           {p.parsed_qty_discounts?.length > 0 && (
-                            <div style={{ fontSize: 11, color: '#5b8cff', marginTop: 2 }}>🏷️ {p.parsed_qty_discounts.length} tier bulk</div>
+                            <div className="hint-icon" style={{ fontSize: 11, color: '#5b8cff', marginTop: 2 }}><Icon name="tag" size={12} /> {p.parsed_qty_discounts.length} tier bulk</div>
                           )}
                         </td>
                         <td>
                           {p.stock_mode === 'unlimited' ? (
-                            <span className="badge st-paid">♾️ Unlimited</span>
+                            <span className="badge st-paid badge-icon"><Icon name="infinity" size={13} /> Unlimited</span>
                           ) : (
                             <StockPill count={p.available_stock} />
                           )}
@@ -253,19 +254,19 @@ export default function Products() {
                         </td>
                         <td><b>{p.sold_stock || 0}</b> pcs</td>
                         <td>
-                          <button className={`badge ${p.active ? 'st-delivered' : 'st-expired'}`} style={{ border: 'none', cursor: 'pointer' }}
+                          <button className={`badge badge-icon ${p.active ? 'st-delivered' : 'st-expired'}`} style={{ border: 'none', cursor: 'pointer' }}
                             onClick={() => handleToggleActive(p)} title="Klik untuk toggle status">
-                            {p.active ? '✅ Aktif' : '⏸️ Paused'}
+                            <Icon name={p.active ? 'check' : 'pause'} size={13} /> {p.active ? 'Aktif' : 'Paused'}
                           </button>
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           <div className="row-actions">
                             <button className="ic-btn" onClick={() => setStockDrawerProd(p)} title="Kelola Stok"
-                              disabled={p.stock_mode === 'unlimited'}>🧰</button>
-                            <button className="ic-btn" onClick={() => setEditingProduct(p)} title="Edit Produk">✏️</button>
-                            <button className="ic-btn" style={{ color: p.is_flash_active ? '#ff6b6b' : undefined }} onClick={() => setFlashModalProd(p)} title="Flash Sale">⚡</button>
-                            <button className="ic-btn" onClick={() => setBulkModalProd(p)} title="Diskon Grosir">🏷️</button>
-                            <button className="ic-btn" style={{ color: '#ff6b6b' }} onClick={() => setDeleteModalProd(p)} title="Hapus">🗑️</button>
+                              disabled={p.stock_mode === 'unlimited'}><Icon name="box" /></button>
+                            <button className="ic-btn" onClick={() => setEditingProduct(p)} title="Edit Produk"><Icon name="edit" /></button>
+                            <button className="ic-btn" style={{ color: p.is_flash_active ? '#ff6b6b' : undefined }} onClick={() => setFlashModalProd(p)} title="Flash Sale"><Icon name="flash" /></button>
+                            <button className="ic-btn" onClick={() => setBulkModalProd(p)} title="Diskon Grosir"><Icon name="discount" /></button>
+                            <button className="ic-btn ic-danger" onClick={() => setDeleteModalProd(p)} title="Hapus"><Icon name="trash" /></button>
                           </div>
                         </td>
                       </tr>
@@ -301,8 +302,8 @@ export default function Products() {
                       <td><span className="badge st-delivered">{c.active_product_count} aktif</span></td>
                       <td style={{ textAlign: 'right' }}>
                         <div className="row-actions">
-                          <button className="ic-btn" onClick={() => setCategoryModal({ mode: 'edit', cat: c })} title="Edit">✏️</button>
-                          <button className="ic-btn" style={{ color: '#ff6b6b' }} onClick={() => setDeleteCatModal(c)} title="Hapus">🗑️</button>
+                          <button className="ic-btn" onClick={() => setCategoryModal({ mode: 'edit', cat: c })} title="Edit"><Icon name="edit" /></button>
+                          <button className="ic-btn ic-danger" onClick={() => setDeleteCatModal(c)} title="Hapus"><Icon name="trash" /></button>
                         </div>
                       </td>
                     </tr>
@@ -373,7 +374,7 @@ export default function Products() {
 function ProdStat({ icon, label, value, sub, accent }) {
   return (
     <div className={`stat-card accent-${accent}`}>
-      <div className="stat-icon">{icon}</div>
+      <div className="stat-icon"><Icon name={icon} size={22} /></div>
       <div className="stat-body">
         <div className="stat-label">{label}</div>
         <div className="stat-value">{value}</div>
@@ -384,7 +385,7 @@ function ProdStat({ icon, label, value, sub, accent }) {
 }
 
 function StockPill({ count }) {
-  if (count > 0 && count < 3) return <b style={{ color: '#ffb454' }}>{count} item ⚠️</b>;
+  if (count > 0 && count < 3) return <b className="hint-icon" style={{ color: '#ffb454' }}>{count} item <Icon name="warning" size={13} /></b>;
   if (count > 0) return <b style={{ color: '#37d399' }}>{count} item</b>;
   return <span className="badge st-cancelled">Habis (0)</span>;
 }
@@ -393,33 +394,33 @@ function ProductCard({ p, onEdit, onFlash, onBulk, onStock, onDelete, onToggle }
   return (
     <div className={`prod-card ${!p.active ? 'is-paused' : ''}`}>
       <div className="prod-card-top">
-        <span className="badge st-muted" style={{ fontSize: 11 }}>📁 {p.category_name_id}</span>
-        <button className={`badge ${p.active ? 'st-delivered' : 'st-expired'}`} style={{ border: 'none', cursor: 'pointer' }} onClick={onToggle}>
-          {p.active ? '✅ Aktif' : '⏸️ Paused'}
+        <span className="badge st-muted" style={{ fontSize: 11 }}>{p.category_name_id}</span>
+        <button className={`badge badge-icon ${p.active ? 'st-delivered' : 'st-expired'}`} style={{ border: 'none', cursor: 'pointer' }} onClick={onToggle}>
+          <Icon name={p.active ? 'check' : 'pause'} size={13} /> {p.active ? 'Aktif' : 'Paused'}
         </button>
       </div>
       <div className="prod-card-name">{p.name_id}</div>
-      <div className="prod-card-meta">{p.name_en || '-'} • <code>{p.id}</code></div>
+      <div className="prod-card-meta">{p.name_en || '-'} · <code>{p.id}</code></div>
 
       <div className="prod-card-price">
         {p.is_flash_active ? (
           <>
             <span className="strike">{formatIDR(p.price_idr)}</span>
             <b className="flash">{formatIDR(p.flash_price)}</b>
-            <span className="badge-flash">⚡ Flash</span>
+            <span className="badge-flash badge-icon"><Icon name="flash" size={12} /> Flash</span>
           </>
         ) : (
           <b>{formatIDR(p.price_idr)}</b>
         )}
       </div>
       {p.parsed_qty_discounts?.length > 0 && (
-        <div className="prod-card-bulk">🏷️ {p.parsed_qty_discounts.length} tier diskon grosir</div>
+        <div className="prod-card-bulk hint-icon"><Icon name="tag" size={13} /> {p.parsed_qty_discounts.length} tier diskon grosir</div>
       )}
 
       <div className="prod-card-stock">
         <div>
           <div className="mini-label">Stok</div>
-          {p.stock_mode === 'unlimited' ? <span className="badge st-paid">♾️ Unlimited</span> : <StockPill count={p.available_stock} />}
+          {p.stock_mode === 'unlimited' ? <span className="badge st-paid badge-icon"><Icon name="infinity" size={13} /> Unlimited</span> : <StockPill count={p.available_stock} />}
         </div>
         <div>
           <div className="mini-label">Terjual</div>
@@ -432,11 +433,11 @@ function ProductCard({ p, onEdit, onFlash, onBulk, onStock, onDelete, onToggle }
       </div>
 
       <div className="prod-card-actions">
-        <button className="a-btn a-green" onClick={onStock} disabled={p.stock_mode === 'unlimited'}>🧰 Stok</button>
-        <button className="a-btn a-blue" onClick={onEdit}>✏️ Edit</button>
-        <button className="a-btn a-amber" onClick={onFlash} style={{ color: p.is_flash_active ? '#ff6b6b' : undefined }}>⚡ Flash</button>
-        <button className="a-btn a-violet" onClick={onBulk}>🏷️ Bulk</button>
-        <button className="a-btn a-red" onClick={onDelete}>🗑️</button>
+        <button className="a-btn a-green btn-icon" onClick={onStock} disabled={p.stock_mode === 'unlimited'}><Icon name="box" size={15} /> Stok</button>
+        <button className="a-btn a-blue btn-icon" onClick={onEdit}><Icon name="edit" size={15} /> Edit</button>
+        <button className="a-btn a-amber btn-icon" onClick={onFlash} style={{ color: p.is_flash_active ? '#ff6b6b' : undefined }}><Icon name="flash" size={15} /> Flash</button>
+        <button className="a-btn a-violet btn-icon" onClick={onBulk}><Icon name="discount" size={15} /> Bulk</button>
+        <button className="a-btn a-red" onClick={onDelete}><Icon name="trash" size={15} /></button>
       </div>
     </div>
   );
@@ -486,14 +487,14 @@ function ProductFormModal({ prod, categories, onClose, onSaved, toast }) {
     <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal modal-lg" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>{isEdit ? `✏️ Edit: ${prod.name_id}` : '➕ Tambah Produk Baru'}</h3>
-          <button className="x" onClick={onClose}>✕</button>
+          <h3>{isEdit ? `Edit Produk: ${prod.name_id}` : 'Tambah Produk Baru'}</h3>
+          <button className="x" onClick={onClose}><Icon name="x" /></button>
         </div>
 
         <div className="tab-bar" style={{ marginBottom: 18 }}>
-          <button className={`tab-item ${formTab === 'general' ? 'active' : ''}`} onClick={() => setFormTab('general')}>⚙️ Informasi Utama</button>
-          <button className={`tab-item ${formTab === 'desc' ? 'active' : ''}`} onClick={() => setFormTab('desc')}>📌 Deskripsi & Garansi</button>
-          <button className={`tab-item ${formTab === 'terms' ? 'active' : ''}`} onClick={() => setFormTab('terms')}>📜 Syarat & Ketentuan</button>
+          <button type="button" className={`tab-item tab-icon ${formTab === 'general' ? 'active' : ''}`} onClick={() => setFormTab('general')}><Icon name="settings" size={16} /> Informasi Utama</button>
+          <button type="button" className={`tab-item tab-icon ${formTab === 'desc' ? 'active' : ''}`} onClick={() => setFormTab('desc')}><Icon name="desc" size={16} /> Deskripsi & Garansi</button>
+          <button type="button" className={`tab-item tab-icon ${formTab === 'terms' ? 'active' : ''}`} onClick={() => setFormTab('terms')}><Icon name="terms" size={16} /> Syarat & Ketentuan</button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -502,7 +503,7 @@ function ProductFormModal({ prod, categories, onClose, onSaved, toast }) {
               <div style={{ gridColumn: 'span 2' }}>
                 <label className="field-label">Kategori Produk</label>
                 <select className="qty-field" value={formData.category_id} onChange={(e) => handleChange('category_id', e.target.value)}>
-                  {categories.map((c) => <option key={c.id} value={c.id}>📁 {c.name_id}</option>)}
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name_id}</option>)}
                 </select>
               </div>
               <div>
@@ -529,15 +530,15 @@ function ProductFormModal({ prod, categories, onClose, onSaved, toast }) {
               <div>
                 <label className="field-label">Mode Stok</label>
                 <select className="qty-field" value={formData.stock_mode} onChange={(e) => handleChange('stock_mode', e.target.value)}>
-                  <option value="limited">📦 Limited (Butuh entri stok)</option>
-                  <option value="unlimited">♾️ Unlimited (Stok tak terbatas)</option>
+                  <option value="limited">Limited (Butuh entri stok)</option>
+                  <option value="unlimited">Unlimited (Stok tak terbatas)</option>
                 </select>
               </div>
               <div>
                 <label className="field-label">Status Produk</label>
                 <select className="qty-field" value={formData.active ? 'true' : 'false'} onChange={(e) => handleChange('active', e.target.value === 'true')}>
-                  <option value="true">✅ Aktif (Bisa dibeli)</option>
-                  <option value="false">⏸️ Paused (Nonaktif)</option>
+                  <option value="true">Aktif (Bisa dibeli)</option>
+                  <option value="false">Paused (Nonaktif)</option>
                 </select>
               </div>
             </div>
@@ -573,8 +574,8 @@ function ProductFormModal({ prod, categories, onClose, onSaved, toast }) {
               <div>
                 <label className="field-label">Format Teks S&K</label>
                 <select className="qty-field" value={formData.terms_format} onChange={(e) => handleChange('terms_format', e.target.value)}>
-                  <option value="markdown">📝 Markdown / Plain Text</option>
-                  <option value="html">🌐 HTML Format</option>
+                  <option value="markdown">Markdown / Plain Text</option>
+                  <option value="html">HTML Format</option>
                 </select>
               </div>
               <div>
@@ -593,7 +594,7 @@ function ProductFormModal({ prod, categories, onClose, onSaved, toast }) {
           <div className="modal-actions" style={{ marginTop: 22 }}>
             <button type="button" className="btn-ghost" onClick={onClose}>Batal</button>
             <button type="submit" className="btn-primary" disabled={busy}>
-              {busy ? 'Memproses…' : isEdit ? 'Simpan Perubahan' : 'Tambah Produk'}
+              {busy ? 'Memproses...' : isEdit ? 'Simpan Perubahan' : 'Tambah Produk'}
             </button>
           </div>
         </form>
@@ -629,14 +630,14 @@ function FlashSaleModal({ prod, onClose, onSaved }) {
     <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" style={{ maxWidth: 440, textAlign: 'left' }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>⚡ Flash Sale: {prod.name_id}</h3>
-          <button className="x" onClick={onClose}>✕</button>
+          <h3 className="h3-icon"><Icon name="flash" size={18} /> Flash Sale: {prod.name_id}</h3>
+          <button className="x" onClick={onClose}><Icon name="x" /></button>
         </div>
         <p style={{ fontSize: 13, color: '#8a93a6', margin: '0 0 14px' }}>
           Harga Normal: <b>{formatIDR(prod.price_idr)}</b>
           {price > 0 && price < prod.price_idr && <span className="badge-flash" style={{ marginLeft: 8 }}>Hemat {discountPct}%</span>}
         </p>
-        {err && <div className="empty error-panel" style={{ marginBottom: 12 }}>⚠️ {err}</div>}
+        {err && <div className="empty error-panel" style={{ marginBottom: 12 }}>{err}</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <label className="field-label">Harga Diskon Flash Sale (IDR) *</label>
@@ -657,7 +658,7 @@ function FlashSaleModal({ prod, onClose, onSaved }) {
           {prod.is_flash_active && (
             <button type="button" className="btn-ghost" style={{ color: '#ff6b6b' }} onClick={handleClear} disabled={busy}>Matikan Promo</button>
           )}
-          <button type="button" className="btn-primary" onClick={handleSet} disabled={busy}>{busy ? 'Memproses…' : 'Simpan Flash Sale'}</button>
+          <button type="button" className="btn-primary" onClick={handleSet} disabled={busy}>{busy ? 'Memproses...' : 'Simpan Flash Sale'}</button>
         </div>
       </div>
     </div>
@@ -685,13 +686,13 @@ function BulkDiscountModal({ prod, onClose, onSaved }) {
     <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" style={{ maxWidth: 460, textAlign: 'left' }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>🏷️ Diskon Grosir: {prod.name_id}</h3>
-          <button className="x" onClick={onClose}>✕</button>
+          <h3 className="h3-icon"><Icon name="discount" size={18} /> Diskon Grosir: {prod.name_id}</h3>
+          <button className="x" onClick={onClose}><Icon name="x" /></button>
         </div>
         <p style={{ fontSize: 13, color: '#8a93a6', margin: '0 0 14px' }}>
           Atur diskon persentase berdasarkan jumlah pcs pembelian (bulk purchase).
         </p>
-        {err && <div className="empty error-panel" style={{ marginBottom: 12 }}>⚠️ {err}</div>}
+        {err && <div className="empty error-panel" style={{ marginBottom: 12 }}>{err}</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 280, overflowY: 'auto' }}>
           {tiers.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 20, color: '#8a93a6', fontSize: 13 }}>
@@ -700,22 +701,22 @@ function BulkDiscountModal({ prod, onClose, onSaved }) {
           ) : (
             tiers.map((t, idx) => (
               <div key={idx} className="tier-row">
-                <span style={{ fontSize: 13, color: '#8a93a6', minWidth: 44 }}>Beli ≥</span>
+                <span style={{ fontSize: 13, color: '#8a93a6', minWidth: 44 }}>Beli &ge;</span>
                 <input type="number" min="2" className="qty-field" style={{ width: 80 }} value={t.min_qty} onChange={(e) => updateTier(idx, 'min_qty', e.target.value)} />
-                <span style={{ fontSize: 13, color: '#8a93a6' }}>pcs →</span>
+                <span style={{ fontSize: 13, color: '#8a93a6' }}>pcs</span>
                 <input type="number" min="1" max="99" className="qty-field" style={{ width: 80 }} value={t.percent} onChange={(e) => updateTier(idx, 'percent', e.target.value)} />
                 <span style={{ fontSize: 13, color: '#8a93a6' }}>%</span>
-                <button type="button" className="x" style={{ color: '#ff6b6b', marginLeft: 'auto' }} onClick={() => removeTier(idx)}>✕</button>
+                <button type="button" className="x" style={{ color: '#ff6b6b', marginLeft: 'auto' }} onClick={() => removeTier(idx)}><Icon name="x" size={16} /></button>
               </div>
             ))
           )}
         </div>
-        <button type="button" className="btn-ghost" style={{ width: '100%', marginTop: 12, borderStyle: 'dashed' }} onClick={addTier}>
-          ➕ Tambah Tier Diskon
+        <button type="button" className="btn-ghost btn-icon" style={{ width: '100%', marginTop: 12, borderStyle: 'dashed', justifyContent: 'center' }} onClick={addTier}>
+          <Icon name="plus" size={15} /> Tambah Tier Diskon
         </button>
         <div className="modal-actions" style={{ marginTop: 20 }}>
           <button type="button" className="btn-ghost" onClick={onClose}>Batal</button>
-          <button type="button" className="btn-primary" onClick={handleSave} disabled={busy}>{busy ? 'Memproses…' : 'Simpan Diskon Grosir'}</button>
+          <button type="button" className="btn-primary" onClick={handleSave} disabled={busy}>{busy ? 'Memproses...' : 'Simpan Diskon Grosir'}</button>
         </div>
       </div>
     </div>
@@ -740,10 +741,10 @@ function CategoryFormModal({ data, onClose, onSaved }) {
     <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" style={{ maxWidth: 400, textAlign: 'left' }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>{isEdit ? '✏️ Edit Kategori' : '➕ Tambah Kategori'}</h3>
-          <button className="x" onClick={onClose}>✕</button>
+          <h3>{isEdit ? 'Edit Kategori' : 'Tambah Kategori'}</h3>
+          <button className="x" onClick={onClose}><Icon name="x" /></button>
         </div>
-        {err && <div className="empty error-panel" style={{ marginBottom: 12 }}>⚠️ {err}</div>}
+        {err && <div className="empty error-panel" style={{ marginBottom: 12 }}>{err}</div>}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <label className="field-label">Nama Kategori (Indonesia) *</label>
@@ -755,7 +756,7 @@ function CategoryFormModal({ data, onClose, onSaved }) {
           </div>
           <div className="modal-actions" style={{ marginTop: 14 }}>
             <button type="button" className="btn-ghost" onClick={onClose}>Batal</button>
-            <button type="submit" className="btn-primary" disabled={busy}>{busy ? 'Memproses…' : isEdit ? 'Simpan' : 'Buat Kategori'}</button>
+            <button type="submit" className="btn-primary" disabled={busy}>{busy ? 'Memproses...' : isEdit ? 'Simpan' : 'Buat Kategori'}</button>
           </div>
         </form>
       </div>
@@ -768,13 +769,13 @@ function ConfirmDeleteModal({ title, message, onClose, onConfirm }) {
   return (
     <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="modal-icon">⚠️</div>
+        <div className="modal-icon modal-icon-danger"><Icon name="warning" size={30} /></div>
         <h4>{title}</h4>
         <p style={{ margin: '10px 0 20px', color: '#8a93a6', fontSize: 13.5 }}>{message}</p>
         <div className="modal-actions">
           <button className="btn-ghost" onClick={onClose} disabled={busy}>Batal</button>
           <button className="btn-danger" disabled={busy} onClick={async () => { setBusy(true); await onConfirm(); setBusy(false); }}>
-            {busy ? 'Menghapus…' : 'Ya, Hapus Permanen'}
+            {busy ? 'Menghapus...' : 'Ya, Hapus Permanen'}
           </button>
         </div>
       </div>
@@ -793,7 +794,7 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
   const [mode, setMode] = useState('list'); // 'list' | 'add' | 'removeData'
   const [bulkText, setBulkText] = useState('');
   const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState(null); // { type: 'clear'|'removeLast'|'delItem', ... }
+  const [confirm, setConfirm] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -831,7 +832,7 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
     try {
       const r = await removeStockByData(prod.id, lines);
       let msg = r.message;
-      if (r.notFound?.length) msg += ` • ${r.notFound.length} tidak ditemukan`;
+      if (r.notFound?.length) msg += ` · ${r.notFound.length} tidak ditemukan`;
       toast(msg, r.notFound?.length ? 'err' : 'ok');
       setBulkText('');
       setMode('list');
@@ -865,10 +866,10 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
       <aside className="drawer drawer-wide">
         <div className="drawer-head">
           <div>
-            <h3>🧰 Kelola Stok</h3>
-            <div style={{ fontSize: 12.5, color: '#8a93a6', marginTop: 2 }}>{prod.name_id} • {stockTypeLabel(prod.stock_type)}</div>
+            <h3 className="h3-icon"><Icon name="box" size={18} /> Kelola Stok</h3>
+            <div style={{ fontSize: 12.5, color: '#8a93a6', marginTop: 2 }}>{prod.name_id} · {stockTypeLabel(prod.stock_type)}</div>
           </div>
-          <button className="x" onClick={onClose}>✕</button>
+          <button className="x" onClick={onClose}><Icon name="x" /></button>
         </div>
 
         <div className="drawer-body">
@@ -883,10 +884,10 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
           {/* Action buttons */}
           {mode === 'list' && (
             <div className="stock-actions">
-              <button className="a-btn a-green" onClick={() => setMode('add')}>➕ Tambah Stok</button>
-              <button className="a-btn a-red" onClick={() => setMode('removeData')}>🧹 Hapus by Data</button>
-              <button className="a-btn a-amber" onClick={() => setConfirm({ type: 'removeLast' })} disabled={!c.available}>➖ Hapus N Terakhir</button>
-              <button className="a-btn a-red" onClick={() => setConfirm({ type: 'clear' })} disabled={!c.available}>🗑️ Kosongkan</button>
+              <button className="a-btn a-green btn-icon" onClick={() => setMode('add')}><Icon name="plus" size={15} /> Tambah Stok</button>
+              <button className="a-btn a-red btn-icon" onClick={() => setMode('removeData')}><Icon name="eraser" size={15} /> Hapus by Data</button>
+              <button className="a-btn a-amber btn-icon" onClick={() => setConfirm({ type: 'removeLast' })} disabled={!c.available}><Icon name="minus" size={15} /> Hapus N Terakhir</button>
+              <button className="a-btn a-red btn-icon" onClick={() => setConfirm({ type: 'clear' })} disabled={!c.available}><Icon name="trash" size={15} /> Kosongkan</button>
             </div>
           )}
 
@@ -902,7 +903,7 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
               </div>
               <div className="modal-actions" style={{ marginTop: 14 }}>
                 <button className="btn-ghost" onClick={() => { setMode('list'); setBulkText(''); }}>Batal</button>
-                <button className="btn-primary" onClick={doAdd} disabled={busy}>{busy ? 'Memproses…' : 'Tambah Stok'}</button>
+                <button className="btn-primary" onClick={doAdd} disabled={busy}>{busy ? 'Memproses...' : 'Tambah Stok'}</button>
               </div>
             </div>
           )}
@@ -916,7 +917,7 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
                 value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
               <div className="modal-actions" style={{ marginTop: 14 }}>
                 <button className="btn-ghost" onClick={() => { setMode('list'); setBulkText(''); }}>Batal</button>
-                <button className="btn-danger" onClick={doRemoveByData} disabled={busy}>{busy ? 'Memproses…' : 'Hapus Item'}</button>
+                <button className="btn-danger" onClick={doRemoveByData} disabled={busy}>{busy ? 'Memproses...' : 'Hapus Item'}</button>
               </div>
             </div>
           )}
@@ -931,14 +932,14 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
                   ))}
                 </div>
                 <div className="search" style={{ marginTop: 10, maxWidth: '100%' }}>
-                  <span className="search-icon">🔎</span>
+                  <span className="search-icon"><Icon name="search" size={15} /></span>
                   <input placeholder="Cari data stok..." value={q} onChange={(e) => setQ(e.target.value)} />
                 </div>
               </div>
 
-              {err && <div className="empty error-panel">⚠️ {err}</div>}
+              {err && <div className="empty error-panel">{err}</div>}
               {loading && !data ? (
-                <div className="empty">Memuat stok…</div>
+                <div className="empty">Memuat stok...</div>
               ) : data && data.items.length === 0 ? (
                 <div className="empty">Tidak ada item stok pada filter ini.</div>
               ) : (
@@ -949,18 +950,18 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
                         <code className="stock-data">{s.data}</code>
                         <div className="stock-item-meta">
                           {s.sold ? (
-                            <span className="badge st-paid">💰 Terjual {s.order_id ? `• ${s.order_id}` : ''}</span>
+                            <span className="badge st-paid badge-icon"><Icon name="coin" size={12} /> Terjual{s.order_id ? ` · ${s.order_id}` : ''}</span>
                           ) : s.reserved_by ? (
-                            <span className="badge st-pending">⏳ Reserved • {s.reserved_by}</span>
+                            <span className="badge st-pending badge-icon"><Icon name="clock" size={12} /> Reserved · {s.reserved_by}</span>
                           ) : (
-                            <span className="badge st-delivered">✅ Tersedia</span>
+                            <span className="badge st-delivered badge-icon"><Icon name="check" size={12} /> Tersedia</span>
                           )}
                           <span className="stock-date">+{fmtDate(s.added_at)}</span>
                         </div>
                       </div>
                       {!s.sold && (
-                        <button className="ic-btn" style={{ color: '#ff6b6b' }} title="Hapus item"
-                          onClick={() => setConfirm({ type: 'delItem', id: s.id, data: s.data })}>🗑️</button>
+                        <button className="ic-btn ic-danger" title="Hapus item"
+                          onClick={() => setConfirm({ type: 'delItem', id: s.id, data: s.data })}><Icon name="trash" /></button>
                       )}
                     </div>
                   ))}
@@ -971,7 +972,6 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
         </div>
       </aside>
 
-      {/* Confirm modals */}
       {confirm?.type === 'clear' && (
         <ConfirmDeleteModal
           title="Kosongkan Semua Stok Tersedia?"
@@ -1001,8 +1001,8 @@ function RemoveLastModal({ max, onClose, onConfirm, busy }) {
     <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" style={{ maxWidth: 380, textAlign: 'left' }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>➖ Hapus N Stok Terakhir</h3>
-          <button className="x" onClick={onClose}>✕</button>
+          <h3 className="h3-icon"><Icon name="minus" size={18} /> Hapus N Stok Terakhir</h3>
+          <button className="x" onClick={onClose}><Icon name="x" /></button>
         </div>
         <p style={{ fontSize: 13, color: '#8a93a6', margin: '0 0 12px' }}>
           Menghapus item stok yang paling baru ditambahkan. Maksimal <b>{max}</b> item tersedia.
@@ -1012,7 +1012,7 @@ function RemoveLastModal({ max, onClose, onConfirm, busy }) {
           onChange={(e) => setCount(Math.min(max, Math.max(1, parseInt(e.target.value) || 1)))} />
         <div className="modal-actions" style={{ marginTop: 18 }}>
           <button className="btn-ghost" onClick={onClose}>Batal</button>
-          <button className="btn-danger" disabled={busy || !max} onClick={() => onConfirm(count)}>{busy ? 'Memproses…' : `Hapus ${count} Item`}</button>
+          <button className="btn-danger" disabled={busy || !max} onClick={() => onConfirm(count)}>{busy ? 'Memproses...' : `Hapus ${count} Item`}</button>
         </div>
       </div>
     </div>

@@ -563,3 +563,24 @@ button { font-family: inherit; cursor: pointer; }
   .form-grid { grid-template-columns: 1fr; }
   .stock-actions { grid-template-columns: 1fr; }
 }
+
+
+/* ============ TABLER ICON ALIGNMENT ============ */
+.tk-icon { display: inline-block; vertical-align: middle; flex-shrink: 0; }
+.btn-icon, .tab-icon, .chip-icon, .badge-icon, .h3-icon, .hint-icon {
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.badge-icon { gap: 4px; }
+.h3-icon { gap: 8px; }
+.stat-icon .tk-icon { color: var(--text); }
+.stat-card.accent-blue .stat-icon .tk-icon { color: var(--brand); }
+.stat-card.accent-green .stat-icon .tk-icon { color: var(--green); }
+.stat-card.accent-violet .stat-icon .tk-icon { color: var(--violet); }
+.stat-card.accent-amber .stat-icon .tk-icon { color: var(--amber); }
+.stat-card.accent-red .stat-icon .tk-icon { color: var(--red); }
+.ic-btn .tk-icon { color: inherit; }
+.ic-btn.ic-danger { color: #ff6b6b; }
+.ic-btn.ic-danger:hover:not(:disabled) { background: rgba(255,107,107,0.12); border-color: rgba(255,107,107,0.3); }
+.search .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: var(--muted); opacity: .8; }
+.modal-icon-danger { color: var(--red); display: grid; place-items: center; }
+.a-btn.btn-icon { justify-content: center; }
