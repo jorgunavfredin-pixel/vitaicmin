@@ -471,23 +471,6 @@ button { font-family: inherit; cursor: pointer; }
 }
 .select-field:focus { border-color: var(--brand); }
 
-.toolbar-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
-.toolbar-filters .search { flex: 0 1 240px; min-width: 160px; max-width: 340px; }
-.date-filter { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.date-field {
-  padding: 9px 10px; border-radius: 11px; font-size: 13px;
-  background: var(--panel); border: 1px solid var(--border); color: var(--text);
-  outline: none; transition: border-color .15s; color-scheme: dark;
-}
-.date-field:focus { border-color: var(--brand); }
-.date-sep { color: var(--muted); font-size: 13px; }
-.date-clear {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; border-radius: 9px; cursor: pointer;
-  background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--muted);
-}
-.date-clear:hover { color: #ffb1b1; border-color: #ffb1b1; }
-
 .view-toggle { display: inline-flex; background: var(--panel); border: 1px solid var(--border); border-radius: 11px; overflow: hidden; }
 .view-toggle button {
   background: transparent; border: none; color: var(--muted);

@@ -37,8 +37,6 @@ const FILTERS = [
 export default function Orders() {
   const [status, setStatus] = useState('all');
   const [q, setQ] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -53,14 +51,11 @@ export default function Orders() {
 
   const load = useCallback(() => {
     setLoading(true);
-    const params = { status, q, page, pageSize: 20 };
-    if (from) params.from = from;
-    if (to) params.to = to;
-    fetchOrders(params)
+    fetchOrders({ status, q, page, pageSize: 20 })
       .then((d) => { setData(d); setError(''); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [status, q, page, from, to]);
+  }, [status, q, page]);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 300 : 0); // debounce search
@@ -104,39 +99,13 @@ export default function Orders() {
             </button>
           ))}
         </div>
-        <div className="toolbar-filters">
-          <div className="search">
-            <span className="search-icon"><Icon name="search" size={15} /></span>
-            <input
-              placeholder="Cari ID / user / produk…"
-              value={q}
-              onChange={(e) => { setQ(e.target.value); setPage(1); }}
-            />
-          </div>
-          <div className="date-filter">
-            <input
-              type="date"
-              className="date-field"
-              value={from}
-              max={to || undefined}
-              title="Dari tanggal"
-              onChange={(e) => { setFrom(e.target.value); setPage(1); }}
-            />
-            <span className="date-sep">—</span>
-            <input
-              type="date"
-              className="date-field"
-              value={to}
-              min={from || undefined}
-              title="Sampai tanggal"
-              onChange={(e) => { setTo(e.target.value); setPage(1); }}
-            />
-            {(from || to) && (
-              <button className="date-clear" title="Reset tanggal" onClick={() => { setFrom(''); setTo(''); setPage(1); }}>
-                <Icon name="x" size={14} />
-              </button>
-            )}
-          </div>
+        <div className="search">
+          <span className="search-icon"><Icon name="search" size={15} /></span>
+          <input
+            placeholder="Cari ID / user / produk…"
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setPage(1); }}
+          />
         </div>
       </div>
 
