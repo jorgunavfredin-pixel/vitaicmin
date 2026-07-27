@@ -145,6 +145,13 @@ export const changeAdminPassword = (currentPassword, newPassword) =>
 export const updateStoreInfo = (data) =>
   apiFetch('/settings/store', { method: 'PUT', body: JSON.stringify(data) });
 
+// ---- Payment Gateways ----
+export const fetchGateways = () => apiFetch('/gateways');
+export const createGateway = (data) => apiFetch('/gateways', { method: 'POST', body: JSON.stringify(data) });
+export const updateGateway = (id, data) => apiFetch(`/gateways/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteGateway = (id) => apiFetch(`/gateways/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const testGateway = (id, creds) => apiFetch(`/gateways/${encodeURIComponent(id)}/test`, { method: 'POST', body: JSON.stringify(creds || {}) });
+
 export async function downloadBackup() {
   const res = await fetch(BASE + '/settings/backup', {
     headers: { Authorization: `Bearer ${getToken()}` }

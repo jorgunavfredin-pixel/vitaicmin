@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { fetchSettings, toggleSetting, changeAdminPassword, downloadBackup, updateStoreInfo } from '../api.js';
 import Icon from '../components/Icons.jsx';
+import PaymentTab from './settings/PaymentTab.jsx';
 
 // Tab structure — dibuat extensible biar gampang nambah tab di fase berikutnya.
 const TABS = [
   { key: 'general', label: 'Umum', icon: 'settings' },
   { key: 'store', label: 'Info Toko', icon: 'category' },
+  { key: 'payment', label: 'Payment Gateway', icon: 'cash' },
   { key: 'security', label: 'Keamanan', icon: 'shield' },
   { key: 'backup', label: 'Backup', icon: 'download' },
   { key: 'system', label: 'Info Sistem', icon: 'terminal' }
@@ -100,6 +102,8 @@ export default function Settings() {
           )}
 
           {tab === 'store' && <StoreTab store={data.store} showToast={showToast} onChanged={load} />}
+
+          {tab === 'payment' && <PaymentTab showToast={showToast} />}
 
           {tab === 'security' && <SecurityTab data={data} showToast={showToast} onChanged={load} />}
 

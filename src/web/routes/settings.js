@@ -11,9 +11,26 @@ const path = require('path');
 const db = require('../../models/db');
 const { getWIBToday } = require('../../utils/helpers');
 const { changePassword, isCustomPassword } = require('../auth');
+const { testConnection } = require('../../payments/qris');
 
 // Key toggle yang boleh diubah dari web (whitelist — jangan izinkan sembarang key).
 const TOGGLE_KEYS = ['maintenance', 'qris_enabled', 'saldo_enabled'];
+
+// Field credential per provider (buat validasi & masking). Fase 4 bisa nambah provider.
+const PROVIDER_FIELDS = {
+    pakasir: ['api_key', 'slug']
+};
+
+// Mask nilai credential untuk ditampilkan (jangan pernah kirim plaintext ke UI).
+const maskCred = (creds = {}) => {
+    const out = {};
+    for (const [k, v] of Object.entries(creds)) {
+        // slug bukan rahasia berat → tampilkan apa adanya biar admin bisa verifikasi.
+        if (k === 'slug') out[k] = v || null;
+        else out[k] = v ? mask(v) : null;
+    }
+    return out;
+};
 
 // Mask sebagian string sensitif jadi ••••1234 (tampilkan 4 char terakhir).
 const mask = (val) => {
@@ -157,12 +174,121 @@ const updateStore = (req, res) => {
     }
 };
 
+// ==================== PAYMENT GATEWAYS ====================
+
+// ---- GET /gateways ----  daftar gateway (credential di-mask)
+const listGateways = (req, res) => {
+    try {
+        const gws = db.getPaymentGateways().map(g => ({
+            id: g.id,
+            provider: g.provider,
+            label: g.label,
+            credentials: maskCred(g.credentials),
+            enabled: g.enabled,
+            priority: g.priority,
+            updated_at: g.updated_at
+        }));
+        res.json({ gateways: gws, providers: Object.keys(PROVIDER_FIELDS) });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
+// ---- POST /gateways ----  buat gateway baru
+const createGateway = (req, res) => {
+    try {
+        const { provider, label, credentials, enabled } = req.body || {};
+        if (!PROVIDER_FIELDS[provider]) return res.status(400).json({ error: 'Provider tidak dikenal' });
+        const gw = db.createPaymentGateway({
+            provider,
+            label: (label || '').trim() || provider,
+            credentials: credentials || {},
+            enabled: enabled !== false
+        });
+        res.json({ ok: true, message: 'Gateway ditambahkan', id: gw.id });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
+// ---- PUT /gateways/:id ----  update (credential partial: field kosong tidak menimpa)
+const updateGateway = (req, res) => {
+    try {
+        const { id } = req.params;
+        const existing = db.getPaymentGatewayById(id);
+        if (!existing) return res.status(404).json({ error: 'Gateway tidak ditemukan' });
+
+        const { label, credentials, enabled, priority } = req.body || {};
+        const updates = {};
+        if (label !== undefined) updates.label = String(label).trim();
+        if (enabled !== undefined) updates.enabled = !!enabled;
+        if (priority !== undefined) updates.priority = parseInt(priority) || 0;
+
+        // Credential: hanya update field yang dikirim & non-kosong (biar bisa ganti api_key
+        // tanpa harus ketik ulang slug, dan sebaliknya). Field kosong = pertahankan lama.
+        if (credentials && typeof credentials === 'object') {
+            const allowed = PROVIDER_FIELDS[existing.provider] || [];
+            const credUpdate = {};
+            for (const f of allowed) {
+                if (credentials[f] !== undefined && String(credentials[f]).trim() !== '') {
+                    credUpdate[f] = String(credentials[f]).trim();
+                }
+            }
+            if (Object.keys(credUpdate).length) updates.credentials = credUpdate;
+        }
+
+        db.updatePaymentGateway(id, updates);
+        res.json({ ok: true, message: 'Gateway diperbarui' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
+// ---- DELETE /gateways/:id ----
+const deleteGateway = (req, res) => {
+    try {
+        const { id } = req.params;
+        const existing = db.getPaymentGatewayById(id);
+        if (!existing) return res.status(404).json({ error: 'Gateway tidak ditemukan' });
+        db.deletePaymentGateway(id);
+        res.json({ ok: true, message: `Gateway ${existing.label} dihapus` });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
+// ---- POST /gateways/:id/test ----  test koneksi credential (pakai yg tersimpan / yg dikirim)
+const testGateway = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const gw = db.getPaymentGatewayById(id);
+        if (!gw) return res.status(404).json({ error: 'Gateway tidak ditemukan' });
+        if (gw.provider !== 'pakasir') return res.status(400).json({ error: 'Test belum didukung untuk provider ini' });
+
+        // Pakai credential tersimpan; kalau body kirim credential baru (belum disimpan), pakai itu.
+        const body = req.body || {};
+        const apiKey = (body.api_key && String(body.api_key).trim()) || gw.credentials.api_key;
+        const slug = (body.slug && String(body.slug).trim()) || gw.credentials.slug;
+
+        const result = await testConnection({ apiKey, slug });
+        res.json(result);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
 const registerSettingsRoutes = (api) => {
     api.get('/settings', getSettings);
     api.patch('/settings/toggle', toggleSetting);
     api.put('/settings/store', updateStore);
     api.post('/settings/password', updatePassword);
     api.get('/settings/backup', backupDb);
+    // Payment gateways
+    api.get('/gateways', listGateways);
+    api.post('/gateways', createGateway);
+    api.put('/gateways/:id', updateGateway);
+    api.delete('/gateways/:id', deleteGateway);
+    api.post('/gateways/:id/test', testGateway);
 };
 
 module.exports = { registerSettingsRoutes };

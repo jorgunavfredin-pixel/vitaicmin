@@ -192,7 +192,39 @@ db.exec(`
     UNIQUE(voucher_code, user_id)
   );
   CREATE INDEX IF NOT EXISTS idx_vred_user ON voucher_redemptions(user_id);
+
+  CREATE TABLE IF NOT EXISTS payment_gateways (
+    id TEXT PRIMARY KEY,
+    provider TEXT,          -- 'pakasir' | (future providers)
+    label TEXT,             -- nama tampilan yang admin kasih
+    credentials TEXT,       -- JSON string { api_key, slug, ... } — sensitif
+    enabled INTEGER DEFAULT 1,
+    priority INTEGER DEFAULT 0,  -- untuk multi-gateway routing (Fase 4)
+    created_at TEXT,
+    updated_at TEXT
+  );
 `);
+
+// Migration: seed gateway PaKasir dari .env kalau tabel masih kosong (backward compatible).
+// Ini memastikan sistem yang sudah jalan pakai env tetap bekerja setelah upgrade,
+// TANPA menimpa data kalau admin sudah mengelola gateway dari panel.
+try {
+  const count = db.prepare('SELECT COUNT(*) AS n FROM payment_gateways').get().n;
+  if (count === 0 && (process.env.PAKASIR_API_KEY || process.env.PAKASIR_SLUG)) {
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO payment_gateways (id, provider, label, credentials, enabled, priority, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 1, 0, ?, ?)`).run(
+      'pakasir-default',
+      'pakasir',
+      'PaKasir (dari .env)',
+      JSON.stringify({ api_key: process.env.PAKASIR_API_KEY || '', slug: process.env.PAKASIR_SLUG || '' }),
+      now, now
+    );
+    console.log('[DB] Seeded default PaKasir gateway from .env');
+  }
+} catch (e) {
+  console.error('[DB] payment_gateways seed error:', e.message);
+}
 
 // ==================== JSON → SQLite MIGRATION ====================
 const migrateFromJSON = () => {
@@ -777,6 +809,88 @@ const getConfig = (settingKey, envKey, fallback = '') => {
   return fallback;
 };
 
+// ==================== PAYMENT GATEWAYS ====================
+const parseGateway = (row) => {
+  if (!row) return null;
+  let creds = {};
+  try { creds = JSON.parse(row.credentials || '{}'); } catch (e) { creds = {}; }
+  return {
+    id: row.id,
+    provider: row.provider,
+    label: row.label,
+    credentials: creds,
+    enabled: row.enabled === 1,
+    priority: row.priority || 0,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+};
+
+const getPaymentGateways = () => {
+  return db.prepare('SELECT * FROM payment_gateways ORDER BY priority ASC, created_at ASC').all().map(parseGateway);
+};
+
+const getPaymentGatewayById = (id) => {
+  return parseGateway(db.prepare('SELECT * FROM payment_gateways WHERE id = ?').get(id));
+};
+
+// Gateway aktif berprioritas tertinggi untuk sebuah provider (dipakai qris.js call-time).
+// Fase 3: single gateway. Fase 4: routing multi-gateway pakai daftar enabled.
+const getActiveGateway = (provider = 'pakasir') => {
+  const row = db.prepare(
+    'SELECT * FROM payment_gateways WHERE provider = ? AND enabled = 1 ORDER BY priority ASC, created_at ASC LIMIT 1'
+  ).get(provider);
+  return parseGateway(row);
+};
+
+const createPaymentGateway = ({ provider, label, credentials, enabled = true, priority = 0 }) => {
+  const id = `GW-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO payment_gateways (id, provider, label, credentials, enabled, priority, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    id, provider, label || provider, JSON.stringify(credentials || {}), enabled ? 1 : 0, priority, now, now
+  );
+  return getPaymentGatewayById(id);
+};
+
+const updatePaymentGateway = (id, updates) => {
+  const existing = getPaymentGatewayById(id);
+  if (!existing) return null;
+  const merged = {
+    label: updates.label !== undefined ? updates.label : existing.label,
+    // Merge credentials: field yang tidak dikirim tetap pakai nilai lama (biar bisa update sebagian).
+    credentials: updates.credentials !== undefined
+      ? { ...existing.credentials, ...updates.credentials }
+      : existing.credentials,
+    enabled: updates.enabled !== undefined ? updates.enabled : existing.enabled,
+    priority: updates.priority !== undefined ? updates.priority : existing.priority
+  };
+  db.prepare(`UPDATE payment_gateways SET label = ?, credentials = ?, enabled = ?, priority = ?, updated_at = ? WHERE id = ?`)
+    .run(merged.label, JSON.stringify(merged.credentials), merged.enabled ? 1 : 0, merged.priority, new Date().toISOString(), id);
+  return getPaymentGatewayById(id);
+};
+
+const deletePaymentGateway = (id) => {
+  db.prepare('DELETE FROM payment_gateways WHERE id = ?').run(id);
+};
+
+/**
+ * getGatewayCredential — resolver credential untuk provider aktif.
+ * Prioritas: gateway aktif di DB > process.env (backward compat) > ''.
+ * Dipakai qris.js SAAT CALL (bukan module-load) supaya ganti credential langsung ngefek.
+ */
+const getGatewayCredential = (provider = 'pakasir') => {
+  const gw = getActiveGateway(provider);
+  if (gw && gw.credentials) {
+    return { source: 'db', gatewayId: gw.id, ...gw.credentials };
+  }
+  // Fallback ke env
+  if (provider === 'pakasir') {
+    return { source: 'env', api_key: process.env.PAKASIR_API_KEY || '', slug: process.env.PAKASIR_SLUG || '' };
+  }
+  return { source: 'none' };
+};
+
 // ==================== FLASH SALE ====================
 const isFlashSaleActive = (product) => {
   if (!product || !product.flash_price || !product.flash_start || !product.flash_end) return false;
@@ -850,6 +964,9 @@ module.exports = {
   getVouchers, getVoucherByCode, createVoucher, useVoucher, deleteVoucher, calculateDiscount, hasUserRedeemedVoucher, redeemVoucher,
   // Settings
   getSettings, updateSettings, getConfig,
+  // Payment Gateways
+  getPaymentGateways, getPaymentGatewayById, getActiveGateway, createPaymentGateway,
+  updatePaymentGateway, deletePaymentGateway, getGatewayCredential,
   // Flash Sale
   isFlashSaleActive, getEffectivePrice, setFlashSale, clearFlashSale, getActiveFlashSales, getExpiredFlashSales,
   // Maintenance
