@@ -3,6 +3,7 @@ import {
   fetchOrders, fetchOrder, redeliverOrder, replaceOrder,
   refundOrder, deleteOrder, downloadOrdersCsv
 } from '../api.js';
+import Icon from '../components/Icons.jsx';
 
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('id-ID', {
@@ -82,7 +83,7 @@ export default function Orders() {
           <h2 className="page-title">Orders</h2>
           <p className="page-sub">{data ? `${data.total} order` : 'Memuat…'}</p>
         </div>
-        <button className="btn-ghost" onClick={onExport}>⬇️ Export CSV</button>
+        <button className="btn-ghost btn-icon" onClick={onExport}><Icon name="download" size={16} /> Export CSV</button>
       </div>
 
       <div className="toolbar">
@@ -99,7 +100,7 @@ export default function Orders() {
           ))}
         </div>
         <div className="search">
-          <span className="search-icon">🔎</span>
+          <span className="search-icon"><Icon name="search" size={15} /></span>
           <input
             placeholder="Cari ID / user / produk…"
             value={q}
@@ -110,7 +111,7 @@ export default function Orders() {
 
       <div className="panel no-pad">
         {error ? (
-          <div className="empty error-panel">⚠️ {error}</div>
+          <div className="empty error-panel hint-icon"><Icon name="warning" size={16} /> {error}</div>
         ) : (
           <div className="table-wrap">
             <table className="table">
@@ -222,10 +223,10 @@ function OrderDrawer({ id, onClose, onChanged, toast }) {
   };
 
   const actions = order ? [
-    { key: 'redeliver', label: '🔄 Kirim Ulang', fn: redeliverOrder, show: order.delivered_data?.length > 0, cls: 'a-blue' },
-    { key: 'replace', label: '🔁 Replace Akun', fn: replaceOrder, show: order.status === 'delivered', cls: 'a-violet' },
-    { key: 'refund', label: '💸 Refund', fn: refundOrder, show: ['delivered', 'paid'].includes(order.status), danger: true, cls: 'a-amber' },
-    { key: 'delete', label: '🗑 Hapus', fn: deleteOrder, show: true, danger: true, cls: 'a-red' }
+    { key: 'redeliver', icon: 'refresh', label: 'Kirim Ulang', fn: redeliverOrder, show: order.delivered_data?.length > 0, cls: 'a-blue' },
+    { key: 'replace', icon: 'exchange', label: 'Replace Akun', fn: replaceOrder, show: order.status === 'delivered', cls: 'a-violet' },
+    { key: 'refund', icon: 'arrow-back', label: 'Refund', fn: refundOrder, show: ['delivered', 'paid'].includes(order.status), danger: true, cls: 'a-amber' },
+    { key: 'delete', icon: 'trash', label: 'Hapus', fn: deleteOrder, show: true, danger: true, cls: 'a-red' }
   ].filter(a => a.show) : [];
 
 
@@ -235,10 +236,10 @@ function OrderDrawer({ id, onClose, onChanged, toast }) {
       <aside className="drawer">
         <div className="drawer-head">
           <h3>Detail Order</h3>
-          <button className="x" onClick={onClose}>✕</button>
+          <button className="x" onClick={onClose}><Icon name="x" /></button>
         </div>
 
-        {err && <div className="empty error-panel">⚠️ {err}</div>}
+        {err && <div className="empty error-panel hint-icon"><Icon name="warning" size={16} /> {err}</div>}
         {!order && !err && <div className="empty">Memuat…</div>}
 
         {order && (
@@ -261,7 +262,7 @@ function OrderDrawer({ id, onClose, onChanged, toast }) {
             {order.delivered_data?.length > 0 && (
               <>
                 <div className="d-divider" />
-                <div className="d-label">📋 Data Terkirim ({order.delivered_data.length})</div>
+                <div className="d-label hint-icon"><Icon name="clipboard" size={14} /> Data Terkirim ({order.delivered_data.length})</div>
                 <div className="d-accounts">
                   {order.delivered_data.map((d, i) => <code key={i}>{d}</code>)}
                 </div>
@@ -269,18 +270,18 @@ function OrderDrawer({ id, onClose, onChanged, toast }) {
             )}
 
             {order.status === 'delivered' && (
-              <div className="d-hint">🧰 Stok tersedia untuk replace: <b>{order.available_stock}</b></div>
+              <div className="d-hint hint-icon"><Icon name="box" size={14} /> Stok tersedia untuk replace: <b>{order.available_stock}</b></div>
             )}
 
             <div className="d-actions">
               {actions.map((a) => (
                 <button
                   key={a.key}
-                  className={`a-btn ${a.cls}`}
+                  className={`a-btn btn-icon ${a.cls}`}
                   disabled={!!busy}
                   onClick={() => (a.danger || a.key === 'replace') ? setConfirm(a) : run(a.key, a.fn)}
                 >
-                  {busy === a.key ? '…' : a.label}
+                  {busy === a.key ? '…' : <><Icon name={a.icon} size={15} /> {a.label}</>}
                 </button>
               ))}
             </div>
@@ -291,7 +292,7 @@ function OrderDrawer({ id, onClose, onChanged, toast }) {
       {confirm && (
         <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirm(null); }}>
           <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="modal-icon">{confirm.key === 'replace' ? '🔁' : '⚠️'}</div>
+            <div className={`modal-icon ${confirm.key === 'replace' ? '' : 'modal-icon-danger'}`}><Icon name={confirm.key === 'replace' ? 'exchange' : 'warning'} size={30} /></div>
             <h4>{confirm.label}?</h4>
             {confirm.key === 'replace' ? (
               <div style={{ margin: '14px 0', textAlign: 'left' }}>

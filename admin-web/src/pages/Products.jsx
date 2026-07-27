@@ -227,7 +227,7 @@ export default function Products() {
                       <tr key={p.id}>
                         <td>
                           <div style={{ fontWeight: 600, color: '#fff' }}>{p.name_id}</div>
-                          <div style={{ fontSize: 12, color: '#8a93a6' }}>{p.name_en || '-'} · <code style={{ fontSize: 11 }}>{p.id}</code></div>
+                          <div style={{ fontSize: 12, color: '#8a93a6' }}>{p.name_en || '-'}</div>
                         </td>
                         <td><span className="badge st-muted">{p.category_name_id}</span></td>
                         <td>
@@ -285,17 +285,16 @@ export default function Products() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>ID Kategori</th><th>Nama (ID)</th><th>Nama (EN)</th>
+                  <th>Nama (ID)</th><th>Nama (EN)</th>
                   <th>Jumlah Produk</th><th>Produk Aktif</th><th style={{ textAlign: 'right' }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {categories.length === 0 ? (
-                  <tr><td colSpan={6} className="empty">Belum ada kategori.</td></tr>
+                  <tr><td colSpan={5} className="empty">Belum ada kategori.</td></tr>
                 ) : (
                   categories.map((c) => (
                     <tr key={c.id}>
-                      <td className="mono">{c.id}</td>
                       <td><b>{c.name_id}</b></td>
                       <td>{c.name_en || '-'}</td>
                       <td><b>{c.product_count}</b> produk</td>
@@ -400,7 +399,7 @@ function ProductCard({ p, onEdit, onFlash, onBulk, onStock, onDelete, onToggle }
         </button>
       </div>
       <div className="prod-card-name">{p.name_id}</div>
-      <div className="prod-card-meta">{p.name_en || '-'} · <code>{p.id}</code></div>
+      <div className="prod-card-meta">{p.name_en || '-'}</div>
 
       <div className="prod-card-price">
         {p.is_flash_active ? (

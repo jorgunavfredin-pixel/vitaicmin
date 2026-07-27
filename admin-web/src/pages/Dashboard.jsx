@@ -3,6 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from 'recharts';
 import { fetchDashboard } from '../api.js';
+import Icon from '../components/Icons.jsx';
 
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const compact = (n) => new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(n || 0);
@@ -21,7 +22,7 @@ const STATUS = {
 function StatCard({ icon, label, value, sub, accent }) {
   return (
     <div className={`stat-card accent-${accent}`}>
-      <div className="stat-icon">{icon}</div>
+      <div className="stat-icon"><Icon name={icon} size={22} /></div>
       <div className="stat-body">
         <div className="stat-label">{label}</div>
         <div className="stat-value">{value}</div>
@@ -51,7 +52,7 @@ export default function Dashboard() {
     return () => window.removeEventListener('order_updated', handleUpdate);
   }, [load]);
 
-  if (error) return <div className="panel error-panel">⚠️ {error}</div>;
+  if (error) return <div className="panel error-panel hint-icon"><Icon name="warning" size={16} /> {error}</div>;
   if (!data) return <div className="skeleton-grid">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton-card" />)}</div>;
 
   const c = data.cards;
@@ -59,10 +60,10 @@ export default function Dashboard() {
   return (
     <div className="dash">
       <div className="stat-grid">
-        <StatCard accent="green" icon="💵" label="Omzet Hari Ini" value={rupiah(c.revenueToday)} sub={`Bulan ini: ${rupiah(c.revenueMonth)}`} />
-        <StatCard accent="blue" icon="🧾" label="Total Order" value={compact(c.ordersTotal)} sub={`${c.ordersPending} pending • ${c.ordersSuccess} sukses`} />
-        <StatCard accent="violet" icon="✅" label="Success Rate" value={`${c.successRate}%`} sub={`${c.ordersSuccess} order berhasil`} />
-        <StatCard accent="amber" icon="👥" label="Total User" value={compact(c.totalUsers)} sub={`${c.totalProducts} produk aktif`} />
+        <StatCard accent="green" icon="cash" label="Omzet Hari Ini" value={rupiah(c.revenueToday)} sub={`Bulan ini: ${rupiah(c.revenueMonth)}`} />
+        <StatCard accent="blue" icon="receipt" label="Total Order" value={compact(c.ordersTotal)} sub={`${c.ordersPending} pending • ${c.ordersSuccess} sukses`} />
+        <StatCard accent="violet" icon="check" label="Success Rate" value={`${c.successRate}%`} sub={`${c.ordersSuccess} order berhasil`} />
+        <StatCard accent="amber" icon="users" label="Total User" value={compact(c.totalUsers)} sub={`${c.totalProducts} produk aktif`} />
       </div>
 
       <div className="grid-2">
@@ -108,8 +109,8 @@ export default function Dashboard() {
             </ul>
           )}
           <div className="stock-note">
-            🧰 Stok tersedia: <b>{c.totalStock}</b>
-            {c.lowStockCount > 0 && <span className="low-badge">⚠️ {c.lowStockCount} produk menipis</span>}
+            <span className="hint-icon"><Icon name="box" size={15} /> Stok tersedia: <b>{c.totalStock}</b></span>
+            {c.lowStockCount > 0 && <span className="low-badge hint-icon"><Icon name="warning" size={14} /> {c.lowStockCount} produk menipis</span>}
           </div>
         </div>
       </div>
