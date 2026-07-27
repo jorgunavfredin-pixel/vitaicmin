@@ -148,7 +148,7 @@ const createProduct = (req, res) => {
         terms_id: (terms_id || '').trim(),
         terms_en: (terms_en || terms_id || '').trim(),
         stock_type: stock_type || 'email_pass',
-        stock_mode: stock_mode || 'limited',
+        stock_mode: 'limited', // hanya mode limited yang didukung (unlimited dihapus)
         terms_format: terms_format || 'markdown',
         active: active !== false
     });
@@ -165,6 +165,7 @@ const updateProduct = (req, res) => {
     const updates = { ...req.body };
     if (updates.price_idr != null) updates.price_idr = parseInt(updates.price_idr) || 0;
     if (updates.active != null) updates.active = updates.active === true || updates.active === 1 || updates.active === 'true';
+    updates.stock_mode = 'limited'; // hanya mode limited yang didukung (unlimited dihapus)
 
     const updated = db.updateProduct(id, updates);
     db.dbEvents?.emit('product_change', { type: 'product_updated', product: updated });

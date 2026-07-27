@@ -63,7 +63,12 @@ export default function Products() {
       fetchProductStats().catch(() => null)
     ])
       .then(([cats, prods, st]) => {
-        setCategories(cats);
+        // Urutkan kategori & produk A-Z (locale ID) agar mudah dicari.
+        const byName = (a, b) => (a.name_id || '').localeCompare(b.name_id || '', 'id', { sensitivity: 'base' });
+        setCategories([...cats].sort(byName));
+        if (prods && Array.isArray(prods.products)) {
+          prods.products = [...prods.products].sort(byName);
+        }
         setProductsData(prods);
         if (st) setStats(st);
         setError('');
@@ -122,7 +127,7 @@ export default function Products() {
           <ProdStat icon="package" accent="blue" label="Total Produk" value={stats.totalProducts}
             sub={`${stats.activeProducts} aktif · ${stats.pausedProducts} paused`} />
           <ProdStat icon="box" accent="green" label="Stok Tersedia" value={compact(stats.totalStock)}
-            sub={stats.unlimitedCount > 0 ? `+${stats.unlimitedCount} produk unlimited` : `${stats.totalSold} terjual (30h)`} />
+            sub={`${stats.totalSold} terjual (30h)`} />
           <ProdStat icon="wallet" accent="violet" label="Nilai Inventory" value={formatIDR(stats.inventoryValue)}
             sub="Estimasi nilai stok tersedia" />
           <ProdStat icon="warning" accent={stats.outOfStockCount > 0 ? 'red' : 'amber'} label="Perlu Restock"
@@ -245,11 +250,7 @@ export default function Products() {
                           )}
                         </td>
                         <td>
-                          {p.stock_mode === 'unlimited' ? (
-                            <span className="badge st-paid badge-icon"><Icon name="infinity" size={13} /> Unlimited</span>
-                          ) : (
-                            <StockPill count={p.available_stock} />
-                          )}
+                          <StockPill count={p.available_stock} />
                           <div style={{ fontSize: 11, color: '#8a93a6', marginTop: 2 }}>{stockTypeLabel(p.stock_type)}</div>
                         </td>
                         <td><b>{p.sold_stock || 0}</b> pcs</td>
@@ -261,8 +262,7 @@ export default function Products() {
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           <div className="row-actions">
-                            <button className="ic-btn" onClick={() => setStockDrawerProd(p)} title="Kelola Stok"
-                              disabled={p.stock_mode === 'unlimited'}><Icon name="box" /></button>
+                            <button className="ic-btn" onClick={() => setStockDrawerProd(p)} title="Kelola Stok"><Icon name="box" /></button>
                             <button className="ic-btn" onClick={() => setEditingProduct(p)} title="Edit Produk"><Icon name="edit" /></button>
                             <button className="ic-btn" style={{ color: p.is_flash_active ? '#ff6b6b' : undefined }} onClick={() => setFlashModalProd(p)} title="Flash Sale"><Icon name="flash" /></button>
                             <button className="ic-btn" onClick={() => setBulkModalProd(p)} title="Diskon Grosir"><Icon name="discount" /></button>
@@ -419,7 +419,7 @@ function ProductCard({ p, onEdit, onFlash, onBulk, onStock, onDelete, onToggle }
       <div className="prod-card-stock">
         <div>
           <div className="mini-label">Stok</div>
-          {p.stock_mode === 'unlimited' ? <span className="badge st-paid badge-icon"><Icon name="infinity" size={13} /> Unlimited</span> : <StockPill count={p.available_stock} />}
+          <StockPill count={p.available_stock} />
         </div>
         <div>
           <div className="mini-label" title="Item terjual dalam 30 hari terakhir">Terjual (30h)</div>
@@ -432,7 +432,7 @@ function ProductCard({ p, onEdit, onFlash, onBulk, onStock, onDelete, onToggle }
       </div>
 
       <div className="prod-card-actions">
-        <button className="a-btn a-green btn-icon" onClick={onStock} disabled={p.stock_mode === 'unlimited'}><Icon name="box" size={15} /> Stok</button>
+        <button className="a-btn a-green btn-icon" onClick={onStock}><Icon name="box" size={15} /> Stok</button>
         <button className="a-btn a-blue btn-icon" onClick={onEdit}><Icon name="edit" size={15} /> Edit</button>
         <button className="a-btn a-amber btn-icon" onClick={onFlash} style={{ color: p.is_flash_active ? '#ff6b6b' : undefined }}><Icon name="flash" size={15} /> Flash</button>
         <button className="a-btn a-violet btn-icon" onClick={onBulk}><Icon name="discount" size={15} /> Bulk</button>
@@ -524,13 +524,6 @@ function ProductFormModal({ prod, categories, onClose, onSaved, toast }) {
                 <label className="field-label">Format Stok (Stock Type)</label>
                 <select className="qty-field" value={formData.stock_type} onChange={(e) => handleChange('stock_type', e.target.value)}>
                   {STOCK_TYPES.map((st) => <option key={st.id} value={st.id}>{st.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="field-label">Mode Stok</label>
-                <select className="qty-field" value={formData.stock_mode} onChange={(e) => handleChange('stock_mode', e.target.value)}>
-                  <option value="limited">Limited (Butuh entri stok)</option>
-                  <option value="unlimited">Unlimited (Stok tak terbatas)</option>
                 </select>
               </div>
               <div>

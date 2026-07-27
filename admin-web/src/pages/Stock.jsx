@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
-  fetchStockOverview, fetchReservedDetail, bulkRestock, downloadStockCsv, fetchCategories
+  fetchStockOverview, fetchReservedDetail, bulkRestock, fetchCategories
 } from '../api.js';
 import { StockDrawer } from './Products.jsx';
 import Icon from '../components/Icons.jsx';
@@ -21,12 +21,12 @@ const STATUS_FILTERS = [
   { key: 'all', label: 'Semua' },
   { key: 'low', label: 'Menipis' },
   { key: 'out', label: 'Habis' },
-  { key: 'ok', label: 'Aman' },
-  { key: 'unlimited', label: 'Unlimited' }
+  { key: 'ok', label: 'Aman' }
 ];
 
+const byName = (a, b) => a.name_id.localeCompare(b.name_id, 'id', { sensitivity: 'base' });
+
 function StatusPill({ status, available }) {
-  if (status === 'unlimited') return <span className="badge st-paid badge-icon"><Icon name="infinity" size={13} /> Unlimited</span>;
   if (status === 'out') return <span className="badge st-cancelled">Habis (0)</span>;
   if (status === 'low') return <b className="hint-icon" style={{ color: '#ffb454' }}>{available} item <Icon name="warning" size={13} /></b>;
   return <b style={{ color: '#37d399' }}>{available} item</b>;
@@ -56,13 +56,14 @@ export default function Stock() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [catFilter, setCatFilter] = useState('all');
   const [q, setQ] = useState('');
-  const [sortBy, setSortBy] = useState('available'); // available | sold_30d | inventory_value
+  const [sortBy, setSortBy] = useState('name'); // name | available | sold_30d | inventory_value
   const [sortDir, setSortDir] = useState('asc');
 
   // Modals & drawers
   const [drawerProd, setDrawerProd] = useState(null);
   const [reservedProd, setReservedProd] = useState(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [alertOpen, setAlertOpen] = useState(false);
 
   const showToast = (msg, kind = 'ok') => {
     setToast({ msg, kind });
@@ -87,28 +88,42 @@ export default function Stock() {
 
   const toggleSort = (key) => {
     if (sortBy === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    else { setSortBy(key); setSortDir('asc'); }
+    else { setSortBy(key); setSortDir(key === 'name' ? 'asc' : 'desc'); }
   };
+
+  // Kategori diurutkan A-Z untuk rail kiri
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => (a.name_id || '').localeCompare(b.name_id || '', 'id', { sensitivity: 'base' })),
+    [categories]
+  );
+
+  // Hitungan produk per kategori (untuk badge di rail)
+  const catCounts = useMemo(() => {
+    const m = {};
+    (data?.products || []).forEach((p) => { m[p.category_id] = (m[p.category_id] || 0) + 1; });
+    return m;
+  }, [data]);
 
   const rows = useMemo(() => {
     if (!data) return [];
     let r = [...data.products];
-    if (statusFilter !== 'all') r = r.filter((x) => x.stock_status === statusFilter);
     if (catFilter !== 'all') r = r.filter((x) => x.category_id === catFilter);
+    if (statusFilter !== 'all') r = r.filter((x) => x.stock_status === statusFilter);
     if (q) {
       const query = q.toLowerCase().trim();
       r = r.filter((x) => x.name_id.toLowerCase().includes(query) || (x.name_en || '').toLowerCase().includes(query) || x.id.toLowerCase().includes(query));
     }
-    r.sort((a, b) => {
-      const av = a[sortBy] ?? -1, bv = b[sortBy] ?? -1;
-      return sortDir === 'asc' ? av - bv : bv - av;
-    });
+    if (sortBy === 'name') {
+      r.sort(byName);
+      if (sortDir === 'desc') r.reverse();
+    } else {
+      r.sort((a, b) => {
+        const av = a[sortBy] ?? -1, bv = b[sortBy] ?? -1;
+        return sortDir === 'asc' ? av - bv : bv - av;
+      });
+    }
     return r;
   }, [data, statusFilter, catFilter, q, sortBy, sortDir]);
-
-  const onExport = async () => {
-    try { await downloadStockCsv(); } catch (e) { showToast(e.message, 'err'); }
-  };
 
   const sortIcon = (key) => sortBy === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
 
@@ -123,19 +138,16 @@ export default function Stock() {
           <h2 className="page-title">Kontrol Stok</h2>
           <p className="page-sub">Pantau, restock, & kelola stok seluruh produk dari satu tempat</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn-ghost btn-icon" onClick={onExport}><Icon name="download" size={16} /> Export CSV</button>
-          <button className="btn-primary btn-icon" style={{ width: 'auto', padding: '10px 18px' }} onClick={() => setBulkOpen(true)}>
-            <Icon name="upload" size={16} /> Bulk Restock
-          </button>
-        </div>
+        <button className="btn-primary btn-icon" style={{ width: 'auto', padding: '10px 18px' }} onClick={() => setBulkOpen(true)}>
+          <Icon name="upload" size={16} /> Bulk Restock
+        </button>
       </div>
 
       {/* Stat cards */}
       {s && (
         <div className="prod-stat-grid">
           <StatCard icon="box" accent="green" label="Stok Tersedia" value={compact(s.totalAvailable)}
-            sub={s.unlimitedCount > 0 ? `+${s.unlimitedCount} produk unlimited` : `${s.totalProducts} produk`} />
+            sub={`${s.totalProducts} produk`} />
           <StatCard icon="clock" accent="amber" label="Ter-reserve" value={compact(s.totalReserved)}
             sub="Ditahan order pending" />
           <StatCard icon="warning" accent={s.outOfStockCount > 0 ? 'red' : 'amber'} label="Perlu Restock"
@@ -145,107 +157,123 @@ export default function Stock() {
         </div>
       )}
 
-      {/* Alert restock */}
-      {data && data.alerts.length > 0 && (
-        <div className="panel alert-panel">
-          <div className="panel-head">
-            <h3 className="h3-icon"><Icon name="warning" size={17} /> Perlu Restock ({data.alerts.length})</h3>
-          </div>
-          <div className="alert-list">
-            {data.alerts.map((a) => (
-              <div key={a.id} className={`alert-item ${a.stock_status}`}>
-                <div className="alert-info">
-                  <span className={`alert-dot ${a.stock_status}`} />
-                  <div>
-                    <div className="alert-name">{a.name_id}</div>
-                    <div className="alert-meta">{a.category_name} · {stockTypeLabel(a.stock_type)}</div>
-                  </div>
-                </div>
-                <div className="alert-right">
-                  <StatusPill status={a.stock_status} available={a.available} />
-                  <button className="a-btn a-green btn-icon" onClick={() => setDrawerProd(a)}>
-                    <Icon name="plus" size={14} /> Tambah
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Toolbar */}
-      <div className="toolbar">
-        <div className="chips">
-          {STATUS_FILTERS.map((f) => (
-            <button key={f.key} className={`chip ${statusFilter === f.key ? 'active' : ''}`} onClick={() => setStatusFilter(f.key)}>
-              {f.label}
+      {/* Layout: rail kategori (kiri) + konten (kanan) */}
+      <div className="stock-layout">
+        {/* Rail kategori A-Z */}
+        <aside className="cat-rail">
+          <div className="cat-rail-title">Kategori</div>
+          <button className={`cat-item ${catFilter === 'all' ? 'active' : ''}`} onClick={() => setCatFilter('all')}>
+            <span>Semua Kategori</span>
+            <span className="cat-count">{data?.products.length || 0}</span>
+          </button>
+          {sortedCategories.map((c) => (
+            <button key={c.id} className={`cat-item ${catFilter === c.id ? 'active' : ''}`} onClick={() => setCatFilter(c.id)}>
+              <span className="cat-item-name">{c.name_id}</span>
+              <span className="cat-count">{catCounts[c.id] || 0}</span>
             </button>
           ))}
-        </div>
-        <div className="toolbar-right">
-          <div className="search" style={{ flex: 1, minWidth: 200 }}>
-            <span className="search-icon"><Icon name="search" size={15} /></span>
-            <input placeholder="Cari produk…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </aside>
+
+        {/* Konten */}
+        <div className="stock-main">
+          <div className="toolbar">
+            <div className="chips">
+              {STATUS_FILTERS.map((f) => (
+                <button key={f.key} className={`chip ${statusFilter === f.key ? 'active' : ''}`} onClick={() => setStatusFilter(f.key)}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className="search" style={{ minWidth: 200 }}>
+              <span className="search-icon"><Icon name="search" size={15} /></span>
+              <input placeholder="Cari produk…" value={q} onChange={(e) => setQ(e.target.value)} />
+            </div>
           </div>
-          <select className="select-field" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
-            <option value="all">Semua Kategori</option>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.name_id}</option>)}
-          </select>
+
+          <div className="panel no-pad">
+            {loading && !data ? (
+              <div className="empty">Memuat stok…</div>
+            ) : rows.length === 0 ? (
+              <div className="empty">Tidak ada produk pada filter ini.</div>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th className="th-sort" onClick={() => toggleSort('name')}>Produk{sortIcon('name')}</th>
+                      <th>Kategori</th>
+                      <th>Tipe</th>
+                      <th className="th-sort" onClick={() => toggleSort('available')}>Tersedia{sortIcon('available')}</th>
+                      <th>Reserved</th>
+                      <th className="th-sort" onClick={() => toggleSort('sold_30d')}>Terjual (30h){sortIcon('sold_30d')}</th>
+                      <th className="th-sort" onClick={() => toggleSort('inventory_value')}>Nilai{sortIcon('inventory_value')}</th>
+                      <th style={{ textAlign: 'right' }}>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((p) => (
+                      <tr key={p.id}>
+                        <td>
+                          <div style={{ fontWeight: 600, color: '#fff' }}>{p.name_id}</div>
+                          {!p.active && <span className="badge st-expired" style={{ fontSize: 11 }}>Nonaktif</span>}
+                        </td>
+                        <td><span className="badge st-muted">{p.category_name}</span></td>
+                        <td style={{ fontSize: 12, color: '#8a93a6' }}>{stockTypeLabel(p.stock_type)}</td>
+                        <td><StatusPill status={p.stock_status} available={p.available} /></td>
+                        <td>
+                          {p.reserved > 0 ? (
+                            <button className="link-reserved hint-icon" onClick={() => setReservedProd(p)} title="Lihat order yang menahan stok">
+                              <Icon name="clock" size={13} /> {p.reserved}
+                            </button>
+                          ) : <span className="muted">0</span>}
+                        </td>
+                        <td><b>{p.sold_30d}</b> <span className="muted">pcs</span></td>
+                        <td>{formatIDR(p.inventory_value)}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button className="a-btn a-green btn-icon" onClick={() => setDrawerProd(p)}>
+                            <Icon name="box" size={14} /> Kelola
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Main table */}
-      <div className="panel no-pad">
-        {loading && !data ? (
-          <div className="empty">Memuat stok…</div>
-        ) : rows.length === 0 ? (
-          <div className="empty">Tidak ada produk pada filter ini.</div>
-        ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Produk</th>
-                  <th>Kategori</th>
-                  <th>Tipe</th>
-                  <th className="th-sort" onClick={() => toggleSort('available')}>Tersedia{sortIcon('available')}</th>
-                  <th>Reserved</th>
-                  <th className="th-sort" onClick={() => toggleSort('sold_30d')}>Terjual (30h){sortIcon('sold_30d')}</th>
-                  <th className="th-sort" onClick={() => toggleSort('inventory_value')}>Nilai{sortIcon('inventory_value')}</th>
-                  <th style={{ textAlign: 'right' }}>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <div style={{ fontWeight: 600, color: '#fff' }}>{p.name_id}</div>
-                      {!p.active && <span className="badge st-expired" style={{ fontSize: 11 }}>Nonaktif</span>}
-                    </td>
-                    <td><span className="badge st-muted">{p.category_name}</span></td>
-                    <td style={{ fontSize: 12, color: '#8a93a6' }}>{stockTypeLabel(p.stock_type)}</td>
-                    <td><StatusPill status={p.stock_status} available={p.available} /></td>
-                    <td>
-                      {p.reserved > 0 ? (
-                        <button className="link-reserved hint-icon" onClick={() => setReservedProd(p)} title="Lihat order yang menahan stok">
-                          <Icon name="clock" size={13} /> {p.reserved}
-                        </button>
-                      ) : <span className="muted">0</span>}
-                    </td>
-                    <td><b>{p.sold_30d}</b> <span className="muted">pcs</span></td>
-                    <td>{p.stock_mode === 'unlimited' ? <span className="muted">—</span> : formatIDR(p.inventory_value)}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button className="a-btn a-green btn-icon" onClick={() => setDrawerProd(p)}>
-                        <Icon name="box" size={14} /> Kelola
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Panel Perlu Restock — collapsible, di bawah, default tergulung */}
+      {data && data.alerts.length > 0 && (
+        <div className="panel alert-panel collapsible">
+          <button className="alert-toggle" onClick={() => setAlertOpen((v) => !v)}>
+            <span className="h3-icon"><Icon name="warning" size={17} /> Perlu Restock ({data.alerts.length})</span>
+            <Icon name="chevron" size={18} className={`chev ${alertOpen ? 'open' : ''}`} />
+          </button>
+          {alertOpen && (
+            <div className="alert-list">
+              {data.alerts.map((a) => (
+                <div key={a.id} className={`alert-item ${a.stock_status}`}>
+                  <div className="alert-info">
+                    <span className={`alert-dot ${a.stock_status}`} />
+                    <div>
+                      <div className="alert-name">{a.name_id}</div>
+                      <div className="alert-meta">{a.category_name} · {stockTypeLabel(a.stock_type)}</div>
+                    </div>
+                  </div>
+                  <div className="alert-right">
+                    <StatusPill status={a.stock_status} available={a.available} />
+                    <button className="a-btn a-green btn-icon" onClick={() => setDrawerProd(a)}>
+                      <Icon name="plus" size={14} /> Tambah
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {drawerProd && (
         <StockDrawer prod={drawerProd} onClose={() => setDrawerProd(null)} toast={showToast} onChanged={load} />
@@ -254,7 +282,7 @@ export default function Stock() {
         <ReservedModal prod={reservedProd} onClose={() => setReservedProd(null)} />
       )}
       {bulkOpen && (
-        <BulkRestockModal products={data?.products || []} onClose={() => setBulkOpen(false)}
+        <BulkRestockModal products={data?.products || []} categories={sortedCategories} onClose={() => setBulkOpen(false)}
           toast={showToast} onDone={() => { setBulkOpen(false); load(); }} />
       )}
 
@@ -308,22 +336,80 @@ function ReservedModal({ prod, onClose }) {
   );
 }
 
+// ---- Custom product picker (light theme, search + grup kategori A-Z) ----
+function ProductPicker({ products, categories, excludeIds, onPick }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  // Grup produk per kategori (A-Z), produk dalam grup A-Z. Kategori tanpa produk disembunyikan.
+  const groups = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    const avail = products.filter((p) => !excludeIds.includes(p.id) &&
+      (!q || p.name_id.toLowerCase().includes(q) || (p.name_en || '').toLowerCase().includes(q)));
+    const catOrder = [...categories];
+    const result = [];
+    for (const c of catOrder) {
+      const items = avail.filter((p) => p.category_id === c.id).sort(byName);
+      if (items.length) result.push({ id: c.id, name: c.name_id, items });
+    }
+    // produk tanpa kategori
+    const noCat = avail.filter((p) => !categories.some((c) => c.id === p.category_id)).sort(byName);
+    if (noCat.length) result.push({ id: '_none', name: 'Tanpa Kategori', items: noCat });
+    return result;
+  }, [products, categories, excludeIds, search]);
+
+  return (
+    <div className="picker" ref={ref}>
+      <button type="button" className="picker-trigger" onClick={() => setOpen((v) => !v)}>
+        <span>+ Pilih produk untuk ditambahkan…</span>
+        <Icon name="chevron" size={16} className={`chev ${open ? 'open' : ''}`} />
+      </button>
+      {open && (
+        <div className="picker-panel">
+          <div className="picker-search">
+            <Icon name="search" size={15} />
+            <input autoFocus placeholder="Cari produk…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <div className="picker-list">
+            {groups.length === 0 ? (
+              <div className="picker-empty">Tidak ada produk.</div>
+            ) : (
+              groups.map((g) => (
+                <div key={g.id} className="picker-group">
+                  <div className="picker-group-head">{g.name}</div>
+                  {g.items.map((p) => (
+                    <button key={p.id} type="button" className="picker-option"
+                      onClick={() => { onPick(p); setOpen(false); setSearch(''); }}>
+                      <span className="picker-opt-name">{p.name_id}</span>
+                      <span className="picker-opt-stock">stok: {p.available ?? 0}</span>
+                    </button>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---- Bulk restock modal ----
-function BulkRestockModal({ products, onClose, toast, onDone }) {
-  // Hanya produk yang pakai stock line (bukan unlimited murni tanpa line) yang relevan; tampilkan semua limited.
-  const options = products.filter((p) => p.stock_mode !== 'unlimited');
-  const [selectedId, setSelectedId] = useState('');
+function BulkRestockModal({ products, categories, onClose, toast, onDone }) {
   const [entries, setEntries] = useState([]); // { product_id, name_id, lines }
   const [busy, setBusy] = useState(false);
 
-  const addEntry = () => {
-    if (!selectedId) return;
-    if (entries.some((e) => e.product_id === selectedId)) { toast('Produk sudah ada di daftar', 'err'); return; }
-    const p = products.find((x) => x.id === selectedId);
+  const addEntry = (p) => {
+    if (entries.some((e) => e.product_id === p.id)) { toast('Produk sudah ada di daftar', 'err'); return; }
     setEntries((prev) => [...prev, { product_id: p.id, name_id: p.name_id, lines: '' }]);
-    setSelectedId('');
   };
-
   const updateLines = (pid, val) => setEntries((prev) => prev.map((e) => e.product_id === pid ? { ...e, lines: val } : e));
   const removeEntry = (pid) => setEntries((prev) => prev.filter((e) => e.product_id !== pid));
 
@@ -350,23 +436,16 @@ function BulkRestockModal({ products, onClose, toast, onDone }) {
           <button className="x" onClick={onClose}><Icon name="x" /></button>
         </div>
         <p style={{ fontSize: 13, color: '#8a93a6', margin: '0 0 14px' }}>
-          Tambah stok ke beberapa produk sekaligus. Pilih produk, lalu tempel data stok (1 baris = 1 item).
+          Tambah stok ke beberapa produk sekaligus. Cari & pilih produk (dikelompokkan per kategori), lalu tempel data stok (1 baris = 1 item).
         </p>
 
-        <div className="row" style={{ gap: 8, marginBottom: 16 }}>
-          <select className="select-field" style={{ flex: 1 }} value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
-            <option value="">+ Pilih produk untuk ditambahkan…</option>
-            {options.filter((o) => !entries.some((e) => e.product_id === o.id)).map((o) => (
-              <option key={o.id} value={o.id}>{o.name_id} (stok: {o.available ?? 0})</option>
-            ))}
-          </select>
-          <button className="btn-ghost btn-icon" onClick={addEntry} disabled={!selectedId}><Icon name="plus" size={15} /> Tambah</button>
-        </div>
+        <ProductPicker products={products} categories={categories}
+          excludeIds={entries.map((e) => e.product_id)} onPick={addEntry} />
 
         {entries.length === 0 ? (
-          <div className="empty">Belum ada produk dipilih.</div>
+          <div className="empty" style={{ marginTop: 14 }}>Belum ada produk dipilih.</div>
         ) : (
-          <div className="bulk-entries">
+          <div className="bulk-entries" style={{ marginTop: 14 }}>
             {entries.map((e) => {
               const n = e.lines.split('\n').map((l) => l.trim()).filter(Boolean).length;
               return (
