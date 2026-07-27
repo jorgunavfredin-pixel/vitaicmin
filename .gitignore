@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Database (data live pelanggan — jangan di-push)
+src/database/
+
+# Assets (banner/media lokal)
+assets/
+
+# Build output frontend
+admin-web/node_modules/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Logs & OS
+*.log
+.DS_Store

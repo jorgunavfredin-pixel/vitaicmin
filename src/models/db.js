@@ -641,6 +641,16 @@ const getDetailedStats = () => {
   };
 };
 
+// Jumlah ITEM terjual per produk = SUM(quantity) dari order sukses (paid/delivered).
+// Ini berbeda dari jumlah baris stock sold=1: order bisa sukses tanpa mengonsumsi
+// baris stock (mis. stok fisik habis tapi order tetap di-deliver, atau mode manual/unlimited).
+const getSoldQtyByProduct = (productId) => {
+  const r = db.prepare(
+    "SELECT COALESCE(SUM(quantity), 0) AS qty FROM orders WHERE product_id = ? AND status IN ('paid', 'delivered')"
+  ).get(productId);
+  return r.qty || 0;
+};
+
 const getTopSpenders = (limit = 10) => {
   const rows = db.prepare(`
     SELECT user_id, SUM(total_idr) as total_spend, COUNT(*) as total_tx
@@ -801,7 +811,7 @@ module.exports = {
   // Users
   getUsers, getUser, createOrUpdateUser, setUserLanguage, getUserLanguage,
   // Stats
-  getStats, getDetailedStats, getTopSpenders,
+  getStats, getDetailedStats, getTopSpenders, getSoldQtyByProduct,
   // Vouchers
   getVouchers, getVoucherByCode, createVoucher, useVoucher, deleteVoucher, calculateDiscount, hasUserRedeemedVoucher, redeemVoucher,
   // Settings

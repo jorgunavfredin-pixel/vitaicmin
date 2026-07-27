@@ -4,8 +4,8 @@ const db = require('../../models/db');
 function formatProductForAdmin(p) {
     const cat = p.category_id ? db.getCategories().find(c => c.id === p.category_id) : null;
     const availableStock = db.getAvailableStockCount(p.id);
-    const allStock = db.getStock().filter(s => s.product_id === p.id);
-    const soldStock = allStock.filter(s => s.sold).length;
+    // "Terjual" = jumlah ITEM terjual (SUM quantity order sukses), bukan jumlah baris stock sold.
+    const soldStock = db.getSoldQtyByProduct(p.id);
     const isFlash = db.isFlashSaleActive(p);
     const effectivePrice = db.getEffectivePrice(p);
 
@@ -267,8 +267,7 @@ const getProductStats = (req, res) => {
                 if (avail === 0) outOfStockCount++;
                 else if (avail < 3) lowStockCount++;
             }
-            const sold = db.getStock().filter(s => s.product_id === p.id && s.sold).length;
-            totalSold += sold;
+            totalSold += db.getSoldQtyByProduct(p.id);
         }
 
         res.json({

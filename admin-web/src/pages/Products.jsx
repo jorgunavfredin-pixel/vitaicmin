@@ -4,15 +4,15 @@ import {
   createCategory, updateCategory, deleteCategory,
   createProduct, updateProduct, toggleActiveProduct, setFlashSale, clearFlashSale,
   setBulkDiscount, deleteProduct,
-  fetchStock, addStock, deleteStockItem, removeLastStock, clearStock, removeStockByData
+  fetchStock, addStock, deleteStockItem, clearStock
 } from '../api.js';
 import Icon from '../components/Icons.jsx';
 
 const formatIDR = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const compact = (n) => new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(n || 0);
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('id-ID', {
-  timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-}) : '-';
+  timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+}).replace('.', ':') + ' WIB' : '-';
 
 const STOCK_TYPES = [
   { id: 'email_pass', label: 'Email | Pass' },
@@ -824,30 +824,9 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
 
-  const doRemoveByData = async () => {
-    const lines = bulkText.split('\n').map((l) => l.trim()).filter(Boolean);
-    if (lines.length === 0) return toast('Masukkan minimal 1 baris data', 'err');
-    setBusy(true);
-    try {
-      const r = await removeStockByData(prod.id, lines);
-      let msg = r.message;
-      if (r.notFound?.length) msg += ` · ${r.notFound.length} tidak ditemukan`;
-      toast(msg, r.notFound?.length ? 'err' : 'ok');
-      setBulkText('');
-      setMode('list');
-      refresh();
-    } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
-  };
-
   const doDeleteItem = async (stockId) => {
     setBusy(true);
     try { const r = await deleteStockItem(prod.id, stockId); toast(r.message); refresh(); }
-    catch (e) { toast(e.message, 'err'); } finally { setBusy(false); setConfirm(null); }
-  };
-
-  const doRemoveLast = async (count) => {
-    setBusy(true);
-    try { const r = await removeLastStock(prod.id, count); toast(r.message); refresh(); }
     catch (e) { toast(e.message, 'err'); } finally { setBusy(false); setConfirm(null); }
   };
 
@@ -884,8 +863,6 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
           {mode === 'list' && (
             <div className="stock-actions">
               <button className="a-btn a-green btn-icon" onClick={() => setMode('add')}><Icon name="plus" size={15} /> Tambah Stok</button>
-              <button className="a-btn a-red btn-icon" onClick={() => setMode('removeData')}><Icon name="eraser" size={15} /> Hapus by Data</button>
-              <button className="a-btn a-amber btn-icon" onClick={() => setConfirm({ type: 'removeLast' })} disabled={!c.available}><Icon name="minus" size={15} /> Hapus N Terakhir</button>
               <button className="a-btn a-red btn-icon" onClick={() => setConfirm({ type: 'clear' })} disabled={!c.available}><Icon name="trash" size={15} /> Kosongkan</button>
             </div>
           )}
@@ -903,20 +880,6 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
               <div className="modal-actions" style={{ marginTop: 14 }}>
                 <button className="btn-ghost" onClick={() => { setMode('list'); setBulkText(''); }}>Batal</button>
                 <button className="btn-primary" onClick={doAdd} disabled={busy}>{busy ? 'Memproses...' : 'Tambah Stok'}</button>
-              </div>
-            </div>
-          )}
-
-          {/* REMOVE by data form */}
-          {mode === 'removeData' && (
-            <div className="stock-form">
-              <label className="field-label">Tempel data stok yang ingin dihapus (1 baris = 1 item)</label>
-              <textarea rows={8} className="qty-field" style={{ resize: 'vertical', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12.5 }}
-                placeholder={"email@mail.com|password123"}
-                value={bulkText} onChange={(e) => setBulkText(e.target.value)} />
-              <div className="modal-actions" style={{ marginTop: 14 }}>
-                <button className="btn-ghost" onClick={() => { setMode('list'); setBulkText(''); }}>Batal</button>
-                <button className="btn-danger" onClick={doRemoveByData} disabled={busy}>{busy ? 'Memproses...' : 'Hapus Item'}</button>
               </div>
             </div>
           )}
@@ -955,7 +918,7 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
                           ) : (
                             <span className="badge st-delivered badge-icon"><Icon name="check" size={12} /> Tersedia</span>
                           )}
-                          <span className="stock-date">+{fmtDate(s.added_at)}</span>
+                          <span className="stock-date"><Icon name="clock" size={12} /> {fmtDate(s.added_at)}</span>
                         </div>
                       </div>
                       {!s.sold && (
@@ -987,33 +950,8 @@ function StockDrawer({ prod, onClose, toast, onChanged }) {
           onConfirm={() => doDeleteItem(confirm.id)}
         />
       )}
-      {confirm?.type === 'removeLast' && (
-        <RemoveLastModal max={c.available} onClose={() => setConfirm(null)} onConfirm={doRemoveLast} busy={busy} />
-      )}
     </>
   );
 }
 
-function RemoveLastModal({ max, onClose, onConfirm, busy }) {
-  const [count, setCount] = useState(1);
-  return (
-    <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ maxWidth: 380, textAlign: 'left' }} onMouseDown={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3 className="h3-icon"><Icon name="minus" size={18} /> Hapus N Stok Terakhir</h3>
-          <button className="x" onClick={onClose}><Icon name="x" /></button>
-        </div>
-        <p style={{ fontSize: 13, color: '#8a93a6', margin: '0 0 12px' }}>
-          Menghapus item stok yang paling baru ditambahkan. Maksimal <b>{max}</b> item tersedia.
-        </p>
-        <label className="field-label">Jumlah item yang dihapus</label>
-        <input type="number" min="1" max={max} className="qty-field" value={count}
-          onChange={(e) => setCount(Math.min(max, Math.max(1, parseInt(e.target.value) || 1)))} />
-        <div className="modal-actions" style={{ marginTop: 18 }}>
-          <button className="btn-ghost" onClick={onClose}>Batal</button>
-          <button className="btn-danger" disabled={busy || !max} onClick={() => onConfirm(count)}>{busy ? 'Memproses...' : `Hapus ${count} Item`}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+
