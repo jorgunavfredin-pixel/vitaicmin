@@ -57,3 +57,23 @@ export async function downloadOrdersCsv() {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+// ---- Categories ----
+export const fetchCategories = () => apiFetch('/categories');
+export const createCategory = (data) => apiFetch('/categories', { method: 'POST', body: JSON.stringify(data) });
+export const updateCategory = (id, data) => apiFetch(`/categories/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteCategory = (id) => apiFetch(`/categories/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+// ---- Products ----
+export const fetchProducts = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return apiFetch('/products' + (qs ? `?${qs}` : ''));
+};
+export const fetchProduct = (id) => apiFetch(`/products/${encodeURIComponent(id)}`);
+export const createProduct = (data) => apiFetch('/products', { method: 'POST', body: JSON.stringify(data) });
+export const updateProduct = (id, data) => apiFetch(`/products/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) });
+export const toggleActiveProduct = (id) => apiFetch(`/products/${encodeURIComponent(id)}/toggle-active`, { method: 'PATCH' });
+export const setFlashSale = (id, data) => apiFetch(`/products/${encodeURIComponent(id)}/flash-sale`, { method: 'POST', body: JSON.stringify(data) });
+export const clearFlashSale = (id) => apiFetch(`/products/${encodeURIComponent(id)}/flash-sale`, { method: 'DELETE' });
+export const setBulkDiscount = (id, tiers) => apiFetch(`/products/${encodeURIComponent(id)}/bulk-discount`, { method: 'POST', body: JSON.stringify({ tiers }) });
+export const deleteProduct = (id) => apiFetch(`/products/${encodeURIComponent(id)}`, { method: 'DELETE' });

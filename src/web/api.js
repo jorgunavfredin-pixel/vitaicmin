@@ -8,6 +8,7 @@ const fs = require('fs');
 const { login, requireAuth } = require('./auth');
 const { getDashboard } = require('./routes/dashboard');
 const { registerOrderRoutes } = require('./routes/orders');
+const { registerProductRoutes } = require('./routes/products');
 const { dbEvents } = require('../models/db');
 
 let sseClients = [];
@@ -24,6 +25,17 @@ dbEvents.on('order_change', (order, reason) => {
         _reason: reason || 'update'
     };
     const payload = JSON.stringify({ type: 'order_change', data: enrichedOrder });
+    sseClients.forEach(res => {
+        try {
+            res.write(`data: ${payload}\n\n`);
+        } catch (e) {
+            // client disconnected or failed to write
+        }
+    });
+});
+
+dbEvents.on('product_change', (data) => {
+    const payload = JSON.stringify({ type: 'product_change', data });
     sseClients.forEach(res => {
         try {
             res.write(`data: ${payload}\n\n`);
@@ -82,6 +94,7 @@ const registerAdminApi = (app, bot) => {
     adminRouter.get('/me', (req, res) => res.json({ ok: true }));
     adminRouter.get('/dashboard', getDashboard);
     registerOrderRoutes(adminRouter, bot);
+    registerProductRoutes(adminRouter);
 
     api.use(adminRouter);
 

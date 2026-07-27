@@ -5,7 +5,7 @@ import { clearToken, getToken } from '../api.js';
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '📊', end: true },
   { to: '/orders', label: 'Orders', icon: '🧾' },
-  { label: 'Produk', icon: '📦', soon: true },
+  { to: '/products', label: 'Produk', icon: '📦' },
   { label: 'Stok', icon: '🧰', soon: true },
   { label: 'Users', icon: '👥', soon: true },
   { label: 'Saldo', icon: '💰', soon: true },
@@ -74,6 +74,8 @@ export default function Layout() {
           if (successStatuses.includes(order.status) && !skipReasons.includes(order._reason)) {
             setOrderNotif(order);
           }
+        } else if (payload.type === 'product_change') {
+          window.dispatchEvent(new CustomEvent('product_updated', { detail: payload.data }));
         }
       } catch (err) {
         console.error('Error handling SSE live update:', err);
