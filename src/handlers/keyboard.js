@@ -28,7 +28,7 @@ const generateCategoryListMsg = (categories, page, lang) => {
 
     // Payment info header
     // Simple welcome message
-    const storeName = process.env.STORE_NAME || 'Store';
+    const storeName = db.getConfig('store_name', 'STORE_NAME', 'Store');
     let msg = `👋 Hiiii.....\nWelcome to <b>${storeName}</b>\n\n`;
 
     // Show active flash sales
@@ -590,7 +590,7 @@ const registerKeyboardHandler = (bot) => {
 
     // ==================== SALDO / BALANCE ====================
 
-    const storeName = process.env.STORE_NAME || 'Store';
+    const storeName = db.getConfig('store_name', 'STORE_NAME', 'Store');
 
     // Saldo Menu - show balance + topup nominals directly
     bot.hears(/^💰 (Saldo|Balance)/, async (ctx) => {
@@ -944,7 +944,7 @@ const registerKeyboardHandler = (bot) => {
             payment_method: 'qris',
             chat_id: ctx.chat.id,
             status: 'pending',
-            expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+            expires_at: new Date(Date.now() + (parseInt(db.getConfig('payment_timeout_minutes', null, 15)) || 15) * 60 * 1000).toISOString()
         });
 
         // Create QRIS payment

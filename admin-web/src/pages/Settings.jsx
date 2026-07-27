@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fetchSettings, toggleSetting, changeAdminPassword, downloadBackup } from '../api.js';
+import { fetchSettings, toggleSetting, changeAdminPassword, downloadBackup, updateStoreInfo } from '../api.js';
 import Icon from '../components/Icons.jsx';
 
 // Tab structure — dibuat extensible biar gampang nambah tab di fase berikutnya.
 const TABS = [
   { key: 'general', label: 'Umum', icon: 'settings' },
+  { key: 'store', label: 'Info Toko', icon: 'category' },
   { key: 'security', label: 'Keamanan', icon: 'shield' },
   { key: 'backup', label: 'Backup', icon: 'download' },
   { key: 'system', label: 'Info Sistem', icon: 'terminal' }
@@ -98,6 +99,8 @@ export default function Settings() {
             </div>
           )}
 
+          {tab === 'store' && <StoreTab store={data.store} showToast={showToast} onChanged={load} />}
+
           {tab === 'security' && <SecurityTab data={data} showToast={showToast} onChanged={load} />}
 
           {tab === 'backup' && <BackupTab showToast={showToast} busy={busy} setBusy={setBusy} />}
@@ -107,6 +110,77 @@ export default function Settings() {
       )}
 
       {toast && <div className={`toast ${toast.kind}`}>{toast.msg}</div>}
+    </div>
+  );
+}
+
+// ---- Store info tab ----
+function StoreTab({ store, showToast, onChanged }) {
+  const [form, setForm] = useState({
+    store_name: store.store_name || '',
+    support_username: store.support_username || '',
+    support_hours: store.support_hours || '',
+    order_prefix: store.order_prefix || '',
+    payment_timeout_minutes: store.payment_timeout_minutes || 15
+  });
+  const [busy, setBusy] = useState(false);
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const submit = async () => {
+    const prefix = String(form.order_prefix).trim().toUpperCase();
+    if (prefix && !/^[A-Z0-9]{1,10}$/.test(prefix)) return showToast('Prefix order hanya huruf/angka, maks 10 karakter', 'err');
+    const mins = parseInt(form.payment_timeout_minutes);
+    if (isNaN(mins) || mins < 1 || mins > 1440) return showToast('Timeout pembayaran harus 1–1440 menit', 'err');
+    setBusy(true);
+    try {
+      const r = await updateStoreInfo({ ...form, order_prefix: prefix, payment_timeout_minutes: mins });
+      showToast(r.message);
+      onChanged();
+    } catch (e) { showToast(e.message, 'err'); } finally { setBusy(false); }
+  };
+
+  const sampleOrderId = `${(form.order_prefix || 'ORD').toUpperCase()}20260728XXXX`;
+
+  return (
+    <div className="panel settings-panel">
+      <h3 className="settings-section-title">Info Toko & Pesan</h3>
+      <div className="settings-note hint-icon">
+        <Icon name="check" size={14} /> Perubahan langsung aktif di bot (tanpa restart). Kalau dikosongkan, sistem pakai nilai dari .env atau default.
+      </div>
+
+      <div className="settings-form">
+        <label className="field-label">Nama Toko</label>
+        <input type="text" className="qty-field" placeholder="cth: Blackscout Store"
+          value={form.store_name} onChange={(e) => set('store_name', e.target.value)} />
+        <div className="bc-hint">Muncul di pesan sambutan bot, banner QRIS, dll.</div>
+
+        <label className="field-label" style={{ marginTop: 14 }}>Username Support (Telegram)</label>
+        <div className="input-prefix">
+          <span className="input-prefix-at">@</span>
+          <input type="text" className="qty-field" placeholder="username_admin" style={{ paddingLeft: 30 }}
+            value={form.support_username} onChange={(e) => set('support_username', e.target.value.replace(/^@+/, ''))} />
+        </div>
+        <div className="bc-hint">Ditampilkan di menu "Hubungi Support". Tanpa tanda @.</div>
+
+        <label className="field-label" style={{ marginTop: 14 }}>Jam Operasional Support</label>
+        <input type="text" className="qty-field" placeholder="09:00 - 22:00 WIB"
+          value={form.support_hours} onChange={(e) => set('support_hours', e.target.value)} />
+
+        <label className="field-label" style={{ marginTop: 14 }}>Prefix Order ID</label>
+        <input type="text" className="qty-field" placeholder="ORD" style={{ textTransform: 'uppercase', maxWidth: 200 }}
+          value={form.order_prefix} onChange={(e) => set('order_prefix', e.target.value.toUpperCase())} />
+        <div className="bc-hint">Contoh order ID: <code>{sampleOrderId}</code></div>
+
+        <label className="field-label" style={{ marginTop: 14 }}>Timeout Pembayaran (menit)</label>
+        <input type="number" min="1" max="1440" className="qty-field" style={{ maxWidth: 200 }}
+          value={form.payment_timeout_minutes} onChange={(e) => set('payment_timeout_minutes', e.target.value)} />
+        <div className="bc-hint">Batas waktu QRIS sebelum order kedaluwarsa (1–1440 menit). Default 15.</div>
+
+        <button className="btn-primary" style={{ marginTop: 20 }} onClick={submit} disabled={busy}>
+          {busy ? 'Menyimpan…' : 'Simpan Perubahan'}
+        </button>
+      </div>
     </div>
   );
 }

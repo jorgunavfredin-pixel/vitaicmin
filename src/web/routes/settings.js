@@ -33,6 +33,14 @@ const getSettings = (req, res) => {
                 qris_enabled: s.qris_enabled !== false,
                 saldo_enabled: s.saldo_enabled !== false
             },
+            // Info toko & pesan — nilai EFEKTIF (settings DB > env > default), editable dari panel.
+            store: {
+                store_name: db.getConfig('store_name', 'STORE_NAME', ''),
+                support_username: db.getConfig('support_username', 'SUPPORT_USERNAME', ''),
+                support_hours: db.getConfig('support_hours', 'SUPPORT_HOURS', '09:00 - 22:00 WIB'),
+                order_prefix: db.getConfig('order_prefix', 'ORDER_PREFIX', 'ORD'),
+                payment_timeout_minutes: parseInt(db.getConfig('payment_timeout_minutes', null, 15)) || 15
+            },
             // Info env read-only (buat referensi admin; nilai sensitif di-mask)
             env: {
                 bot_token: mask(process.env.BOT_TOKEN),
@@ -111,9 +119,48 @@ const backupDb = (req, res) => {
     }
 };
 
+// ---- PUT /settings/store ----  info toko & pesan
+const updateStore = (req, res) => {
+    try {
+        const b = req.body || {};
+        const updates = {};
+
+        // Validasi ringan tiap field (semua opsional; kosong = pakai fallback env/default).
+        if (b.store_name !== undefined) updates.store_name = String(b.store_name).trim().slice(0, 80);
+
+        if (b.support_username !== undefined) {
+            // Buang '@' & whitespace; simpan username bersih.
+            updates.support_username = String(b.support_username).trim().replace(/^@+/, '').slice(0, 60);
+        }
+        if (b.support_hours !== undefined) updates.support_hours = String(b.support_hours).trim().slice(0, 60);
+
+        if (b.order_prefix !== undefined) {
+            const prefix = String(b.order_prefix).trim().toUpperCase();
+            if (prefix && !/^[A-Z0-9]{1,10}$/.test(prefix)) {
+                return res.status(400).json({ error: 'Prefix order hanya huruf/angka, maksimal 10 karakter' });
+            }
+            updates.order_prefix = prefix;
+        }
+
+        if (b.payment_timeout_minutes !== undefined) {
+            const mins = parseInt(b.payment_timeout_minutes);
+            if (isNaN(mins) || mins < 1 || mins > 1440) {
+                return res.status(400).json({ error: 'Timeout pembayaran harus 1–1440 menit' });
+            }
+            updates.payment_timeout_minutes = mins;
+        }
+
+        db.updateSettings(updates);
+        res.json({ ok: true, message: 'Info toko berhasil disimpan', store: updates });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
 const registerSettingsRoutes = (api) => {
     api.get('/settings', getSettings);
     api.patch('/settings/toggle', toggleSetting);
+    api.put('/settings/store', updateStore);
     api.post('/settings/password', updatePassword);
     api.get('/settings/backup', backupDb);
 };

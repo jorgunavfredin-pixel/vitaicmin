@@ -485,7 +485,7 @@ const getPendingOrders = () => {
 
 const generateOrderId = () => {
   const now = new Date();
-  const prefix = process.env.ORDER_PREFIX || 'ORD';
+  const prefix = getConfig('order_prefix', 'ORDER_PREFIX', 'ORD');
   const dateStr = now.toLocaleDateString('id-ID', {
     timeZone: 'Asia/Jakarta',
     year: 'numeric',
@@ -752,6 +752,31 @@ const updateSettings = (updates) => {
   return getSettings();
 };
 
+/**
+ * getConfig — sumber konfigurasi tunggal dengan urutan prioritas:
+ *   1. Nilai di tabel settings (bisa diubah dari panel web, live tanpa restart)
+ *   2. process.env[ENV_KEY]  (backward-compatible dengan .env lama)
+ *   3. fallback default
+ * Dibaca fresh tiap panggil → perubahan dari panel langsung ngefek.
+ *
+ * @param {string} settingKey - key di tabel settings (mis. 'store_name')
+ * @param {string} envKey - nama env var (mis. 'STORE_NAME')
+ * @param {*} fallback - nilai default kalau dua-duanya kosong
+ */
+const getConfig = (settingKey, envKey, fallback = '') => {
+  try {
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(settingKey);
+    if (row && row.value != null) {
+      let v;
+      try { v = JSON.parse(row.value); } catch (e) { v = row.value; }
+      if (v !== '' && v != null) return v;
+    }
+  } catch (e) { /* fall through ke env */ }
+  const envVal = envKey ? process.env[envKey] : undefined;
+  if (envVal != null && envVal !== '') return envVal;
+  return fallback;
+};
+
 // ==================== FLASH SALE ====================
 const isFlashSaleActive = (product) => {
   if (!product || !product.flash_price || !product.flash_start || !product.flash_end) return false;
@@ -824,7 +849,7 @@ module.exports = {
   // Vouchers
   getVouchers, getVoucherByCode, createVoucher, useVoucher, deleteVoucher, calculateDiscount, hasUserRedeemedVoucher, redeemVoucher,
   // Settings
-  getSettings, updateSettings,
+  getSettings, updateSettings, getConfig,
   // Flash Sale
   isFlashSaleActive, getEffectivePrice, setFlashSale, clearFlashSale, getActiveFlashSales, getExpiredFlashSales,
   // Maintenance

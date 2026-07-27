@@ -12,7 +12,16 @@ const registerSupportHandler = (bot) => {
         const locale = require(`../locales/${lang}`);
 
         await ctx.answerCbQuery();
-        await ctx.editMessageText(locale.support_message, {
+
+        // Bangun pesan support secara dinamis supaya username support live dari panel
+        // (locale.support_message di-evaluasi sekali saat load, jadi tidak ikut update).
+        const supportUser = db.getConfig('support_username', 'SUPPORT_USERNAME', 'admin');
+        const supportHours = db.getConfig('support_hours', 'SUPPORT_HOURS', '09:00 - 22:00 WIB');
+        const msg = lang === 'en'
+            ? `💬 *Customer Support*\n\nFor help, please contact admin directly:\n\n👤 @${supportUser}\n\nOperating hours: ${supportHours}`
+            : `💬 *Customer Support*\n\nUntuk bantuan, silakan hubungi admin langsung:\n\n👤 @${supportUser}\n\nJam operasional: ${supportHours}`;
+
+        await ctx.editMessageText(msg, {
             parse_mode: 'Markdown',
             ...backToMenuKeyboard(lang)
         });

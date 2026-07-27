@@ -142,6 +142,8 @@ export const toggleSetting = (key, value) =>
   apiFetch('/settings/toggle', { method: 'PATCH', body: JSON.stringify({ key, value }) });
 export const changeAdminPassword = (currentPassword, newPassword) =>
   apiFetch('/settings/password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+export const updateStoreInfo = (data) =>
+  apiFetch('/settings/store', { method: 'PUT', body: JSON.stringify(data) });
 
 export async function downloadBackup() {
   const res = await fetch(BASE + '/settings/backup', {

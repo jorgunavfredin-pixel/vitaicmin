@@ -68,8 +68,12 @@ const formatInvoice = (order, lang = 'id') => {
  */
 const getExpirationTime = (paymentMethod) => {
     const now = new Date();
-    // 15 minutes for QRIS (saldo is instant, doesn't need expiry)
-    return new Date(now.getTime() + 15 * 60 * 1000);
+    // Timeout QRIS bisa diatur dari panel (payment_timeout_minutes), default 15 menit.
+    // Saldo instan, tapi tetap pakai nilai ini biar konsisten.
+    const db = require('../models/db');
+    let minutes = parseInt(db.getConfig('payment_timeout_minutes', null, 15));
+    if (isNaN(minutes) || minutes < 1) minutes = 15;
+    return new Date(now.getTime() + minutes * 60 * 1000);
 };
 
 module.exports = {
