@@ -213,7 +213,7 @@ export default function Stock() {
                       <th className="th-sort" onClick={() => toggleSort('available')}>Tersedia{sortIcon('available')}</th>
                       <th className="th-sort" onClick={() => toggleSort('sold_30d')}>Terjual (30h){sortIcon('sold_30d')}</th>
                       <th className="th-sort" onClick={() => toggleSort('inventory_value')}>Nilai{sortIcon('inventory_value')}</th>
-                      <th style={{ textAlign: 'right' }}>Aksi</th>
+                      <th className="th-action">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -228,10 +228,12 @@ export default function Stock() {
                         <td><StatusPill status={p.stock_status} available={p.available} /></td>
                         <td><b>{p.sold_30d}</b> <span className="muted">pcs</span></td>
                         <td>{formatIDR(p.inventory_value)}</td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button className="a-btn a-green btn-icon" onClick={() => setDrawerProd(p)}>
-                            <Icon name="box" size={14} /> Kelola
-                          </button>
+                        <td>
+                          <div className="stock-action-cell">
+                            <button className="a-btn a-green btn-icon" onClick={() => setDrawerProd(p)}>
+                              <Icon name="box" size={14} /> Kelola
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
