@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import Orders from './pages/Orders.jsx';
 import Products from './pages/Products.jsx';
 import Stock from './pages/Stock.jsx';
+import Users from './pages/Users.jsx';
 
 function Protected({ children }) {
   return isAuthed() ? children : <Navigate to="/login" replace />;
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="orders" element={<Orders />} />
         <Route path="products" element={<Products />} />
         <Route path="stock" element={<Stock />} />
+        <Route path="users" element={<Users />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

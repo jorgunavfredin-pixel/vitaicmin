@@ -112,3 +112,13 @@ export async function downloadStockCsv() {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+// ---- Users & Balance ----
+export const fetchUsers = (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return apiFetch('/users' + (qs ? `?${qs}` : ''));
+};
+export const fetchUserDetail = (id) => apiFetch(`/users/${encodeURIComponent(id)}`);
+export const toggleBanUser = (id) => apiFetch(`/users/${encodeURIComponent(id)}/ban`, { method: 'PATCH' });
+export const adjustUserBalance = (id, action, amount, note) =>
+  apiFetch(`/users/${encodeURIComponent(id)}/balance`, { method: 'POST', body: JSON.stringify({ action, amount, note }) });

@@ -8,7 +8,7 @@ const NAV = [
   { to: '/orders', label: 'Orders', icon: 'receipt' },
   { to: '/products', label: 'Produk', icon: 'package' },
   { to: '/stock', label: 'Stok', icon: 'box' },
-  { label: 'Users', icon: 'users', soon: true },
+  { to: '/users', label: 'Users', icon: 'users' },
   { label: 'Saldo', icon: 'wallet', soon: true },
   { label: 'Voucher', icon: 'ticket', soon: true },
   { label: 'Broadcast', icon: 'speakerphone', soon: true },
