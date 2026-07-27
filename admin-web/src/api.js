@@ -77,3 +77,17 @@ export const setFlashSale = (id, data) => apiFetch(`/products/${encodeURICompone
 export const clearFlashSale = (id) => apiFetch(`/products/${encodeURIComponent(id)}/flash-sale`, { method: 'DELETE' });
 export const setBulkDiscount = (id, tiers) => apiFetch(`/products/${encodeURIComponent(id)}/bulk-discount`, { method: 'POST', body: JSON.stringify({ tiers }) });
 export const deleteProduct = (id) => apiFetch(`/products/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+// ---- Product Stats (overview cards) ----
+export const fetchProductStats = () => apiFetch('/products-stats');
+
+// ---- Stock Management ----
+export const fetchStock = (productId, params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return apiFetch(`/products/${encodeURIComponent(productId)}/stock` + (qs ? `?${qs}` : ''));
+};
+export const addStock = (productId, lines) => apiFetch(`/products/${encodeURIComponent(productId)}/stock`, { method: 'POST', body: JSON.stringify({ lines }) });
+export const deleteStockItem = (productId, stockId) => apiFetch(`/products/${encodeURIComponent(productId)}/stock/${encodeURIComponent(stockId)}`, { method: 'DELETE' });
+export const removeLastStock = (productId, count) => apiFetch(`/products/${encodeURIComponent(productId)}/stock/remove-last`, { method: 'POST', body: JSON.stringify({ count }) });
+export const clearStock = (productId) => apiFetch(`/products/${encodeURIComponent(productId)}/stock`, { method: 'DELETE' });
+export const removeStockByData = (productId, lines) => apiFetch(`/products/${encodeURIComponent(productId)}/stock/remove-by-data`, { method: 'POST', body: JSON.stringify({ lines }) });

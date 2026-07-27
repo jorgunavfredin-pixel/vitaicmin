@@ -247,12 +247,203 @@ const deleteProduct = (req, res) => {
     res.json({ ok: true, message: 'Produk dan stok terkait berhasil dihapus' });
 };
 
+// ---- PRODUCT STATS (overview cards) ----
+const getProductStats = (req, res) => {
+    try {
+        const products = db.getProducts();
+        const categories = db.getCategories();
+
+        let totalStock = 0, totalSold = 0, lowStockCount = 0, outOfStockCount = 0, unlimitedCount = 0;
+        let inventoryValue = 0; // nilai stok tersedia (harga efektif * jumlah)
+
+        for (const p of products) {
+            const effPrice = db.getEffectivePrice(p);
+            if (p.stock_mode === 'unlimited') {
+                unlimitedCount++;
+            } else {
+                const avail = db.getAvailableStockCount(p.id);
+                totalStock += avail;
+                inventoryValue += avail * (effPrice || 0);
+                if (avail === 0) outOfStockCount++;
+                else if (avail < 3) lowStockCount++;
+            }
+            const sold = db.getStock().filter(s => s.product_id === p.id && s.sold).length;
+            totalSold += sold;
+        }
+
+        res.json({
+            totalProducts: products.length,
+            activeProducts: products.filter(p => p.active === true || p.active === 1).length,
+            pausedProducts: products.filter(p => p.active === false || p.active === 0).length,
+            flashProducts: products.filter(p => db.isFlashSaleActive(p)).length,
+            totalCategories: categories.length,
+            totalStock,
+            totalSold,
+            lowStockCount,
+            outOfStockCount,
+            unlimitedCount,
+            inventoryValue
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
+// ---- STOCK MANAGEMENT ----
+
+// GET /products/:id/stock?filter=available|sold|all&q=...
+const listStock = (req, res) => {
+    const { id } = req.params;
+    const prod = db.getProductById(id);
+    if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
+
+    const filter = (req.query.filter || 'available').toLowerCase();
+    const q = (req.query.q || '').trim().toLowerCase();
+
+    let items = db.getStock().filter(s => s.product_id === id);
+
+    // Compute counts before filtering
+    const counts = {
+        all: items.length,
+        available: items.filter(s => !s.sold && !s.reserved_by).length,
+        reserved: items.filter(s => !s.sold && s.reserved_by).length,
+        sold: items.filter(s => s.sold).length
+    };
+
+    if (filter === 'available') items = items.filter(s => !s.sold && !s.reserved_by);
+    else if (filter === 'reserved') items = items.filter(s => !s.sold && s.reserved_by);
+    else if (filter === 'sold') items = items.filter(s => s.sold);
+
+    if (q) items = items.filter(s => String(s.data).toLowerCase().includes(q));
+
+    // newest first
+    items.sort((a, b) => (b.added_at || '').localeCompare(a.added_at || ''));
+
+    res.json({
+        product: { id: prod.id, name_id: prod.name_id, stock_type: prod.stock_type, stock_mode: prod.stock_mode },
+        counts,
+        items: items.map(s => ({
+            id: s.id,
+            data: s.data,
+            sold: s.sold,
+            sold_to: s.sold_to,
+            sold_at: s.sold_at,
+            order_id: s.order_id,
+            reserved_by: s.reserved_by || null,
+            added_at: s.added_at
+        }))
+    });
+};
+
+// POST /products/:id/stock  { lines: "a\nb\nc" | [ "a","b" ] }
+const addStockRoute = (req, res) => {
+    const { id } = req.params;
+    const prod = db.getProductById(id);
+    if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
+
+    let raw = req.body.lines;
+    let lines = [];
+    if (Array.isArray(raw)) lines = raw;
+    else if (typeof raw === 'string') lines = raw.split('\n');
+    lines = lines.map(l => String(l).trim()).filter(Boolean);
+
+    if (lines.length === 0) return res.status(400).json({ error: 'Tidak ada data stok yang valid' });
+
+    const added = db.addBulkStock(id, lines);
+    const total = db.getAvailableStockCount(id);
+    db.dbEvents?.emit('product_change', { type: 'stock_added', productId: id, added: added.length, total });
+    res.json({ ok: true, message: `${added.length} item stok ditambahkan`, added: added.length, total });
+};
+
+// DELETE /products/:id/stock/:stockId
+const deleteStockRoute = (req, res) => {
+    const { id, stockId } = req.params;
+    const prod = db.getProductById(id);
+    if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
+
+    const item = db.getStock().find(s => s.id === stockId && s.product_id === id);
+    if (!item) return res.status(404).json({ error: 'Item stok tidak ditemukan' });
+    if (item.sold) return res.status(400).json({ error: 'Tidak bisa hapus stok yang sudah terjual' });
+
+    db.deleteStock(stockId);
+    const total = db.getAvailableStockCount(id);
+    db.dbEvents?.emit('product_change', { type: 'stock_deleted', productId: id, total });
+    res.json({ ok: true, message: 'Item stok dihapus', total });
+};
+
+// POST /products/:id/stock/remove-last  { count }
+const removeLastStockRoute = (req, res) => {
+    const { id } = req.params;
+    const prod = db.getProductById(id);
+    if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
+
+    const count = Math.max(1, parseInt(req.body.count) || 0);
+    if (!count) return res.status(400).json({ error: 'Jumlah tidak valid' });
+
+    const removed = db.removeLastStock(id, count);
+    const total = db.getAvailableStockCount(id);
+    db.dbEvents?.emit('product_change', { type: 'stock_removed', productId: id, removed, total });
+    res.json({ ok: true, message: `${removed} item stok terakhir dihapus`, removed, total });
+};
+
+// POST /products/:id/stock/remove-by-data  { lines }
+const removeStockByDataRoute = (req, res) => {
+    const { id } = req.params;
+    const prod = db.getProductById(id);
+    if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
+
+    let raw = req.body.lines;
+    let lines = [];
+    if (Array.isArray(raw)) lines = raw;
+    else if (typeof raw === 'string') lines = raw.split('\n');
+    lines = lines.map(l => String(l).trim()).filter(Boolean);
+    if (lines.length === 0) return res.status(400).json({ error: 'Tidak ada data untuk dihapus' });
+
+    const stock = db.getStock().filter(s => s.product_id === id && !s.sold);
+    let deleted = 0;
+    const notFound = [];
+    for (const line of lines) {
+        const match = stock.find(s => s.data === line);
+        if (match) {
+            db.deleteStock(match.id);
+            deleted++;
+            stock.splice(stock.indexOf(match), 1);
+        } else {
+            notFound.push(line);
+        }
+    }
+    const total = db.getAvailableStockCount(id);
+    db.dbEvents?.emit('product_change', { type: 'stock_removed', productId: id, removed: deleted, total });
+    res.json({
+        ok: true,
+        message: `${deleted} dari ${lines.length} item dihapus`,
+        deleted,
+        notFound,
+        total
+    });
+};
+
+// DELETE /products/:id/stock  (clear all unsold)
+const clearStockRoute = (req, res) => {
+    const { id } = req.params;
+    const prod = db.getProductById(id);
+    if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
+
+    const before = db.getAvailableStockCount(id);
+    db.clearProductStock(id);
+    db.dbEvents?.emit('product_change', { type: 'stock_cleared', productId: id, total: 0 });
+    res.json({ ok: true, message: `Semua stok tersedia dihapus (${before} item)`, total: 0 });
+};
+
 const registerProductRoutes = (api) => {
     // Categories
     api.get('/categories', listCategories);
     api.post('/categories', createCategory);
     api.put('/categories/:id', updateCategory);
     api.delete('/categories/:id', deleteCategory);
+
+    // Product stats (overview cards)
+    api.get('/products-stats', getProductStats);
 
     // Products
     api.get('/products', listProducts);
@@ -263,6 +454,15 @@ const registerProductRoutes = (api) => {
     api.post('/products/:id/flash-sale', setFlashSale);
     api.delete('/products/:id/flash-sale', clearFlashSale);
     api.post('/products/:id/bulk-discount', setBulkDiscount);
+
+    // Stock management (order matters: specific routes before :stockId)
+    api.get('/products/:id/stock', listStock);
+    api.post('/products/:id/stock', addStockRoute);
+    api.post('/products/:id/stock/remove-last', removeLastStockRoute);
+    api.post('/products/:id/stock/remove-by-data', removeStockByDataRoute);
+    api.delete('/products/:id/stock/:stockId', deleteStockRoute);
+    api.delete('/products/:id/stock', clearStockRoute);
+
     api.delete('/products/:id', deleteProduct);
 };
 
