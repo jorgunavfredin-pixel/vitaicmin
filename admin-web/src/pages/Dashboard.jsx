@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from 'recharts';
@@ -35,9 +35,21 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const load = useCallback(() => {
     fetchDashboard().then(setData).catch((e) => setError(e.message));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      load();
+    };
+    window.addEventListener('order_updated', handleUpdate);
+    return () => window.removeEventListener('order_updated', handleUpdate);
+  }, [load]);
 
   if (error) return <div className="panel error-panel">⚠️ {error}</div>;
   if (!data) return <div className="skeleton-grid">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton-card" />)}</div>;

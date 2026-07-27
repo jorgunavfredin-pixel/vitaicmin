@@ -8,6 +8,30 @@ const fs = require('fs');
 const { login, requireAuth } = require('./auth');
 const { getDashboard } = require('./routes/dashboard');
 const { registerOrderRoutes } = require('./routes/orders');
+const { dbEvents } = require('../models/db');
+
+let sseClients = [];
+
+dbEvents.on('order_change', (order, reason) => {
+    const db = require('../models/db');
+    const user = db.getUser(order.user_id);
+    const prod = db.getProductById(order.product_id);
+    const enrichedOrder = {
+        ...order,
+        username: user?.username || null,
+        first_name: user?.first_name || null,
+        product_name: prod ? prod.name_id : (order.product_id === 'TOPUP' ? 'Topup Saldo' : order.product_id),
+        _reason: reason || 'update'
+    };
+    const payload = JSON.stringify({ type: 'order_change', data: enrichedOrder });
+    sseClients.forEach(res => {
+        try {
+            res.write(`data: ${payload}\n\n`);
+        } catch (e) {
+            // client disconnected or failed to write
+        }
+    });
+});
 
 const registerAdminApi = (app, bot) => {
     const api = express.Router();
@@ -15,12 +39,54 @@ const registerAdminApi = (app, bot) => {
     // --- Public ---
     api.post('/login', login);
 
+    // --- Live Updates (SSE) ---
+    api.get('/live-updates', (req, res) => {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
+        // Query param auth (EventSource query param)
+        const token = req.query.token;
+        if (!token) {
+            res.write('event: error\ndata: Unauthorized\n\n');
+            res.end();
+            return;
+        }
+        try {
+            const jwt = require('jsonwebtoken');
+            const getSecret = () => process.env.ADMIN_JWT_SECRET || process.env.BOT_TOKEN || 'insecure-dev-secret';
+            jwt.verify(token, getSecret());
+        } catch (e) {
+            res.write('event: error\ndata: Unauthorized\n\n');
+            res.end();
+            return;
+        }
+
+        sseClients.push(res);
+
+        // Keep-alive connection
+        const keepAlive = setInterval(() => {
+            res.write(': ping\n\n');
+        }, 30000);
+
+        req.on('close', () => {
+            clearInterval(keepAlive);
+            sseClients = sseClients.filter(c => c !== res);
+        });
+    });
+
     // --- Protected ---
-    api.get('/me', requireAuth, (req, res) => res.json({ ok: true }));
-    api.get('/dashboard', requireAuth, getDashboard);
-    registerOrderRoutes(api, bot);
+    const adminRouter = express.Router();
+    adminRouter.use(requireAuth);
+    adminRouter.get('/me', (req, res) => res.json({ ok: true }));
+    adminRouter.get('/dashboard', getDashboard);
+    registerOrderRoutes(adminRouter, bot);
+
+    api.use(adminRouter);
 
     app.use('/api/admin', api);
+
 
     // --- Serve the built SPA at /admin ---
     const distDir = path.join(__dirname, '../../admin-web/dist');

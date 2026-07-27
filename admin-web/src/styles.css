@@ -332,8 +332,16 @@ button { font-family: inherit; cursor: pointer; }
 .modal-icon { font-size: 34px; }
 .modal h4 { margin: 12px 0 8px; font-size: 17px; }
 .modal p { margin: 0 0 20px; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
-.modal-actions { display: flex; gap: 10px; }
-.modal-actions > button { flex: 1; padding: 11px; border-radius: 11px; font-size: 13.5px; font-weight: 600; }
+.modal-actions { display: flex; gap: 10px; margin-top: 14px; }
+.modal-actions > button {
+  flex: 1; border-radius: 10px; font-size: 13.5px; font-weight: 600;
+  margin-top: 0 !important; width: auto !important; height: 42px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid transparent;
+}
+.modal-actions > .btn-ghost {
+  border: 1px solid var(--border);
+}
 .btn-danger { background: linear-gradient(135deg, #ff6b6b, #e14b4b); color: #fff; border: none; }
 .btn-danger:disabled { opacity: .6; }
 
@@ -346,6 +354,59 @@ button { font-family: inherit; cursor: pointer; }
 .toast.ok { background: #143a2c; border: 1px solid rgba(55,211,153,0.4); color: #9ff0cf; }
 .toast.err { background: #3a1616; border: 1px solid rgba(255,107,107,0.4); color: #ffb1b1; }
 @keyframes toastUp { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* Live Order Notification Box (Bottom Right) */
+.order-notif {
+  position: fixed; bottom: 24px; right: 24px; z-index: 100;
+  width: 320px; padding: 18px; border-radius: 16px;
+  background: #131926; border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #e2e8f0;
+}
+.order-notif-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+}
+.order-notif-title {
+  font-size: 13px; font-weight: 700; color: #10b981;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  display: flex; align-items: center; gap: 6px;
+}
+.order-notif-close {
+  background: transparent; border: none; color: #64748b;
+  cursor: pointer; font-size: 14px; padding: 2px 6px;
+  border-radius: 4px; transition: all 0.2s;
+}
+.order-notif-close:hover {
+  color: #fff; background: rgba(255, 255, 255, 0.06);
+}
+.order-notif-body {
+  font-size: 13px; line-height: 1.6;
+}
+.order-notif-item {
+  display: flex; margin-bottom: 6px;
+}
+.order-notif-item span {
+  white-space: pre-wrap;
+}
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Qty Field (Replace Modal) */
+.qty-field {
+  width: 100%; padding: 12px 14px;
+  background: #1a2235; color: #fff;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
+  font-size: 15px; font-weight: 600;
+  outline: none;
+}
+.qty-field:focus { border-color: var(--brand); }
+.qty-field::placeholder { color: #4a5568; font-weight: 400; }
+
 
 /* ============ RESPONSIVE ============ */
 @media (max-width: 900px) {

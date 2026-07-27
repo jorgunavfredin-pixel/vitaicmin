@@ -38,7 +38,7 @@ export const fetchOrders = (params = {}) => {
 };
 export const fetchOrder = (id) => apiFetch(`/orders/${encodeURIComponent(id)}`);
 export const redeliverOrder = (id) => apiFetch(`/orders/${encodeURIComponent(id)}/redeliver`, { method: 'POST' });
-export const replaceOrder = (id) => apiFetch(`/orders/${encodeURIComponent(id)}/replace`, { method: 'POST' });
+export const replaceOrder = (id, count = 1) => apiFetch(`/orders/${encodeURIComponent(id)}/replace`, { method: 'POST', body: JSON.stringify({ count }) });
 export const refundOrder = (id) => apiFetch(`/orders/${encodeURIComponent(id)}/refund`, { method: 'POST' });
 export const deleteOrder = (id) => apiFetch(`/orders/${encodeURIComponent(id)}`, { method: 'DELETE' });
 

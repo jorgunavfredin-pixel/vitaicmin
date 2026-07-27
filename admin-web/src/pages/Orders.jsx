@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   fetchOrders, fetchOrder, redeliverOrder, replaceOrder,
   refundOrder, deleteOrder, downloadOrdersCsv
@@ -60,6 +60,14 @@ export default function Orders() {
     const t = setTimeout(load, q ? 300 : 0); // debounce search
     return () => clearTimeout(t);
   }, [load, q]);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      load();
+    };
+    window.addEventListener('order_updated', handleUpdate);
+    return () => window.removeEventListener('order_updated', handleUpdate);
+  }, [load]);
 
   const onExport = async () => {
     try { await downloadOrdersCsv(); } catch (e) { showToast(e.message, 'err'); }
@@ -163,12 +171,24 @@ function OrderDrawer({ id, onClose, onChanged, toast }) {
   const [order, setOrder] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState('');
-  const [confirm, setConfirm] = useState(null); // { action, label }
+  const [confirm, setConfirm] = useState(null);
+  const qtyRef = useRef(null);
 
   const load = useCallback(() => {
     fetchOrder(id).then(setOrder).catch((e) => setErr(e.message));
   }, [id]);
+
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const handleUpdate = (e) => {
+      if (e.detail && e.detail.id === id) {
+        load();
+      }
+    };
+    window.addEventListener('order_updated', handleUpdate);
+    return () => window.removeEventListener('order_updated', handleUpdate);
+  }, [id, load]);
 
   const run = async (action, fn) => {
     setBusy(action);
@@ -186,12 +206,28 @@ function OrderDrawer({ id, onClose, onChanged, toast }) {
     }
   };
 
+  const runReplace = async (count) => {
+    setBusy('replace');
+    try {
+      const r = await replaceOrder(id, count);
+      toast(r.message || 'Berhasil');
+      setConfirm(null);
+      load();
+      onChanged();
+    } catch (e) {
+      toast(e.message, 'err');
+    } finally {
+      setBusy('');
+    }
+  };
+
   const actions = order ? [
     { key: 'redeliver', label: '🔄 Kirim Ulang', fn: redeliverOrder, show: order.delivered_data?.length > 0, cls: 'a-blue' },
     { key: 'replace', label: '🔁 Replace Akun', fn: replaceOrder, show: order.status === 'delivered', cls: 'a-violet' },
     { key: 'refund', label: '💸 Refund', fn: refundOrder, show: ['delivered', 'paid'].includes(order.status), danger: true, cls: 'a-amber' },
     { key: 'delete', label: '🗑 Hapus', fn: deleteOrder, show: true, danger: true, cls: 'a-red' }
   ].filter(a => a.show) : [];
+
 
   return (
     <>
@@ -242,7 +278,7 @@ function OrderDrawer({ id, onClose, onChanged, toast }) {
                   key={a.key}
                   className={`a-btn ${a.cls}`}
                   disabled={!!busy}
-                  onClick={() => a.danger ? setConfirm(a) : run(a.key, a.fn)}
+                  onClick={() => (a.danger || a.key === 'replace') ? setConfirm(a) : run(a.key, a.fn)}
                 >
                   {busy === a.key ? '…' : a.label}
                 </button>
@@ -253,17 +289,49 @@ function OrderDrawer({ id, onClose, onChanged, toast }) {
       </aside>
 
       {confirm && (
-        <div className="modal-scrim" onClick={() => setConfirm(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-icon">⚠️</div>
+        <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirm(null); }}>
+          <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-icon">{confirm.key === 'replace' ? '🔁' : '⚠️'}</div>
             <h4>{confirm.label}?</h4>
-            <p>
-              {confirm.key === 'refund' && 'Stok akan dikembalikan & user diberi notifikasi refund.'}
-              {confirm.key === 'delete' && 'Order dihapus permanen. Aksi ini tidak bisa dibatalkan.'}
-            </p>
+            {confirm.key === 'replace' ? (
+              <div style={{ margin: '14px 0', textAlign: 'left' }}>
+                <label style={{ marginBottom: 8, display: 'block', fontSize: 13, color: '#8a93a6' }}>
+                  Jumlah akun yang ingin dikirim:
+                </label>
+                <input
+                  ref={qtyRef}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Masukkan jumlah"
+                  defaultValue="1"
+                  className="qty-field"
+                />
+                <div style={{ marginTop: '8px', fontSize: '12px', color: '#8a93a6' }}>
+                  Maksimal: <b>{order.available_stock}</b> (stok tersedia)
+                </div>
+              </div>
+            ) : (
+              <p>
+                {confirm.key === 'refund' && 'Stok akan dikembalikan & user diberi notifikasi refund.'}
+                {confirm.key === 'delete' && 'Order dihapus permanen. Aksi ini tidak bisa dibatalkan.'}
+              </p>
+            )}
             <div className="modal-actions">
               <button className="btn-ghost" onClick={() => setConfirm(null)}>Batal</button>
-              <button className="btn-danger" disabled={!!busy} onClick={() => run(confirm.key, confirm.fn)}>
+              <button
+                className={confirm.key === 'replace' ? 'btn-primary' : 'btn-danger'}
+                disabled={!!busy || (confirm.key === 'replace' && order.available_stock === 0)}
+                onClick={() => {
+                  if (confirm.key === 'replace') {
+                    const val = parseInt(qtyRef.current?.value);
+                    if (!val || val < 1) return toast('Jumlah harus minimal 1', 'err');
+                    if (val > order.available_stock) return toast(`Stok tidak cukup! Maksimal ${order.available_stock}`, 'err');
+                    runReplace(val);
+                  } else {
+                    run(confirm.key, confirm.fn);
+                  }
+                }}
+              >
                 {busy ? 'Memproses…' : 'Ya, Lanjut'}
               </button>
             </div>

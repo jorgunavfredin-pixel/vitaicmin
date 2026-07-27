@@ -1,6 +1,9 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const EventEmitter = require('events');
+const dbEvents = new EventEmitter();
+
 
 const dbDir = path.join(__dirname, '../database');
 const dbFile = path.join(dbDir, 'store.db');
@@ -506,7 +509,9 @@ const createOrder = (orderData) => {
     const id = generateOrderId();
     try {
       db.prepare(`INSERT INTO orders (id, user_id, product_id, quantity, total_idr, total_usd, payment_method, unique_code, status, stock_ids, delivered_data, reminder_sent, message_id, chat_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', 0, ?, ?, ?, ?)`).run(id, orderData.user_id, orderData.product_id, orderData.quantity, orderData.total_idr, orderData.total_usd || 0, orderData.payment_method, orderData.unique_code || null, orderData.status || 'pending', orderData.message_id || null, orderData.chat_id || null, created_at, orderData.expires_at || null);
-      return getOrderById(id);
+      const newOrder = getOrderById(id);
+      dbEvents.emit('order_change', newOrder);
+      return newOrder;
     } catch (e) {
       if (e.message.includes('UNIQUE constraint') && attempt < maxRetries - 1) {
         console.log(`[ORDER] ID collision on ${id}, retrying... (attempt ${attempt + 2})`);
@@ -517,12 +522,14 @@ const createOrder = (orderData) => {
   }
 };
 
-const updateOrder = (orderId, updates) => {
+const updateOrder = (orderId, updates, reason) => {
   const order = getOrderById(orderId);
   if (!order) return null;
   const merged = { ...order, ...updates };
   db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, orderId);
-  return getOrderById(orderId);
+  const updatedOrder = getOrderById(orderId);
+  dbEvents.emit('order_change', updatedOrder, reason || 'update');
+  return updatedOrder;
 };
 
 const deleteOrder = (orderId) => {
@@ -802,5 +809,7 @@ module.exports = {
   // Flash Sale
   isFlashSaleActive, getEffectivePrice, setFlashSale, clearFlashSale, getActiveFlashSales, getExpiredFlashSales,
   // Maintenance
-  purgeOldOrders, purgeOldSoldStock
+  purgeOldOrders, purgeOldSoldStock,
+  // Event Emitter
+  dbEvents
 };

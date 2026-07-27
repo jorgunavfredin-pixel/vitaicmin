@@ -16,13 +16,21 @@ const productLabel = (o) =>
 // Format one stock account into Markdown (same style as chat redeliver)
 const formatAccountMd = (data, stockType) => {
     const lines = String(data).split('|').map(l => l.trim());
-    if (stockType === 'vcc') {
+    if (stockType === 'code') {
+        return `🔑 Code: \`${lines[0] || '-'}\`\n`;
+    } else if (stockType === 'email_pass') {
+        return `📧 Email: \`${lines[0] || '-'}\`\n🔐 Password: \`${lines[1] || '-'}\`\n`;
+    } else if (stockType === 'email_pass_key') {
+        return `📧 Email: \`${lines[0] || '-'}\`\n🔐 Password: \`${lines[1] || '-'}\`\n🔑 Key: \`${lines[2] || '-'}\`\n`;
+    } else if (stockType === 'vcc') {
         let s = `💳 Card: \`${lines[0] || '-'}\`\n`;
-        if (lines[1]) s += `📅 Expiry: ${lines[1]}\n`;
-        if (lines[2]) s += `🔒 CVV: ${lines[2]}\n`;
+        if (lines[1]) s += `📅 Expiry: \`${lines[1]}\`\n`;
+        if (lines[2]) s += `🔒 CVV: \`${lines[2]}\`\n`;
         return s;
+    } else if (stockType === 'custom') {
+        return lines.map(l => `📋 \`${l}\``).join('\n') + '\n';
     }
-    return lines.map(l => `\`${l}\``).join('\n') + '\n';
+    return lines.map(l => `📋 \`${l}\``).join('\n') + '\n';
 };
 
 const notifyLowStock = async (bot, prod) => {
@@ -169,31 +177,36 @@ const replaceAccount = (bot) => async (req, res) => {
     const prod = db.getProductById(order.product_id);
     if (!prod) return res.status(400).json({ error: 'Produk tidak ditemukan' });
 
-    const availableStock = db.getStockByProduct(order.product_id).filter(s => !s.sold && !s.reserved_by);
-    if (availableStock.length === 0) return res.status(400).json({ error: 'Stok habis! Tidak bisa replace.' });
+    const count = Math.max(1, parseInt(req.body.count) || 1);
 
-    const newStock = availableStock[0];
-    db.markStockAsSold([newStock.id], order.user_id, order.id);
+    const availableStock = db.getStockByProduct(order.product_id).filter(s => !s.sold && !s.reserved_by);
+    if (availableStock.length < count) {
+        return res.status(400).json({ error: `Stok tidak cukup! Hanya tersedia ${availableStock.length} stok.` });
+    }
+
+    const stocksToReplace = availableStock.slice(0, count);
+    const stockIdsToMark = stocksToReplace.map(s => s.id);
+    db.markStockAsSold(stockIdsToMark, order.user_id, order.id);
     await notifyLowStock(bot, prod);
 
     const user = db.getUser(order.user_id);
     const lang = user?.language || 'id';
     const prodName = lang === 'en' ? prod?.name_en : prod?.name_id;
 
-    let msg = `🔁 *REPLACEMENT ACCOUNT*\n┏━━━━━━━━━━━━━━━━\n┣ Order: \`${order.id}\`\n┣ Product: ${prodName || '?'}\n┗ Replacement for troubled account\n\n📋 *NEW ACCOUNT:*\n`;
-    msg += `\n━━━ ${lang === 'en' ? 'Replacement' : 'Pengganti'} ━━━\n` + formatAccountMd(newStock.data, prod.stock_type);
-    const warranty = lang === 'en' ? (prod.warranty_en || prod.terms_en) : (prod.warranty_id || prod.terms_id);
-    if (warranty) msg += `\n📜 *${lang === 'en' ? 'Warranty/Terms' : 'Garansi/S&K'}:*\n${warranty}\n`;
-    msg += `\n🙏 ${lang === 'en' ? 'Sorry for the inconvenience!' : 'Mohon maaf atas ketidaknyamanan!'}`;
+    let msg = `🔁 *REPLACEMENT ACCOUNT*\n┏━━━━━━━━━━━━━━━━\n┣ Order: \`${order.id}\`\n┣ Product: ${prodName || '?'}\n┗ Replacement for troubled account (${count} pcs)\n\n📋 *NEW ACCOUNT(S):*\n`;
+    
+    stocksToReplace.forEach((stock, idx) => {
+        msg += `\n━━━ ${lang === 'en' ? `Replacement ${idx + 1}` : `Pengganti ${idx + 1}`} ━━━\n` + formatAccountMd(stock.data, prod.stock_type);
+    });
 
     try {
         await bot.telegram.sendMessage(order.chat_id || order.user_id, msg, { parse_mode: 'Markdown' });
         db.updateOrder(order.id, {
-            delivered_data: [...(order.delivered_data || []), newStock.data],
-            stock_ids: [...(order.stock_ids || []), newStock.id],
+            delivered_data: [...(order.delivered_data || []), ...stocksToReplace.map(s => s.data)],
+            stock_ids: [...(order.stock_ids || []), ...stockIdsToMark],
             replaced_at: new Date().toISOString()
-        });
-        res.json({ ok: true, message: `Akun pengganti dikirim. Sisa stok: ${availableStock.length - 1}` });
+        }, 'replace');
+        res.json({ ok: true, message: `Akun pengganti dikirim. Sisa stok: ${availableStock.length - count}` });
     } catch (e) {
         res.status(500).json({ error: 'Gagal kirim: ' + e.message });
     }
@@ -205,7 +218,7 @@ const refund = (bot) => async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
 
     if (order.stock_ids && order.stock_ids.length > 0) db.restoreStock(order.stock_ids);
-    db.updateOrder(order.id, { status: 'refunded', refunded_at: new Date().toISOString() });
+    db.updateOrder(order.id, { status: 'refunded', refunded_at: new Date().toISOString() }, 'refund');
 
     if (order.delivery_message_id && (order.chat_id || order.user_id)) {
         try { await bot.telegram.deleteMessage(order.chat_id || order.user_id, order.delivery_message_id); } catch (e) { /* ignore */ }
