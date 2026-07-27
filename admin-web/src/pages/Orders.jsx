@@ -222,9 +222,12 @@ function OrderDrawer({ id, onClose, onChanged, toast }) {
     }
   };
 
+  // Setelah refund: akun sudah ditarik balik ke admin, jadi kirim ulang & replace TIDAK boleh lagi.
+  // Order refunded hanya menyisakan opsi Hapus.
+  const isRefunded = order?.status === 'refunded';
   const actions = order ? [
-    { key: 'redeliver', icon: 'refresh', label: 'Kirim Ulang', fn: redeliverOrder, show: order.delivered_data?.length > 0, cls: 'a-blue' },
-    { key: 'replace', icon: 'exchange', label: 'Replace Akun', fn: replaceOrder, show: order.status === 'delivered', cls: 'a-violet' },
+    { key: 'redeliver', icon: 'refresh', label: 'Kirim Ulang', fn: redeliverOrder, show: !isRefunded && order.delivered_data?.length > 0, cls: 'a-blue' },
+    { key: 'replace', icon: 'exchange', label: 'Replace Akun', fn: replaceOrder, show: !isRefunded && order.status === 'delivered', cls: 'a-violet' },
     { key: 'refund', icon: 'arrow-back', label: 'Refund', fn: refundOrder, show: ['delivered', 'paid'].includes(order.status), danger: true, cls: 'a-amber' },
     { key: 'delete', icon: 'trash', label: 'Hapus', fn: deleteOrder, show: true, danger: true, cls: 'a-red' }
   ].filter(a => a.show) : [];
@@ -313,7 +316,7 @@ function OrderDrawer({ id, onClose, onChanged, toast }) {
               </div>
             ) : (
               <p>
-                {confirm.key === 'refund' && 'Stok akan dikembalikan & user diberi notifikasi refund.'}
+                {confirm.key === 'refund' && 'Akun yang sudah terkirim ditarik balik ke stok admin & user diberi notifikasi refund. Setelah ini order hanya bisa dihapus (tidak bisa kirim ulang / replace).'}
                 {confirm.key === 'delete' && 'Order dihapus permanen. Aksi ini tidak bisa dibatalkan.'}
               </p>
             )}

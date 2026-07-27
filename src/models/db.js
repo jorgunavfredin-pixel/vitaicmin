@@ -600,7 +600,12 @@ const getDetailedStats = () => {
   const { getWIBDateRange } = require('../utils/helpers');
   const { todayStart, weekStart, monthStart } = getWIBDateRange();
 
+  // Semua order sukses (termasuk TOPUP) — dipakai untuk HITUNGAN transaksi.
   const paidOrders = db.prepare("SELECT * FROM orders WHERE status IN ('paid', 'delivered')").all();
+
+  // REVENUE hanya dari penjualan produk. Topup saldo BUKAN pendapatan: uang baru dihitung sbg
+  // revenue saat buyer checkout produk pakai saldo. Kalau topup ikut, uang sama ke-count 2x. Jadi exclude TOPUP.
+  const salesOrders = paidOrders.filter(o => o.product_id !== 'TOPUP');
 
   const calculateIncome = (orderList) => {
     let total = 0, qris = 0, saldo = 0;
@@ -613,9 +618,9 @@ const getDetailedStats = () => {
     return { total, qris, saldo };
   };
 
-  const todayOrders = paidOrders.filter(o => o.paid_at && o.paid_at >= todayStart);
-  const weekOrders = paidOrders.filter(o => o.paid_at && o.paid_at >= weekStart);
-  const monthOrders = paidOrders.filter(o => o.paid_at && o.paid_at >= monthStart);
+  const todayOrders = salesOrders.filter(o => o.paid_at && o.paid_at >= todayStart);
+  const weekOrders = salesOrders.filter(o => o.paid_at && o.paid_at >= weekStart);
+  const monthOrders = salesOrders.filter(o => o.paid_at && o.paid_at >= monthStart);
 
   const totalTx = db.prepare('SELECT COUNT(*) as cnt FROM orders').get().cnt;
   const pendingTx = db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status = 'pending'").get().cnt;
@@ -641,13 +646,15 @@ const getDetailedStats = () => {
   };
 };
 
-// Jumlah ITEM terjual per produk = SUM(quantity) dari order sukses (paid/delivered).
-// Ini berbeda dari jumlah baris stock sold=1: order bisa sukses tanpa mengonsumsi
-// baris stock (mis. stok fisik habis tapi order tetap di-deliver, atau mode manual/unlimited).
-const getSoldQtyByProduct = (productId) => {
+// Jumlah ITEM terjual per produk dalam N hari terakhir = SUM(quantity) order sukses (paid/delivered).
+// Dihitung dari tabel orders (bukan baris stock sold), karena baris stock sold=1 dipurge >60 hari
+// (purgeOldSoldStock di reminder.js) sehingga tidak akurat untuk statistik. Order delivered disimpan lebih lama.
+// Default 30 hari: dipakai kolom "Terjual" di menu produk / kelola stok (statistik penjualan bulanan).
+const getSoldQtyByProduct = (productId, sinceDays = 30) => {
+  const cutoff = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString();
   const r = db.prepare(
-    "SELECT COALESCE(SUM(quantity), 0) AS qty FROM orders WHERE product_id = ? AND status IN ('paid', 'delivered')"
-  ).get(productId);
+    "SELECT COALESCE(SUM(quantity), 0) AS qty FROM orders WHERE product_id = ? AND status IN ('paid', 'delivered') AND COALESCE(delivered_at, paid_at, created_at) >= ?"
+  ).get(productId, cutoff);
   return r.qty || 0;
 };
 

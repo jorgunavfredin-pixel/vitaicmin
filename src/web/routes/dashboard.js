@@ -19,7 +19,8 @@ const getDashboard = (req, res) => {
         const users = db.getUsers();
 
         const paidStatuses = ['paid', 'delivered'];
-        const paidOrders = orders.filter(o => paidStatuses.includes(o.status));
+        // Revenue & chart hanya dari penjualan produk — TOPUP saldo bukan pendapatan (hindari double-count).
+        const paidOrders = orders.filter(o => paidStatuses.includes(o.status) && o.product_id !== 'TOPUP');
 
         // ---- Revenue series: last 14 days (WIB) ----
         const { todayWIB } = getWIBDateRange();

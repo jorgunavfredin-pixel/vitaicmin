@@ -122,7 +122,7 @@ export default function Products() {
           <ProdStat icon="package" accent="blue" label="Total Produk" value={stats.totalProducts}
             sub={`${stats.activeProducts} aktif · ${stats.pausedProducts} paused`} />
           <ProdStat icon="box" accent="green" label="Stok Tersedia" value={compact(stats.totalStock)}
-            sub={stats.unlimitedCount > 0 ? `+${stats.unlimitedCount} produk unlimited` : `${stats.totalSold} terjual total`} />
+            sub={stats.unlimitedCount > 0 ? `+${stats.unlimitedCount} produk unlimited` : `${stats.totalSold} terjual (30h)`} />
           <ProdStat icon="wallet" accent="violet" label="Nilai Inventory" value={formatIDR(stats.inventoryValue)}
             sub="Estimasi nilai stok tersedia" />
           <ProdStat icon="warning" accent={stats.outOfStockCount > 0 ? 'red' : 'amber'} label="Perlu Restock"
@@ -217,7 +217,7 @@ export default function Products() {
                       <th>Kategori</th>
                       <th>Harga</th>
                       <th>Stok</th>
-                      <th>Terjual</th>
+                      <th title="Jumlah item terjual dalam 30 hari terakhir">Terjual (30h)</th>
                       <th>Status</th>
                       <th style={{ textAlign: 'right' }}>Aksi</th>
                     </tr>
@@ -422,7 +422,7 @@ function ProductCard({ p, onEdit, onFlash, onBulk, onStock, onDelete, onToggle }
           {p.stock_mode === 'unlimited' ? <span className="badge st-paid badge-icon"><Icon name="infinity" size={13} /> Unlimited</span> : <StockPill count={p.available_stock} />}
         </div>
         <div>
-          <div className="mini-label">Terjual</div>
+          <div className="mini-label" title="Item terjual dalam 30 hari terakhir">Terjual (30h)</div>
           <b>{p.sold_stock || 0} pcs</b>
         </div>
         <div>

@@ -217,8 +217,29 @@ const refund = (bot) => async (req, res) => {
     const order = db.getOrderById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
 
-    if (order.stock_ids && order.stock_ids.length > 0) db.restoreStock(order.stock_ids);
-    db.updateOrder(order.id, { status: 'refunded', refunded_at: new Date().toISOString() }, 'refund');
+    // Idempotensi: cegah refund ganda.
+    if (order.status === 'refunded') {
+        return res.status(400).json({ error: 'Order ini sudah di-refund.' });
+    }
+
+    // Tarik balik stok yang sudah terkirim ke buyer → kembalikan ke pool admin (sold=0).
+    // Untuk order delivered, akun ada di stock_ids. Kita juga clear reserved_by supaya benar-benar
+    // balik ke pool "available" (markStockAsSold tidak reset reserved_by, restoreStock hanya set sold=0).
+    let restored = 0;
+    if (order.stock_ids && order.stock_ids.length > 0) {
+        db.restoreStock(order.stock_ids);
+        restored = order.stock_ids.length;
+    }
+    // Lepas juga stok yang masih ter-reserve untuk order ini (kasus order pending yang di-refund).
+    db.releaseReservedStock(order.id);
+
+    // Kosongkan jejak pengiriman supaya akun tak bisa dikirim ulang / replace setelah refund.
+    db.updateOrder(order.id, {
+        status: 'refunded',
+        refunded_at: new Date().toISOString(),
+        stock_ids: [],
+        delivered_data: []
+    }, 'refund');
 
     if (order.delivery_message_id && (order.chat_id || order.user_id)) {
         try { await bot.telegram.deleteMessage(order.chat_id || order.user_id, order.delivery_message_id); } catch (e) { /* ignore */ }
@@ -229,7 +250,7 @@ const refund = (bot) => async (req, res) => {
             { parse_mode: 'Markdown' });
     } catch (e) { /* user may have blocked bot */ }
 
-    res.json({ ok: true, message: `Order di-refund. Stok dikembalikan: ${order.stock_ids?.length || 0} item` });
+    res.json({ ok: true, message: `Order di-refund. Stok ditarik balik ke admin: ${restored} item. Kini order hanya bisa dihapus.` });
 };
 
 // ---- DELETE /orders/:id ----
