@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { clearToken, getToken } from '../api.js';
+import Icon from './Icons.jsx';
 
 const NAV = [
-  { to: '/', label: 'Dashboard', icon: '📊', end: true },
-  { to: '/orders', label: 'Orders', icon: '🧾' },
-  { to: '/products', label: 'Produk', icon: '📦' },
-  { label: 'Stok', icon: '🧰', soon: true },
-  { label: 'Users', icon: '👥', soon: true },
-  { label: 'Saldo', icon: '💰', soon: true },
-  { label: 'Voucher', icon: '🎟️', soon: true },
-  { label: 'Broadcast', icon: '📣', soon: true },
-  { label: 'Settings', icon: '⚙️', soon: true }
+  { to: '/', label: 'Dashboard', icon: 'dashboard', end: true },
+  { to: '/orders', label: 'Orders', icon: 'receipt' },
+  { to: '/products', label: 'Produk', icon: 'package' },
+  { label: 'Stok', icon: 'box', soon: true },
+  { label: 'Users', icon: 'users', soon: true },
+  { label: 'Saldo', icon: 'wallet', soon: true },
+  { label: 'Voucher', icon: 'ticket', soon: true },
+  { label: 'Broadcast', icon: 'speakerphone', soon: true },
+  { label: 'Settings', icon: 'settings', soon: true }
 ];
 
 export default function Layout() {
@@ -104,14 +105,14 @@ export default function Layout() {
     <div className="app">
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="brand">
-          <span className="brand-logo">⚡</span>
+          <span className="brand-logo"><Icon name="flash" size={20} stroke={2.2} /></span>
           <span className="brand-name">Store Admin</span>
         </div>
         <nav className="nav">
           {NAV.map((item) =>
             item.soon ? (
               <span key={item.label} className="nav-item disabled" title="Segera hadir">
-                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-icon"><Icon name={item.icon} size={19} /></span>
                 <span>{item.label}</span>
                 <span className="soon-badge">soon</span>
               </span>
@@ -123,14 +124,14 @@ export default function Layout() {
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
                 onClick={() => setOpen(false)}
               >
-                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-icon"><Icon name={item.icon} size={19} /></span>
                 <span>{item.label}</span>
               </NavLink>
             )
           )}
         </nav>
         <button className="logout" onClick={logout}>
-          <span className="nav-icon">⏻</span> Keluar
+          <span className="nav-icon"><Icon name="logout" size={18} /></span> Keluar
         </button>
       </aside>
 
@@ -138,7 +139,7 @@ export default function Layout() {
 
       <div className="main">
         <header className="topbar">
-          <button className="hamburger" onClick={() => setOpen((v) => !v)} aria-label="Menu">☰</button>
+          <button className="hamburger" onClick={() => setOpen((v) => !v)} aria-label="Menu"><Icon name="menu" size={22} /></button>
           <div className="topbar-title">{current.label}</div>
           <div className="topbar-right">
             <span className="dot" /> Online
@@ -154,16 +155,16 @@ export default function Layout() {
       {orderNotif && (
         <div className="order-notif">
           <div className="order-notif-head">
-            <span className="order-notif-title">🎉 Transaksi Sukses</span>
-            <button className="order-notif-close" onClick={() => setOrderNotif(null)}>✕</button>
+            <span className="order-notif-title"><Icon name="confetti" size={15} /> Transaksi Sukses</span>
+            <button className="order-notif-close" onClick={() => setOrderNotif(null)}><Icon name="x" size={15} /></button>
           </div>
           <div className="order-notif-body">
-            <div className="order-notif-item"><span>🆔 <b>Order ID:</b> </span><span className="mono">{orderNotif.id}</span></div>
-            <div className="order-notif-item"><span>👤 <b>User:</b> </span><span>{orderNotif.username ? `@${orderNotif.username}` : (orderNotif.first_name || 'User')} ({orderNotif.user_id})</span></div>
-            <div className="order-notif-item"><span>📦 <b>Produk:</b> </span><span>{orderNotif.product_name}</span></div>
-            <div className="order-notif-item"><span>🔢 <b>Jumlah:</b> </span><span>{orderNotif.quantity} pcs</span></div>
-            <div className="order-notif-item"><span>💳 <b>Metode:</b> </span><span className="up">{orderNotif.payment_method?.toUpperCase()}</span></div>
-            <div className="order-notif-item"><span>⏰ <b>Selesai:</b> </span><span>{fmtNotifyDate(orderNotif.paid_at || orderNotif.delivered_at)}</span></div>
+            <div className="order-notif-item"><span><b>Order ID:</b> </span><span className="mono">{orderNotif.id}</span></div>
+            <div className="order-notif-item"><span><b>User:</b> </span><span>{orderNotif.username ? `@${orderNotif.username}` : (orderNotif.first_name || 'User')} ({orderNotif.user_id})</span></div>
+            <div className="order-notif-item"><span><b>Produk:</b> </span><span>{orderNotif.product_name}</span></div>
+            <div className="order-notif-item"><span><b>Jumlah:</b> </span><span>{orderNotif.quantity} pcs</span></div>
+            <div className="order-notif-item"><span><b>Metode:</b> </span><span className="up">{orderNotif.payment_method?.toUpperCase()}</span></div>
+            <div className="order-notif-item"><span><b>Selesai:</b> </span><span>{fmtNotifyDate(orderNotif.paid_at || orderNotif.delivered_at)}</span></div>
           </div>
         </div>
       )}

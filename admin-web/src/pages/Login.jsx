@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login, setToken } from '../api.js';
+import Icon from '../components/Icons.jsx';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ export default function Login() {
     <div className="login-wrap">
       <div className="login-glow" />
       <form className="login-card" onSubmit={submit}>
-        <div className="login-logo">⚡</div>
+        <div className="login-logo"><Icon name="flash" size={28} stroke={2.2} /></div>
         <h1 className="login-title">Store Admin</h1>
         <p className="login-sub">Masuk untuk mengelola toko kamu</p>
 
@@ -43,7 +44,7 @@ export default function Login() {
               autoFocus
             />
             <button type="button" className="eye" onClick={() => setShow((v) => !v)}>
-              {show ? '🙈' : '👁️'}
+              <Icon name={show ? 'eye-off' : 'eye'} size={17} />
             </button>
           </div>
         </label>

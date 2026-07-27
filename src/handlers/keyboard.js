@@ -148,10 +148,10 @@ const registerKeyboardHandler = (bot) => {
         const msg = generateCategoryListMsg(categories, page, lang);
         const keyboard = generateCategoryButtons(categories, page, lang);
 
-        await ctx.editMessageCaption(msg, {
-            parse_mode: 'Markdown',
-            ...keyboard
-        });
+        // Category list uses HTML tags (<b>/<i>) — must render as HTML, not Markdown,
+        // otherwise the tags leak as raw text. Use editBannerCaption for consistency
+        // with the initial render (replyWithBanner) and back_to_categories.
+        await editBannerCaption(ctx, msg, keyboard);
     });
 
     // Helper: build product list page
