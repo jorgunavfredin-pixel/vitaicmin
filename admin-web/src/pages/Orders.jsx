@@ -104,37 +104,39 @@ export default function Orders() {
             </button>
           ))}
         </div>
-        <div className="search">
-          <span className="search-icon"><Icon name="search" size={15} /></span>
-          <input
-            placeholder="Cari ID / user / produk…"
-            value={q}
-            onChange={(e) => { setQ(e.target.value); setPage(1); }}
-          />
-        </div>
-        <div className="date-filter">
-          <input
-            type="date"
-            className="date-field"
-            value={from}
-            max={to || undefined}
-            title="Dari tanggal"
-            onChange={(e) => { setFrom(e.target.value); setPage(1); }}
-          />
-          <span className="date-sep">—</span>
-          <input
-            type="date"
-            className="date-field"
-            value={to}
-            min={from || undefined}
-            title="Sampai tanggal"
-            onChange={(e) => { setTo(e.target.value); setPage(1); }}
-          />
-          {(from || to) && (
-            <button className="date-clear" title="Reset tanggal" onClick={() => { setFrom(''); setTo(''); setPage(1); }}>
-              <Icon name="x" size={14} />
-            </button>
-          )}
+        <div className="toolbar-filters">
+          <div className="search">
+            <span className="search-icon"><Icon name="search" size={15} /></span>
+            <input
+              placeholder="Cari ID / user / produk…"
+              value={q}
+              onChange={(e) => { setQ(e.target.value); setPage(1); }}
+            />
+          </div>
+          <div className="date-filter">
+            <input
+              type="date"
+              className="date-field"
+              value={from}
+              max={to || undefined}
+              title="Dari tanggal"
+              onChange={(e) => { setFrom(e.target.value); setPage(1); }}
+            />
+            <span className="date-sep">—</span>
+            <input
+              type="date"
+              className="date-field"
+              value={to}
+              min={from || undefined}
+              title="Sampai tanggal"
+              onChange={(e) => { setTo(e.target.value); setPage(1); }}
+            />
+            {(from || to) && (
+              <button className="date-clear" title="Reset tanggal" onClick={() => { setFrom(''); setTo(''); setPage(1); }}>
+                <Icon name="x" size={14} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

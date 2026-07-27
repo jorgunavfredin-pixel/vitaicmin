@@ -471,7 +471,9 @@ button { font-family: inherit; cursor: pointer; }
 }
 .select-field:focus { border-color: var(--brand); }
 
-.date-filter { display: flex; align-items: center; gap: 6px; }
+.toolbar-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.toolbar-filters .search { flex: 0 1 240px; min-width: 160px; max-width: 340px; }
+.date-filter { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .date-field {
   padding: 9px 10px; border-radius: 11px; font-size: 13px;
   background: var(--panel); border: 1px solid var(--border); color: var(--text);
