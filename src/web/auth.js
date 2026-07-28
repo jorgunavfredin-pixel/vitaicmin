@@ -124,10 +124,15 @@ const setAdminPassword = (newPassword, minimumLength = 10) => {
     return true;
 };
 
-const resetPasswordWithRecovery = (recoveryPassword, newPassword) => {
+const resetPasswordToEnv = (recoveryPassword) => {
     const recovery = getEnvPassword();
     if (!recovery || !safeEqual(recoveryPassword, recovery)) throw new Error('Recovery password tidak valid');
-    return setAdminPassword(newPassword, 10);
+    // Hapus hash custom agar login kembali memakai ADMIN_PANEL_PASSWORD dari .env.
+    db.updateSettings({
+        admin_password_hash: '',
+        admin_session_version: getSessionVersion() + 1
+    });
+    return true;
 };
 
 // POST /api/admin/forgot-password — public, tetapi dibatasi per IP.
@@ -141,16 +146,15 @@ const forgotPassword = (req, res) => {
     recent.push(now);
     recoveryAttempts.set(ip, recent);
     try {
-        resetPasswordWithRecovery(req.body?.recoveryPassword || '', req.body?.newPassword || '');
+        resetPasswordToEnv(req.body?.recoveryPassword || '');
         recoveryAttempts.delete(ip);
-        return res.json({ ok: true, message: 'Password berhasil direset. Silakan login dengan password baru.' });
+        return res.json({ ok: true, message: 'Password custom direset. Silakan login menggunakan ADMIN_PANEL_PASSWORD dari .env.' });
     } catch (e) {
-        const validation = String(e.message).startsWith('Password baru minimal');
-        return res.status(400).json({ error: validation ? e.message : 'Recovery password tidak valid' });
+        return res.status(400).json({ error: 'Recovery password tidak valid' });
     }
 };
 
 module.exports = {
-    login, forgotPassword, requireAuth, changePassword, resetPasswordWithRecovery, setAdminPassword,
+    login, forgotPassword, requireAuth, changePassword, resetPasswordToEnv,
     isCustomPassword, verifyPassword, getSecret, getSessionVersion
 };
