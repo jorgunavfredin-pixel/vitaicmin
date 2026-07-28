@@ -84,11 +84,19 @@ button { font-family: inherit; cursor: pointer; }
   position: absolute; right: 8px; background: none; border: none;
   font-size: 16px; padding: 6px; opacity: .8;
 }
-.login-error {
-  margin-top: 14px; padding: 10px 12px; border-radius: 10px;
-  background: rgba(255,107,107,0.12); border: 1px solid rgba(255,107,107,0.3);
-  color: #ffb1b1; font-size: 13px;
+.login-error, .login-success {
+  margin-top: 14px; padding: 10px 12px; border-radius: 10px; font-size: 13px;
 }
+.login-error { background: rgba(255,107,107,0.12); border: 1px solid rgba(255,107,107,0.3); color: #ffb1b1; }
+.login-success { background: rgba(42,202,129,.11); border: 1px solid rgba(42,202,129,.28); color: #8ce5b9; }
+.login-link {
+  display: block; margin: 10px 0 0 auto; padding: 0; border: none; background: none;
+  color: var(--brand); font-size: 12px; cursor: pointer;
+}
+.login-link:hover { color: #a9c2ff; text-decoration: underline; }
+.login-link-center { margin: 14px auto 0; }
+.login-recovery-fields { display: flex; flex-direction: column; gap: 13px; }
+.login-recovery-fields .field-label { margin-bottom: 6px; }
 .btn-primary {
   width: 100%; margin-top: 22px; padding: 13px;
   border: none; border-radius: 12px; font-size: 15px; font-weight: 600;

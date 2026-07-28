@@ -64,3 +64,29 @@ test('login memakai secret otomatis persisten, TTL 24 jam, dan password baru men
   assert.equal(out.after, out.before + 1);
   assert.equal(out.secretLength, 64);
 });
+
+test('recovery key .env mereset password DB dan mencabut sesi lama', () => {
+  const out = runScenario(`
+    const auth=require('./src/web/auth'); const before=auth.getSessionVersion();
+    auth.resetPasswordWithRecovery('old-password','recovered-password');
+    let shortRejected=false; try{auth.resetPasswordWithRecovery('old-password','short')}catch(e){shortRejected=true}
+    console.log(JSON.stringify({oldValid:auth.verifyPassword('old-password'),newValid:auth.verifyPassword('recovered-password'),before,after:auth.getSessionVersion(),shortRejected}));
+  `);
+  assert.equal(out.oldValid, false);
+  assert.equal(out.newValid, true);
+  assert.equal(out.after, out.before + 1);
+  assert.equal(out.shortRejected, true);
+});
+
+test('forgot-password dibatasi 5 percobaan per IP per 15 menit', () => {
+  const out = runScenario(`
+    const auth=require('./src/web/auth'); const codes=[];
+    for(let i=0;i<6;i++){
+      let code=200;
+      const res={status:c=>{code=c;return res},json:()=>{codes.push(code)}};
+      auth.forgotPassword({ip:'203.0.113.10',body:{recoveryPassword:'wrong',newPassword:'valid-password'}},res);
+    }
+    console.log(JSON.stringify({codes}));
+  `);
+  assert.deepEqual(out.codes, [400,400,400,400,400,429]);
+});

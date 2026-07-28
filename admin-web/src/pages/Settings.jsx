@@ -274,52 +274,34 @@ function BackupTab({ showToast }) {
   );
 }
 
-// ---- System info tab: runtime/deployment read-only + fallback env ----
+// ---- System info tab: hanya runtime/deployment yang memang read-only ----
 function SystemTab({ env }) {
-  const groups = [
-    { title: 'Runtime & Deployment — edit .env lalu restart', rows: [
-      { label: 'Admin Telegram ID', value: env.admin_id, key: 'ADMIN_ID' },
-      { label: 'Port Server', value: env.port, key: 'PORT' },
-      { label: 'Webhook URL Publik', value: env.webhook_url, key: 'WEBHOOK_URL' },
-      { label: 'Bot Token', value: env.bot_token, key: 'BOT_TOKEN', masked: true },
-      { label: 'JWT Secret', value: env.admin_jwt_secret, key: `Sumber: ${env.admin_jwt_source}`, masked: true },
-      { label: 'Password Login', value: env.admin_password_source, key: 'Sumber aktif' },
-      { label: 'Callback PaKasir', value: env.callback_pakasir, key: 'otomatis' },
-      { label: 'Callback WijayaPay', value: env.wijayapay_callback_url, key: 'otomatis' },
-      { label: 'Callback Xoftware', value: env.callback_xoftware, key: 'otomatis' }
-    ]},
-    { title: 'Fallback .env — nilai efektif dapat dioverride dari menu lain', rows: [
-      { label: 'Nama Toko (fallback)', value: env.store_name, key: 'STORE_NAME' },
-      { label: 'Username Support (fallback)', value: env.support_username, key: 'SUPPORT_USERNAME' },
-      { label: 'Prefix Order (fallback)', value: env.order_prefix, key: 'ORDER_PREFIX' }
-    ]},
-    { title: 'Tema QRIS Lama — ditunda sampai project twibbon baru', rows: [
-      { label: 'Preset Tema', value: env.theme_preset, key: 'THEME_PRESET' },
-      { label: 'Warna Tema', value: env.theme_color, key: 'THEME_COLOR' },
-      { label: 'Background Tema', value: env.theme_bg, key: 'THEME_BG' }
-    ]}
+  const rows = [
+    { label: 'Admin Telegram ID', value: env.admin_id, key: 'ADMIN_ID' },
+    { label: 'Port Server', value: env.port, key: 'PORT' },
+    { label: 'Webhook URL Publik', value: env.webhook_url, key: 'WEBHOOK_URL' },
+    { label: 'Bot Token', value: env.bot_token, key: 'BOT_TOKEN', masked: true },
+    { label: 'JWT Secret', value: env.admin_jwt_secret, key: `Sumber: ${env.admin_jwt_source}`, masked: true },
+    { label: 'Password Login', value: env.admin_password_source, key: 'Sumber aktif' },
+    { label: 'Durasi Sesi', value: '24 jam', key: 'JWT expiry' }
   ];
-
   return (
     <div className="panel settings-panel">
       <h3 className="settings-section-title">Info Sistem (read-only)</h3>
       <div className="settings-note hint-icon">
-        <Icon name="warning" size={14} /> Runtime/deployment tidak diedit dari web. Identitas toko dan gateway dikelola live dari submenu masing-masing; nilai .env di bawah hanya fallback.
+        <Icon name="warning" size={14} /> Nilai runtime/deployment ini tidak diedit dari web. Ubah melalui .env lalu restart bot bila diperlukan.
       </div>
-      {groups.map((group) => <div key={group.title} style={{ marginTop: 18 }}>
-        <div className="field-label" style={{ marginBottom: 8 }}>{group.title}</div>
-        <div className="sysinfo-list">
-          {group.rows.map((r) => (
-            <div key={`${group.title}-${r.label}`} className="sysinfo-row">
-              <div className="sysinfo-label">{r.label}<span className="sysinfo-key">{r.key}</span></div>
-              <div className="sysinfo-value mono">
-                {r.value != null && r.value !== '' ? r.value : <span className="muted">— belum diset</span>}
-                {r.masked && r.value && <span className="sysinfo-masked-badge">masked</span>}
-              </div>
+      <div className="sysinfo-list" style={{ marginTop: 16 }}>
+        {rows.map((r) => (
+          <div key={r.label} className="sysinfo-row">
+            <div className="sysinfo-label">{r.label}<span className="sysinfo-key">{r.key}</span></div>
+            <div className="sysinfo-value mono">
+              {r.value != null && r.value !== '' ? r.value : <span className="muted">— belum diset</span>}
+              {r.masked && r.value && <span className="sysinfo-masked-badge">masked</span>}
             </div>
-          ))}
-        </div>
-      </div>)}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

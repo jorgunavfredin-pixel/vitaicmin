@@ -5,7 +5,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { login, requireAuth } = require('./auth');
+const { login, forgotPassword, requireAuth } = require('./auth');
 const { getDashboard } = require('./routes/dashboard');
 const { registerOrderRoutes } = require('./routes/orders');
 const { registerProductRoutes } = require('./routes/products');
@@ -55,6 +55,7 @@ const registerAdminApi = (app, bot) => {
 
     // --- Public ---
     api.post('/login', login);
+    api.post('/forgot-password', forgotPassword);
 
     // --- Live Updates (SSE) ---
     api.get('/live-updates', (req, res) => {

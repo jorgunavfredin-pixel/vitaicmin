@@ -56,30 +56,15 @@ const getSettings = (req, res) => {
                 order_prefix: db.getConfig('order_prefix', 'ORDER_PREFIX', 'ORD'),
                 payment_timeout_minutes: parseInt(db.getConfig('payment_timeout_minutes', null, 15)) || 15
             },
-            // Info env read-only (buat referensi admin; nilai sensitif di-mask)
+            // Hanya runtime/deployment read-only. Config live ada di submenu masing-masing.
             env: {
                 bot_token: mask(process.env.BOT_TOKEN),
                 port: process.env.PORT || null,
                 webhook_url: process.env.WEBHOOK_URL || null,
                 admin_id: process.env.ADMIN_ID || null,
-                store_name: process.env.STORE_NAME || null,
-                support_username: process.env.SUPPORT_USERNAME || null,
-                order_prefix: process.env.ORDER_PREFIX || 'ORD',
-                pakasir_api_key: mask(process.env.PAKASIR_API_KEY),
-                pakasir_slug: process.env.PAKASIR_SLUG || null,
-                wijayapay_code_merchant: process.env.WIJAYAPAY_CODE_MERCHANT || null,
-                wijayapay_api_key: mask(process.env.WIJAYAPAY_API_KEY),
-                wijayapay_callback_url: process.env.WEBHOOK_URL
-                    ? `${String(process.env.WEBHOOK_URL).replace(/\/$/, '')}/webhook/wijayapay`
-                    : null,
                 admin_jwt_secret: mask(process.env.ADMIN_JWT_SECRET || db.getConfig('admin_jwt_secret', null, '')),
                 admin_jwt_source: process.env.ADMIN_JWT_SECRET ? '.env' : 'otomatis (database)',
-                admin_password_source: isCustomPassword() ? 'database (scrypt)' : '.env',
-                theme_preset: process.env.THEME_PRESET || 'gold',
-                theme_color: process.env.THEME_COLOR || null,
-                theme_bg: process.env.THEME_BG || null,
-                callback_pakasir: process.env.WEBHOOK_URL ? `${String(process.env.WEBHOOK_URL).replace(/\/$/, '')}/webhook/qris` : null,
-                callback_xoftware: process.env.WEBHOOK_URL ? `${String(process.env.WEBHOOK_URL).replace(/\/$/, '')}/webhook/xoftware` : null
+                admin_password_source: isCustomPassword() ? 'database (scrypt)' : '.env'
             },
             security: {
                 password_source: isCustomPassword() ? 'custom' : 'env',
@@ -187,6 +172,8 @@ const updateStore = (req, res) => {
 // ---- GET /gateways ----  daftar gateway (credential di-mask)
 const listGateways = (req, res) => {
     try {
+        const webhookBase = String(process.env.WEBHOOK_URL || '').replace(/\/$/, '');
+        const callbackPath = { pakasir: '/webhook/qris', wijayapay: '/webhook/wijayapay', xoftware: '/webhook/xoftware' };
         const activeMap = new Map(
             gateway.listActiveGateways()
                 .filter(g => g.id)
@@ -198,6 +185,7 @@ const listGateways = (req, res) => {
             label: g.label,
             credentials: maskCred(g.credentials),
             enabled: g.enabled,
+            callback_url: webhookBase && callbackPath[g.provider] ? `${webhookBase}${callbackPath[g.provider]}` : null,
             qris_number: activeMap.get(g.id)?.qris_number || null,
             buyer_label: activeMap.get(g.id)?.buyer_label || null,
             updated_at: g.updated_at

@@ -44,6 +44,8 @@ export async function apiFetch(path, options = {}) {
 
 export const login = (password) =>
   apiFetch('/login', { method: 'POST', body: JSON.stringify({ password }) });
+export const resetForgottenPassword = (recoveryPassword, newPassword) =>
+  apiFetch('/forgot-password', { method: 'POST', body: JSON.stringify({ recoveryPassword, newPassword }) });
 
 export const fetchDashboard = () => apiFetch('/dashboard');
 

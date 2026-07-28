@@ -23,6 +23,9 @@ const getSecret = () => {
 };
 const getSessionVersion = () => parseInt(db.getConfig('admin_session_version', null, 1)) || 1;
 const getEnvPassword = () => process.env.ADMIN_PANEL_PASSWORD || '';
+const recoveryAttempts = new Map();
+const RECOVERY_WINDOW = 15 * 60 * 1000;
+const RECOVERY_MAX = 5;
 
 // Constant-time compare untuk plaintext (fallback env)
 const safeEqual = (a, b) => {
@@ -108,10 +111,46 @@ const changePassword = (currentPassword, newPassword) => {
     const ok = verifyPassword(currentPassword);
     if (ok === null) throw new Error('Panel belum dikonfigurasi');
     if (!ok) throw new Error('Password lama salah');
-    if (!newPassword || String(newPassword).length < 6) throw new Error('Password baru minimal 6 karakter');
-    db.updateSettings({ admin_password_hash: hashPassword(newPassword) });
-    db.updateSettings({ admin_session_version: getSessionVersion() + 1 });
+    setAdminPassword(newPassword, 6);
     return true;
 };
 
-module.exports = { login, requireAuth, changePassword, isCustomPassword, verifyPassword, getSecret, getSessionVersion };
+const setAdminPassword = (newPassword, minimumLength = 10) => {
+    if (!newPassword || String(newPassword).length < minimumLength) throw new Error(`Password baru minimal ${minimumLength} karakter`);
+    db.updateSettings({
+        admin_password_hash: hashPassword(newPassword),
+        admin_session_version: getSessionVersion() + 1
+    });
+    return true;
+};
+
+const resetPasswordWithRecovery = (recoveryPassword, newPassword) => {
+    const recovery = getEnvPassword();
+    if (!recovery || !safeEqual(recoveryPassword, recovery)) throw new Error('Recovery password tidak valid');
+    return setAdminPassword(newPassword, 10);
+};
+
+// POST /api/admin/forgot-password — public, tetapi dibatasi per IP.
+const forgotPassword = (req, res) => {
+    const ip = String(req.ip || req.socket?.remoteAddress || 'unknown');
+    const now = Date.now();
+    const recent = (recoveryAttempts.get(ip) || []).filter(ts => now - ts < RECOVERY_WINDOW);
+    if (recent.length >= RECOVERY_MAX) {
+        return res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi dalam 15 menit.' });
+    }
+    recent.push(now);
+    recoveryAttempts.set(ip, recent);
+    try {
+        resetPasswordWithRecovery(req.body?.recoveryPassword || '', req.body?.newPassword || '');
+        recoveryAttempts.delete(ip);
+        return res.json({ ok: true, message: 'Password berhasil direset. Silakan login dengan password baru.' });
+    } catch (e) {
+        const validation = String(e.message).startsWith('Password baru minimal');
+        return res.status(400).json({ error: validation ? e.message : 'Recovery password tidak valid' });
+    }
+};
+
+module.exports = {
+    login, forgotPassword, requireAuth, changePassword, resetPasswordWithRecovery, setAdminPassword,
+    isCustomPassword, verifyPassword, getSecret, getSessionVersion
+};
