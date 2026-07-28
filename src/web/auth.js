@@ -10,8 +10,18 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const db = require('../models/db');
 
-// JWT secret: dedicated env, else fall back to bot token (always present)
-const getSecret = () => process.env.ADMIN_JWT_SECRET || process.env.BOT_TOKEN || 'insecure-dev-secret';
+// JWT secret: env jika tersedia; jika kosong generate sekali dan simpan persisten di DB.
+// Admin tidak perlu mengelola secret manual dan secret tidak berubah saat restart.
+const getSecret = () => {
+    if (process.env.ADMIN_JWT_SECRET) return process.env.ADMIN_JWT_SECRET;
+    let secret = db.getConfig('admin_jwt_secret', null, '');
+    if (!secret) {
+        secret = crypto.randomBytes(32).toString('hex');
+        db.updateSettings({ admin_jwt_secret: secret });
+    }
+    return secret;
+};
+const getSessionVersion = () => parseInt(db.getConfig('admin_session_version', null, 1)) || 1;
 const getEnvPassword = () => process.env.ADMIN_PANEL_PASSWORD || '';
 
 // Constant-time compare untuk plaintext (fallback env)
@@ -64,7 +74,7 @@ const verifyPassword = (input) => {
 // Apakah password sudah pernah diubah lewat panel (bukan env lagi)
 const isCustomPassword = () => !!getStoredHash();
 
-const signToken = () => jwt.sign({ role: 'admin' }, getSecret(), { expiresIn: '7d' });
+const signToken = () => jwt.sign({ role: 'admin', sv: getSessionVersion() }, getSecret(), { expiresIn: '24h' });
 
 // POST /api/admin/login  { password }
 const login = (req, res) => {
@@ -76,7 +86,7 @@ const login = (req, res) => {
     if (!result) {
         return res.status(401).json({ error: 'Password salah' });
     }
-    return res.json({ token: signToken(), expiresIn: '7d' });
+    return res.json({ token: signToken(), expiresIn: '24h' });
 };
 
 // Middleware: require a valid Bearer token
@@ -85,7 +95,8 @@ const requireAuth = (req, res, next) => {
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
     try {
-        jwt.verify(token, getSecret());
+        const payload = jwt.verify(token, getSecret());
+        if (payload.sv !== getSessionVersion()) throw new Error('Session revoked');
         return next();
     } catch (e) {
         return res.status(401).json({ error: 'Sesi kadaluarsa, silakan login ulang' });
@@ -99,7 +110,8 @@ const changePassword = (currentPassword, newPassword) => {
     if (!ok) throw new Error('Password lama salah');
     if (!newPassword || String(newPassword).length < 6) throw new Error('Password baru minimal 6 karakter');
     db.updateSettings({ admin_password_hash: hashPassword(newPassword) });
+    db.updateSettings({ admin_session_version: getSessionVersion() + 1 });
     return true;
 };
 
-module.exports = { login, requireAuth, changePassword, isCustomPassword, verifyPassword };
+module.exports = { login, requireAuth, changePassword, isCustomPassword, verifyPassword, getSecret, getSessionVersion };

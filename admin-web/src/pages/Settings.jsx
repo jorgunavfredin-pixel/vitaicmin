@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fetchSettings, toggleSetting, changeAdminPassword, downloadBackup, updateStoreInfo } from '../api.js';
+import { fetchSettings, toggleSetting, changeAdminPassword, downloadBackup, updateStoreInfo, clearToken } from '../api.js';
+import { useNavigate } from 'react-router-dom';
 import Icon from '../components/Icons.jsx';
 import PaymentTab from './settings/PaymentTab.jsx';
 
@@ -29,6 +30,7 @@ function Toggle({ on, onChange, disabled }) {
 }
 
 export default function Settings() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState('general');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -105,7 +107,7 @@ export default function Settings() {
 
           {tab === 'payment' && <PaymentTab showToast={showToast} />}
 
-          {tab === 'security' && <SecurityTab data={data} showToast={showToast} onChanged={load} />}
+          {tab === 'security' && <SecurityTab data={data} showToast={showToast} onRelogin={() => { clearToken(); navigate('/login', { replace: true }); }} />}
 
           {tab === 'backup' && <BackupTab showToast={showToast} busy={busy} setBusy={setBusy} />}
 
@@ -190,7 +192,7 @@ function StoreTab({ store, showToast, onChanged }) {
 }
 
 // ---- Security tab: ganti password ----
-function SecurityTab({ data, showToast, onChanged }) {
+function SecurityTab({ data, showToast, onRelogin }) {
   const [cur, setCur] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -205,7 +207,7 @@ function SecurityTab({ data, showToast, onChanged }) {
       const r = await changeAdminPassword(cur, next);
       showToast(r.message);
       setCur(''); setNext(''); setConfirm('');
-      onChanged();
+      setTimeout(onRelogin, 900);
     } catch (e) { showToast(e.message, 'err'); } finally { setBusy(false); }
   };
 
@@ -215,8 +217,9 @@ function SecurityTab({ data, showToast, onChanged }) {
       <div className="settings-note hint-icon">
         <Icon name={data.security.password_source === 'custom' ? 'check' : 'warning'} size={14} />
         {data.security.password_source === 'custom'
-          ? ' Password saat ini: custom (tersimpan aman di database).'
+          ? ' Password custom tersimpan sebagai hash scrypt di database.'
           : ' Password saat ini masih dari .env. Ganti di sini untuk keamanan lebih baik.'}
+        {' '}Sesi berlaku 24 jam. Setelah password diganti, semua sesi lama dicabut dan Anda diminta login ulang.
       </div>
 
       <div className="settings-form">
@@ -252,14 +255,14 @@ function BackupTab({ showToast }) {
     <div className="panel settings-panel">
       <h3 className="settings-section-title">Backup Database</h3>
       <div className="settings-note hint-icon">
-        <Icon name="box" size={14} /> Unduh salinan lengkap database (store.db). Simpan di tempat aman sebagai cadangan.
+        <Icon name="box" size={14} /> Unduh satu file snapshot SQLite lengkap. Perubahan di WAL digabung otomatis tanpa perlu mengunduh store.db-wal/store.db-shm.
       </div>
       <div className="backup-box">
         <div className="backup-info">
           <Icon name="download" size={26} />
           <div>
             <div className="backup-title">Snapshot Database</div>
-            <div className="backup-sub">File SQLite berisi semua data: order, user, produk, stok, voucher.</div>
+            <div className="backup-sub">Berisi order, buyer, saldo, stok, voucher, settings, hash password, dan credential gateway. Simpan di tempat aman.</div>
           </div>
         </div>
         <button className="btn-primary btn-icon" style={{ width: 'auto', marginTop: 0, padding: '11px 18px' }}
@@ -271,40 +274,52 @@ function BackupTab({ showToast }) {
   );
 }
 
-// ---- System info tab (env read-only) ----
+// ---- System info tab: runtime/deployment read-only + fallback env ----
 function SystemTab({ env }) {
-  const rows = [
-    { label: 'Nama Toko', value: env.store_name, key: 'STORE_NAME' },
-    { label: 'Username Support', value: env.support_username, key: 'SUPPORT_USERNAME' },
-    { label: 'Prefix Order', value: env.order_prefix, key: 'ORDER_PREFIX' },
-    { label: 'Admin ID', value: env.admin_id, key: 'ADMIN_ID' },
-    { label: 'Port Server', value: env.port, key: 'PORT' },
-    { label: 'Webhook URL', value: env.webhook_url, key: 'WEBHOOK_URL' },
-    { label: 'Bot Token', value: env.bot_token, key: 'BOT_TOKEN', masked: true },
-    { label: 'PaKasir API Key', value: env.pakasir_api_key, key: 'PAKASIR_API_KEY', masked: true },
-    { label: 'PaKasir Slug', value: env.pakasir_slug, key: 'PAKASIR_SLUG' }
+  const groups = [
+    { title: 'Runtime & Deployment — edit .env lalu restart', rows: [
+      { label: 'Admin Telegram ID', value: env.admin_id, key: 'ADMIN_ID' },
+      { label: 'Port Server', value: env.port, key: 'PORT' },
+      { label: 'Webhook URL Publik', value: env.webhook_url, key: 'WEBHOOK_URL' },
+      { label: 'Bot Token', value: env.bot_token, key: 'BOT_TOKEN', masked: true },
+      { label: 'JWT Secret', value: env.admin_jwt_secret, key: `Sumber: ${env.admin_jwt_source}`, masked: true },
+      { label: 'Password Login', value: env.admin_password_source, key: 'Sumber aktif' },
+      { label: 'Callback PaKasir', value: env.callback_pakasir, key: 'otomatis' },
+      { label: 'Callback WijayaPay', value: env.wijayapay_callback_url, key: 'otomatis' },
+      { label: 'Callback Xoftware', value: env.callback_xoftware, key: 'otomatis' }
+    ]},
+    { title: 'Fallback .env — nilai efektif dapat dioverride dari menu lain', rows: [
+      { label: 'Nama Toko (fallback)', value: env.store_name, key: 'STORE_NAME' },
+      { label: 'Username Support (fallback)', value: env.support_username, key: 'SUPPORT_USERNAME' },
+      { label: 'Prefix Order (fallback)', value: env.order_prefix, key: 'ORDER_PREFIX' }
+    ]},
+    { title: 'Tema QRIS Lama — ditunda sampai project twibbon baru', rows: [
+      { label: 'Preset Tema', value: env.theme_preset, key: 'THEME_PRESET' },
+      { label: 'Warna Tema', value: env.theme_color, key: 'THEME_COLOR' },
+      { label: 'Background Tema', value: env.theme_bg, key: 'THEME_BG' }
+    ]}
   ];
 
   return (
     <div className="panel settings-panel">
       <h3 className="settings-section-title">Info Sistem (read-only)</h3>
       <div className="settings-note hint-icon">
-        <Icon name="warning" size={14} /> Nilai ini dari .env dan hanya bisa diubah dengan restart server. Ditampilkan sebagai referensi. Konfigurasi yang bisa diedit dari panel akan hadir di fase berikutnya.
+        <Icon name="warning" size={14} /> Runtime/deployment tidak diedit dari web. Identitas toko dan gateway dikelola live dari submenu masing-masing; nilai .env di bawah hanya fallback.
       </div>
-      <div className="sysinfo-list">
-        {rows.map((r) => (
-          <div key={r.key} className="sysinfo-row">
-            <div className="sysinfo-label">
-              {r.label}
-              <span className="sysinfo-key">{r.key}</span>
+      {groups.map((group) => <div key={group.title} style={{ marginTop: 18 }}>
+        <div className="field-label" style={{ marginBottom: 8 }}>{group.title}</div>
+        <div className="sysinfo-list">
+          {group.rows.map((r) => (
+            <div key={`${group.title}-${r.label}`} className="sysinfo-row">
+              <div className="sysinfo-label">{r.label}<span className="sysinfo-key">{r.key}</span></div>
+              <div className="sysinfo-value mono">
+                {r.value != null && r.value !== '' ? r.value : <span className="muted">— belum diset</span>}
+                {r.masked && r.value && <span className="sysinfo-masked-badge">masked</span>}
+              </div>
             </div>
-            <div className="sysinfo-value mono">
-              {r.value != null && r.value !== '' ? r.value : <span className="muted">— belum diset</span>}
-              {r.masked && r.value && <span className="sysinfo-masked-badge">masked</span>}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </div>)}
     </div>
   );
 }

@@ -6,7 +6,23 @@ const BASE = '/api/admin';
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
-export const isAuthed = () => !!getToken();
+export const isAuthed = () => {
+  const token = getToken();
+  if (!token) return false;
+  try {
+    const segment = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = segment.padEnd(Math.ceil(segment.length / 4) * 4, '=');
+    const payload = JSON.parse(atob(padded));
+    if (!payload.exp || payload.exp * 1000 <= Date.now()) {
+      clearToken();
+      return false;
+    }
+    return true;
+  } catch {
+    clearToken();
+    return false;
+  }
+};
 
 export async function apiFetch(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -149,7 +165,8 @@ export const updateStoreInfo = (data) =>
 export const fetchGateways = () => apiFetch('/gateways');
 export const createGateway = (data) => apiFetch('/gateways', { method: 'POST', body: JSON.stringify(data) });
 export const updateGateway = (id, data) => apiFetch(`/gateways/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) });
-export const deleteGateway = (id) => apiFetch(`/gateways/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const checkGatewayDelete = (id) => apiFetch(`/gateways/${encodeURIComponent(id)}/delete-check`);
+export const deleteGateway = (id) => apiFetch(`/gateways/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ confirm: true }) });
 export const testGateway = (id, creds) => apiFetch(`/gateways/${encodeURIComponent(id)}/test`, { method: 'POST', body: JSON.stringify(creds || {}) });
 
 

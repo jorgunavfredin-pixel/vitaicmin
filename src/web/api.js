@@ -72,8 +72,9 @@ const registerAdminApi = (app, bot) => {
         }
         try {
             const jwt = require('jsonwebtoken');
-            const getSecret = () => process.env.ADMIN_JWT_SECRET || process.env.BOT_TOKEN || 'insecure-dev-secret';
-            jwt.verify(token, getSecret());
+            const { getSecret, getSessionVersion } = require('./auth');
+            const payload = jwt.verify(token, getSecret());
+            if (payload.sv !== getSessionVersion()) throw new Error('Session revoked');
         } catch (e) {
             res.write('event: error\ndata: Unauthorized\n\n');
             res.end();

@@ -71,10 +71,20 @@ const getSettings = (req, res) => {
                 wijayapay_api_key: mask(process.env.WIJAYAPAY_API_KEY),
                 wijayapay_callback_url: process.env.WEBHOOK_URL
                     ? `${String(process.env.WEBHOOK_URL).replace(/\/$/, '')}/webhook/wijayapay`
-                    : null
+                    : null,
+                admin_jwt_secret: mask(process.env.ADMIN_JWT_SECRET || db.getConfig('admin_jwt_secret', null, '')),
+                admin_jwt_source: process.env.ADMIN_JWT_SECRET ? '.env' : 'otomatis (database)',
+                admin_password_source: isCustomPassword() ? 'database (scrypt)' : '.env',
+                theme_preset: process.env.THEME_PRESET || 'gold',
+                theme_color: process.env.THEME_COLOR || null,
+                theme_bg: process.env.THEME_BG || null,
+                callback_pakasir: process.env.WEBHOOK_URL ? `${String(process.env.WEBHOOK_URL).replace(/\/$/, '')}/webhook/qris` : null,
+                callback_xoftware: process.env.WEBHOOK_URL ? `${String(process.env.WEBHOOK_URL).replace(/\/$/, '')}/webhook/xoftware` : null
             },
             security: {
-                password_source: isCustomPassword() ? 'custom' : 'env'
+                password_source: isCustomPassword() ? 'custom' : 'env',
+                session_duration: '24 jam',
+                jwt_source: process.env.ADMIN_JWT_SECRET ? 'env' : 'database-auto'
             }
         });
     } catch (e) {
@@ -109,24 +119,19 @@ const updatePassword = (req, res) => {
     }
 };
 
-// ---- GET /settings/backup ----  download store.db
-const backupDb = (req, res) => {
+// ---- GET /settings/backup ----  download satu snapshot SQLite lengkap
+const backupDb = async (req, res) => {
     let tmpPath = null;
     try {
         const dbDir = path.join(__dirname, '../../database');
-        const dbFile = path.join(dbDir, 'store.db');
         const timestamp = getWIBToday();
         const backupName = `backup_${timestamp}.db`;
         // Jangan pakai prefix titik: res.download menolak dotfiles secara default.
         tmpPath = path.join(dbDir, `webbackup_${Date.now()}.db`);
 
-        // Checkpoint WAL ke main DB dulu supaya backup lengkap.
-        const Database = require('better-sqlite3');
-        const liveDb = new Database(dbFile);
-        liveDb.pragma('wal_checkpoint(TRUNCATE)');
-        liveDb.close();
-
-        fs.copyFileSync(dbFile, tmpPath);
+        // Online backup API menghasilkan satu snapshot lengkap dan konsisten,
+        // termasuk perubahan yang masih berada di WAL saat bot tetap berjalan.
+        await db.backupDatabase(tmpPath);
 
         res.download(tmpPath, backupName, (err) => {
             // Bersihkan file sementara setelah terkirim (atau gagal).
@@ -285,14 +290,43 @@ const updateGateway = (req, res) => {
     }
 };
 
-// ---- DELETE /gateways/:id ----
+const gatewayDeleteCheck = (id) => {
+    const existing = db.getPaymentGatewayById(id);
+    if (!existing) return { found: false };
+    const active_orders = db.getActiveOrderCountByGateway(id);
+    // Field .env sebagian pun dapat men-seed row lagi setelah restart; tetap blok hard-delete.
+    const env_configured = !!gateway.envCredential(existing.provider);
+    return {
+        found: true,
+        gateway: { id: existing.id, label: existing.label, provider: existing.provider, enabled: existing.enabled },
+        active_orders,
+        env_configured,
+        can_delete: active_orders === 0 && !env_configured
+    };
+};
+
+// ---- GET /gateways/:id/delete-check ----
+const checkDeleteGateway = (req, res) => {
+    const result = gatewayDeleteCheck(req.params.id);
+    if (!result.found) return res.status(404).json({ error: 'Gateway tidak ditemukan' });
+    res.json(result);
+};
+
+// ---- DELETE /gateways/:id ----  wajib preflight + confirm=true
 const deleteGateway = (req, res) => {
     try {
         const { id } = req.params;
-        const existing = db.getPaymentGatewayById(id);
-        if (!existing) return res.status(404).json({ error: 'Gateway tidak ditemukan' });
+        const check = gatewayDeleteCheck(id);
+        if (!check.found) return res.status(404).json({ error: 'Gateway tidak ditemukan' });
+        if (check.active_orders > 0) {
+            return res.status(409).json({ ...check, error: `Masih ada ${check.active_orders} order pending/processing. Nonaktifkan gateway dan tunggu transaksi selesai.` });
+        }
+        if (check.env_configured) {
+            return res.status(409).json({ ...check, error: 'Credential provider ini masih ada di .env. Nonaktifkan gateway atau hapus credential .env lalu restart.' });
+        }
+        if (req.body?.confirm !== true) return res.status(400).json({ error: 'Konfirmasi penghapusan diperlukan' });
         db.deletePaymentGateway(id);
-        res.json({ ok: true, message: `Gateway ${existing.label} dihapus` });
+        res.json({ ok: true, message: `Gateway ${check.gateway.label} dihapus` });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -332,6 +366,7 @@ const registerSettingsRoutes = (api) => {
 
     api.post('/gateways', createGateway);
     api.put('/gateways/:id', updateGateway);
+    api.get('/gateways/:id/delete-check', checkDeleteGateway);
     api.delete('/gateways/:id', deleteGateway);
     api.post('/gateways/:id/test', testGateway);
 };

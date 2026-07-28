@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fetchGateways, createGateway, updateGateway, deleteGateway, testGateway } from '../../api.js';
+import { fetchGateways, createGateway, updateGateway, checkGatewayDelete, deleteGateway, testGateway } from '../../api.js';
 import Icon from '../../components/Icons.jsx';
 
 // Toko hanya memakai QRIS. Saat >1 gateway aktif, buyer memilih gateway saat checkout.
@@ -83,7 +83,7 @@ function GatewayCard({ gw, showToast, onChanged }) {
   const [feeDirection, setFeeDirection] = useState(gw.credentials.fee_direction || 'merchant');
   const [busy, setBusy] = useState('');
   const [testResult, setTestResult] = useState(null);
-  const [confirmDel, setConfirmDel] = useState(false);
+  const [deleteState, setDeleteState] = useState(null);
 
   useEffect(() => {
     setEnabled(gw.enabled);
@@ -131,6 +131,14 @@ function GatewayCard({ gw, showToast, onChanged }) {
       const r = await testGateway(gw.id, creds);
       setTestResult(r);
     } catch (e) { setTestResult({ ok: false, message: e.message }); } finally { setBusy(''); }
+  };
+
+  const beginDelete = async () => {
+    setBusy('delcheck');
+    try {
+      const check = await checkGatewayDelete(gw.id);
+      setDeleteState({ step: 1, check });
+    } catch (e) { showToast(e.message, 'err'); } finally { setBusy(''); }
   };
 
   const doDelete = async () => {
@@ -210,21 +218,40 @@ function GatewayCard({ gw, showToast, onChanged }) {
         <button className="a-btn a-blue btn-icon" onClick={save} disabled={!!busy}>
           <Icon name="check" size={14} /> {busy === 'save' ? 'Menyimpan…' : 'Simpan'}
         </button>
-        <button className="a-btn a-red btn-icon" onClick={() => setConfirmDel(true)} disabled={!!busy}>
-          <Icon name="trash" size={14} /> Hapus
+        <button className="a-btn a-red btn-icon" onClick={beginDelete} disabled={!!busy}>
+          <Icon name="trash" size={14} /> {busy === 'delcheck' ? 'Memeriksa…' : 'Hapus'}
         </button>
       </div>
 
-      {confirmDel && (
-        <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmDel(false); }}>
+      {deleteState && (
+        <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) setDeleteState(null); }}>
           <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
             <div className="modal-icon modal-icon-danger"><Icon name="warning" size={30} /></div>
-            <h4>Hapus Gateway?</h4>
-            <p>Gateway <b>{gw.label}</b> akan dihapus. Kalau ini satu-satunya gateway aktif, pembayaran QRIS bisa berhenti. Pastikan ada gateway lain atau .env sebagai fallback.</p>
-            <div className="modal-actions">
-              <button className="btn-ghost" onClick={() => setConfirmDel(false)}>Batal</button>
-              <button className="btn-danger" onClick={doDelete}>Ya, Hapus</button>
-            </div>
+            {!deleteState.check.can_delete ? <>
+              <h4>Gateway Tidak Dapat Dihapus</h4>
+              {deleteState.check.active_orders > 0 &&
+                <p>Masih ada <b>{deleteState.check.active_orders} order pending/processing</b> yang menggunakan gateway ini. Nonaktifkan gateway, lalu tunggu pembayaran selesai atau kedaluwarsa.</p>}
+              {deleteState.check.env_configured &&
+                <p>Credential provider ini masih tersedia di <code>.env</code>. Jika row dihapus, gateway dapat aktif kembali. Nonaktifkan saja, atau hapus credential dari <code>.env</code> lalu restart bot.</p>}
+              <div className="modal-actions">
+                <button className="btn-ghost" onClick={() => setDeleteState(null)}>Tutup</button>
+                {enabled && <button className="btn-primary" onClick={async () => { setDeleteState(null); await toggleEnabled(); }}>Nonaktifkan Gateway</button>}
+              </div>
+            </> : deleteState.step === 1 ? <>
+              <h4>Hapus Gateway?</h4>
+              <p>Gateway <b>{gw.label}</b> tidak memiliki transaksi aktif dan dapat dihapus. Histori order tetap tersimpan.</p>
+              <div className="modal-actions">
+                <button className="btn-ghost" onClick={() => setDeleteState(null)}>Batal</button>
+                <button className="btn-danger" onClick={() => setDeleteState(s => ({ ...s, step: 2 }))}>Lanjut</button>
+              </div>
+            </> : <>
+              <h4>Konfirmasi Terakhir</h4>
+              <p>Credential <b>{gw.label}</b> akan dihapus permanen dari database. Tindakan ini tidak bisa dibatalkan.</p>
+              <div className="modal-actions">
+                <button className="btn-ghost" onClick={() => setDeleteState(s => ({ ...s, step: 1 }))}>Kembali</button>
+                <button className="btn-danger" onClick={doDelete} disabled={busy === 'del'}>{busy === 'del' ? 'Menghapus…' : 'Ya, Hapus Permanen'}</button>
+              </div>
+            </>}
           </div>
         </div>
       )}

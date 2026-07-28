@@ -818,6 +818,10 @@ const updateSettings = (updates) => {
   return getSettings();
 };
 
+// SQLite online backup API: menghasilkan satu file snapshot konsisten termasuk
+// seluruh perubahan WAL, tanpa perlu menyalin store.db-wal/store.db-shm.
+const backupDatabase = (destination) => db.backup(destination);
+
 /**
  * getConfig — sumber konfigurasi tunggal dengan urutan prioritas:
  *   1. Nilai di tabel settings (bisa diubah dari panel web, live tanpa restart)
@@ -907,6 +911,10 @@ const updatePaymentGateway = (id, updates) => {
 const deletePaymentGateway = (id) => {
   db.prepare('DELETE FROM payment_gateways WHERE id = ?').run(id);
 };
+
+const getActiveOrderCountByGateway = (gatewayId) => db.prepare(
+  "SELECT COUNT(*) AS n FROM orders WHERE gateway_id = ? AND status IN ('pending','processing')"
+).get(gatewayId).n || 0;
 
 // Atomic webhook idempotency claim. true hanya untuk event pertama.
 const claimWebhookEvent = (eventId, provider, orderId) => {
@@ -1074,10 +1082,10 @@ module.exports = {
   // Vouchers
   getVouchers, getVoucherByCode, createVoucher, useVoucher, deleteVoucher, calculateDiscount, hasUserRedeemedVoucher, redeemVoucher,
   // Settings
-  getSettings, updateSettings, getConfig,
+  getSettings, updateSettings, getConfig, backupDatabase,
   // Payment Gateways
   getPaymentGateways, getPaymentGatewayById, getActiveGateway, createPaymentGateway,
-  updatePaymentGateway, deletePaymentGateway, getGatewayCredential,
+  updatePaymentGateway, deletePaymentGateway, getActiveOrderCountByGateway, getGatewayCredential,
   getGatewayCredentialById, getRoutedGateway, getGatewayStrategy, claimWebhookEvent, releaseWebhookEvent,
   // Flash Sale
   isFlashSaleActive, getEffectivePrice, setFlashSale, clearFlashSale, getActiveFlashSales, getExpiredFlashSales,

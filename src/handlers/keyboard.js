@@ -606,18 +606,23 @@ const registerKeyboardHandler = (bot) => {
             balanceDisplay = `Rp ${formatIDR(balance)}`;
         }
 
-        topupInputStates.set(userId, true);
+        const qrisEnabled = db.getSettings().qris_enabled;
+        if (qrisEnabled) topupInputStates.set(userId, true);
+        else topupInputStates.delete(userId);
 
         const minDisplay = lang === 'en' ? '$0.06' : 'Rp 1.000';
+        const msg = qrisEnabled
+            ? (lang === 'en'
+                ? `💰 *Your Balance at ${storeName}*\n\n💵 Your current balance: *${balanceDisplay}*\n\n📥 *Want to top up?*\n• Select a nominal below\n• Or type an amount directly (min. $0.1):`
+                : `💰 *Detail Saldo Anda di ${storeName}*\n\n💵 Saldo Anda saat ini: *${balanceDisplay}*\n\n📥 *Mau isi saldo?*\n• Silakan pilih nominal dibawah ini\n• Atau langsung ketik angka (min. ${minDisplay}):`)
+            : (lang === 'en'
+                ? `💰 *Your Balance at ${storeName}*\n\n💵 Your current balance: *${balanceDisplay}*\n\n⚠️ QRIS top up is currently under maintenance.`
+                : `💰 *Detail Saldo Anda di ${storeName}*\n\n💵 Saldo Anda saat ini: *${balanceDisplay}*\n\n⚠️ Topup QRIS sedang maintenance.`);
 
-        const msg = lang === 'en'
-            ? `💰 *Your Balance at ${storeName}*\n\n💵 Your current balance: *${balanceDisplay}*\n\n📥 *Want to top up?*\n• Select a nominal below\n• Or type an amount directly (min. $0.1):`
-            : `💰 *Detail Saldo Anda di ${storeName}*\n\n💵 Saldo Anda saat ini: *${balanceDisplay}*\n\n📥 *Mau isi saldo?*\n• Silakan pilih nominal dibawah ini\n• Atau langsung ketik angka (min. ${minDisplay}):`;
-
-        await ctx.reply(msg, {
-            parse_mode: 'Markdown',
-            ...topupNominalKeyboard(lang)
-        });
+        const keyboard = qrisEnabled
+            ? topupNominalKeyboard(lang)
+            : { reply_markup: { inline_keyboard: [[{ text: lang === 'en' ? '📜 Deposit History' : '📜 Riwayat Deposit', callback_data: 'saldo_history' }]] } };
+        await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
     });
 
     // Topup - USD nominal selected (English) → convert to IDR and confirm
@@ -701,6 +706,14 @@ const registerKeyboardHandler = (bot) => {
 
     // Confirmation step - invoice style
     async function showTopupConfirmation(ctx, userId, amount, lang) {
+        const settings = db.getSettings();
+        if (!settings.qris_enabled) {
+            const msg = lang === 'en'
+                ? '⚠️ QRIS top up is currently under maintenance.'
+                : '⚠️ Topup QRIS sedang maintenance.';
+            try { await ctx.answerCbQuery(msg, { show_alert: true }); } catch (e) { await ctx.reply(msg); }
+            return;
+        }
         const currentBalance = getBalance(userId);
         const afterBalance = currentBalance + amount;
 
@@ -745,9 +758,42 @@ const registerKeyboardHandler = (bot) => {
         const amount = parseInt(ctx.match[1]);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
+        const settings = db.getSettings();
+        if (!settings.qris_enabled) {
+            return ctx.answerCbQuery(lang === 'en' ? 'QRIS is under maintenance.' : 'QRIS sedang maintenance.', { show_alert: true });
+        }
+        const gateways = gateway.listActiveGateways();
+        if (!gateways.length) {
+            return ctx.answerCbQuery(lang === 'en' ? 'No QRIS gateway is available.' : 'Tidak ada gateway QRIS aktif.', { show_alert: true });
+        }
+        const buttons = [];
+        for (let i = 0; i < gateways.length; i += 2) {
+            buttons.push(gateways.slice(i, i + 2).map((gw, j) => ({
+                text: `📱 QRIS ${i + j + 1}`,
+                callback_data: `topup_qgw_${gw.id || `env-${gw.provider}`}_${amount}`
+            })));
+        }
+        buttons.push([{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back_new' }]);
+        await ctx.answerCbQuery();
+        await ctx.editMessageReplyMarkup({ inline_keyboard: buttons });
+    });
 
+    // Gateway QRIS dipilih untuk topup. Order baru dibuat SETELAH pilihan ini.
+    bot.action(/^topup_qgw_(.+)_(\d+)$/, async (ctx) => {
+        const token = ctx.match[1];
+        const amount = parseInt(ctx.match[2]);
+        const userId = ctx.from.id.toString();
+        const lang = db.getUserLanguage(userId);
+        if (!db.getSettings().qris_enabled) {
+            return ctx.answerCbQuery(lang === 'en' ? 'QRIS is under maintenance.' : 'QRIS sedang maintenance.', { show_alert: true });
+        }
+        const gatewayId = token.startsWith('env-') ? null : token;
+        const selected = gateway.listActiveGateways().find(gw => gatewayId ? gw.id === gatewayId : `env-${gw.provider}` === token);
+        if (!selected) {
+            return ctx.answerCbQuery(lang === 'en' ? 'This QRIS gateway is no longer active.' : 'Gateway QRIS ini sudah tidak aktif.', { show_alert: true });
+        }
         await ctx.answerCbQuery(lang === 'en' ? 'Creating QRIS...' : 'Membuat QRIS...');
-        await processTopup(ctx, userId, amount, lang);
+        await processTopup(ctx, userId, amount, lang, gatewayId);
     });
 
     // Deposit History
@@ -930,7 +976,12 @@ const registerKeyboardHandler = (bot) => {
     /**
      * Process topup - generate QRIS and show to user
      */
-    async function processTopup(ctx, userId, amount, lang) {
+    async function processTopup(ctx, userId, amount, lang, gatewayId = null) {
+        if (!db.getSettings().qris_enabled) {
+            const msg = lang === 'en' ? '⚠️ QRIS top up is under maintenance.' : '⚠️ Topup QRIS sedang maintenance.';
+            try { await ctx.answerCbQuery(msg, { show_alert: true }); } catch (e) { await ctx.reply(msg); }
+            return;
+        }
         // Convert to USD for display
         const usdAmount = await convertIDRtoUSD(amount);
         const timeoutMinutes = parseInt(db.getConfig('payment_timeout_minutes', null, 15)) || 15;
@@ -948,9 +999,9 @@ const registerKeyboardHandler = (bot) => {
             expires_at: new Date(Date.now() + timeoutMinutes * 60 * 1000).toISOString()
         });
 
-        // Topup memakai gateway aktif pertama. Xoftware menerima timeout toko secara native;
+        // Buyer memilih gateway aktif. Xoftware menerima timeout toko secara native;
         // provider lain tetap dibersihkan berdasarkan expiry lokal order.
-        const qrisResult = await gateway.createQRIS(topupOrder.id, amount, null, {
+        const qrisResult = await gateway.createQRIS(topupOrder.id, amount, gatewayId, {
             timeout_minutes: timeoutMinutes,
             user_id: userId,
             customer_name: ctx.from?.first_name || 'Telegram Buyer',
@@ -958,6 +1009,7 @@ const registerKeyboardHandler = (bot) => {
         });
 
         if (!qrisResult.success) {
+            db.updateOrder(topupOrder.id, { status: 'cancelled' });
             try { await ctx.deleteMessage(); } catch (e) { }
             const errMsg = lang === 'en'
                 ? '❌ Failed to create QRIS. Please try again.'
