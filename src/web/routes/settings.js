@@ -277,6 +277,51 @@ const testGateway = async (req, res) => {
     }
 };
 
+// Strategi routing yang diizinkan (harus sinkron dengan db.ROUTING_STRATEGIES).
+const ROUTING_STRATEGIES = ['priority', 'round_robin', 'manual'];
+
+// ---- GET /gateways/routing ----  strategi routing + gateway aktif saat ini
+const getRouting = (req, res) => {
+    try {
+        const strategy = db.getGatewayStrategy();
+        const manualId = db.getConfig('gateway_manual_id', null, '') || null;
+        const active = db.getRoutedGateway('pakasir');
+        res.json({
+            strategy,
+            manual_id: manualId,
+            active_gateway: active ? { id: active.id, label: active.label } : null,
+            strategies: ROUTING_STRATEGIES
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
+// ---- PUT /gateways/routing ----  { strategy, manual_id? }
+const updateRouting = (req, res) => {
+    try {
+        const { strategy, manual_id } = req.body || {};
+        if (!ROUTING_STRATEGIES.includes(strategy)) {
+            return res.status(400).json({ error: 'Strategi tidak dikenal' });
+        }
+        const updates = { gateway_strategy: strategy };
+
+        if (strategy === 'manual') {
+            const gw = manual_id ? db.getPaymentGatewayById(manual_id) : null;
+            if (!gw) return res.status(400).json({ error: 'Pilih gateway yang valid untuk mode manual' });
+            if (!gw.enabled) return res.status(400).json({ error: 'Gateway yang dipilih sedang nonaktif' });
+            updates.gateway_manual_id = manual_id;
+        }
+        // Reset kursor round-robin tiap ganti strategi biar mulai dari gateway prioritas teratas.
+        updates.gateway_rr_index = 0;
+
+        db.updateSettings(updates);
+        res.json({ ok: true, message: 'Strategi routing disimpan', strategy });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
 const registerSettingsRoutes = (api) => {
     api.get('/settings', getSettings);
     api.patch('/settings/toggle', toggleSetting);
@@ -285,6 +330,9 @@ const registerSettingsRoutes = (api) => {
     api.get('/settings/backup', backupDb);
     // Payment gateways
     api.get('/gateways', listGateways);
+    // Routing (Fase 4) — daftar SEBELUM '/gateways/:id' supaya '/routing' tidak ketangkap :id
+    api.get('/gateways/routing', getRouting);
+    api.put('/gateways/routing', updateRouting);
     api.post('/gateways', createGateway);
     api.put('/gateways/:id', updateGateway);
     api.delete('/gateways/:id', deleteGateway);

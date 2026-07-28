@@ -870,7 +870,7 @@ const registerKeyboardHandler = (bot) => {
         const topupOrder = db.getOrderById(topupId);
         if (!topupOrder) return;
 
-        const result = await checkQRISStatus(topupId, topupOrder.total_idr);
+        const result = await checkQRISStatus(topupId, topupOrder.total_idr, topupOrder.gateway_id);
 
         if (result.success && result.status === 'completed') {
             // Add balance
@@ -1003,7 +1003,7 @@ const registerKeyboardHandler = (bot) => {
 
         db.updateOrder(topupOrder.id, {
             message_id: sentMsg.message_id,
-            pakasir_data: qrisResult.data
+            gateway_id: qrisResult.gateway_id || null
         });
     }
 };

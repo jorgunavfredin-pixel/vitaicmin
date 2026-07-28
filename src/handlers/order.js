@@ -162,7 +162,7 @@ const registerOrderHandler = (bot) => {
             }
         }
 
-        // Create QRIS payment via PaKasir
+        // Create QRIS payment via PaKasir (gateway dipilih sesuai strategi routing Fase 4)
         const qrisResult = await createQRISPayment(orderId, order.total_idr);
 
         if (!qrisResult.success) {
@@ -241,10 +241,11 @@ const registerOrderHandler = (bot) => {
             });
         }
 
-        // Store message ID for later editing
+        // Store message ID + gateway yang dipakai (Fase 4). gateway_id dipakai saat
+        // cek status / verifikasi / webhook agar credential-nya konsisten dengan transaksi.
         db.updateOrder(orderId, {
             message_id: sentMsg.message_id,
-            pakasir_data: qrisResult.data
+            gateway_id: qrisResult.gateway_id || null
         });
 
         // Notify admin
@@ -261,9 +262,9 @@ const registerOrderHandler = (bot) => {
         if (!order) return;
 
         if (order.payment_method === 'qris') {
-            // QRIS payment
+            // QRIS payment — cek pakai gateway yang membuat transaksi (Fase 4)
             const { checkQRISStatus } = require('../payments/qris');
-            const result = await checkQRISStatus(orderId, order.total_idr);
+            const result = await checkQRISStatus(orderId, order.total_idr, order.gateway_id);
 
             if (result.success && result.status === 'completed') {
                 await handlePaymentSuccess(bot, orderId);

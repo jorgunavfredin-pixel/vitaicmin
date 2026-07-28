@@ -151,6 +151,8 @@ export const createGateway = (data) => apiFetch('/gateways', { method: 'POST', b
 export const updateGateway = (id, data) => apiFetch(`/gateways/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deleteGateway = (id) => apiFetch(`/gateways/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const testGateway = (id, creds) => apiFetch(`/gateways/${encodeURIComponent(id)}/test`, { method: 'POST', body: JSON.stringify(creds || {}) });
+export const fetchRouting = () => apiFetch('/gateways/routing');
+export const updateRouting = (data) => apiFetch('/gateways/routing', { method: 'PUT', body: JSON.stringify(data) });
 
 export async function downloadBackup() {
   const res = await fetch(BASE + '/settings/backup', {

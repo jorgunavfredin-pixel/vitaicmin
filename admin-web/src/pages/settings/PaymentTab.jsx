@@ -1,6 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fetchGateways, createGateway, updateGateway, deleteGateway, testGateway } from '../../api.js';
+import { fetchGateways, createGateway, updateGateway, deleteGateway, testGateway, fetchRouting, updateRouting } from '../../api.js';
 import Icon from '../../components/Icons.jsx';
+
+// Label & deskripsi tiap strategi routing (Fase 4).
+const STRATEGY_META = {
+  priority: { label: 'Prioritas', desc: 'Selalu pakai gateway dengan prioritas tertinggi (angka terkecil). Gateway lain jadi cadangan.' },
+  round_robin: { label: 'Round Robin', desc: 'Bergilir merata antar gateway aktif tiap transaksi — bagi beban.' },
+  manual: { label: 'Manual', desc: 'Selalu pakai satu gateway yang kamu pilih.' }
+};
 
 // Metadata field per provider (label & apakah rahasia). Fase 4 bisa nambah provider.
 const PROVIDER_META = {
@@ -45,9 +52,15 @@ export default function PaymentTab({ showToast }) {
       ) : (
         <div className="gw-list">
           {data.gateways.map((gw) => (
-            <GatewayCard key={gw.id} gw={gw} showToast={showToast} onChanged={load} />
+            <GatewayCard key={gw.id} gw={gw} showToast={showToast} onChanged={load}
+              showPriority={data.gateways.length > 1} />
           ))}
         </div>
+      )}
+
+      {/* Routing hanya relevan kalau ada >1 gateway (Fase 4). */}
+      {data.gateways.length > 1 && (
+        <RoutingPanel gateways={data.gateways} showToast={showToast} />
       )}
 
       {adding && (
@@ -58,9 +71,83 @@ export default function PaymentTab({ showToast }) {
   );
 }
 
-function GatewayCard({ gw, showToast, onChanged }) {
+function RoutingPanel({ gateways, showToast }) {
+  const [routing, setRouting] = useState(null);
+  const [strategy, setStrategy] = useState('priority');
+  const [manualId, setManualId] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const enabledGws = gateways.filter((g) => g.enabled);
+
+  useEffect(() => {
+    fetchRouting().then((r) => {
+      setRouting(r);
+      setStrategy(r.strategy || 'priority');
+      setManualId(r.manual_id || (enabledGws[0]?.id ?? ''));
+    }).catch(() => { });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const payload = { strategy };
+      if (strategy === 'manual') payload.manual_id = manualId;
+      const r = await updateRouting(payload);
+      showToast(r.message || 'Strategi routing disimpan');
+      const fresh = await fetchRouting();
+      setRouting(fresh);
+    } catch (e) { showToast(e.message, 'err'); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="gw-routing">
+      <div className="settings-head-row" style={{ marginBottom: 6 }}>
+        <h4 className="settings-section-title" style={{ margin: 0, fontSize: 14 }}>Strategi Routing</h4>
+        {routing?.active_gateway && (
+          <span className="gw-routing-active">Aktif: <b>{routing.active_gateway.label}</b></span>
+        )}
+      </div>
+      <div className="settings-note hint-icon" style={{ marginTop: 0, marginBottom: 12 }}>
+        <Icon name="info" size={14} /> Menentukan gateway mana yang dipakai saat pelanggan membuat pembayaran QRIS baru.
+      </div>
+
+      <div className="gw-strategy-opts">
+        {Object.entries(STRATEGY_META).map(([key, meta]) => (
+          <label key={key} className={`gw-strategy-opt ${strategy === key ? 'sel' : ''}`}>
+            <input type="radio" name="gw-strategy" value={key}
+              checked={strategy === key} onChange={() => setStrategy(key)} />
+            <span className="gw-strategy-body">
+              <b>{meta.label}</b>
+              <span className="gw-strategy-desc">{meta.desc}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      {strategy === 'manual' && (
+        <div className="gw-field" style={{ marginTop: 10 }}>
+          <label className="field-label">Gateway pilihan</label>
+          <select className="select-field" style={{ width: '100%' }}
+            value={manualId} onChange={(e) => setManualId(e.target.value)}>
+            {enabledGws.length === 0 && <option value="">(tidak ada gateway aktif)</option>}
+            {enabledGws.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+          </select>
+        </div>
+      )}
+
+      <button className="a-btn a-blue btn-icon" style={{ marginTop: 12 }} onClick={save}
+        disabled={busy || (strategy === 'manual' && !manualId)}>
+        <Icon name="check" size={14} /> {busy ? 'Menyimpan…' : 'Simpan Strategi'}
+      </button>
+    </div>
+  );
+}
+
+function GatewayCard({ gw, showToast, onChanged, showPriority }) {
   const meta = PROVIDER_META[gw.provider] || { label: gw.provider, fields: [] };
   const [label, setLabel] = useState(gw.label);
+  const [priority, setPriority] = useState(gw.priority ?? 0);
   const [creds, setCreds] = useState({});   // hanya field yang diubah
   const [busy, setBusy] = useState('');
   const [testResult, setTestResult] = useState(null);
@@ -73,6 +160,8 @@ function GatewayCard({ gw, showToast, onChanged }) {
     try {
       const payload = { label };
       if (Object.keys(creds).length) payload.credentials = creds;
+      const p = parseInt(priority);
+      if (!isNaN(p)) payload.priority = p;
       await updateGateway(gw.id, payload);
       showToast('Gateway disimpan');
       setCreds({});
@@ -135,6 +224,13 @@ function GatewayCard({ gw, showToast, onChanged }) {
             />
           </div>
         ))}
+        {showPriority && (
+          <div className="gw-field">
+            <label className="field-label">Prioritas <span className="field-hint">(kecil = didahulukan)</span></label>
+            <input type="number" className="qty-field" min="0" step="1"
+              value={priority} onChange={(e) => setPriority(e.target.value)} />
+          </div>
+        )}
       </div>
 
       {testResult && (

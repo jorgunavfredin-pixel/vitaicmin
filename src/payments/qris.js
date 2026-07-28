@@ -8,16 +8,37 @@ const PAKASIR_BASE_URL = 'https://app.pakasir.com/api';
  * Ambil credential PaKasir SAAT CALL (bukan module-load) via resolver DB > env.
  * Ini kunci Fase 3: ganti credential dari panel langsung ngefek tanpa restart.
  * Dibungkus require di dalam fungsi untuk hindari circular require saat boot.
+ *
+ * Fase 4 (multi-gateway): kalau `gatewayId` diberikan, ambil credential gateway ITU
+ * (dipakai saat verifikasi/cek status/webhook — order menyimpan gateway_id yang dipakai
+ * membuat transaksi). Tanpa gatewayId, pakai resolver gateway aktif (backward compatible).
  */
-const getCreds = () => {
+const getCreds = (gatewayId = null) => {
     try {
         const db = require('../models/db');
-        const c = db.getGatewayCredential('pakasir');
+        const c = gatewayId
+            ? db.getGatewayCredentialById(gatewayId, 'pakasir')
+            : db.getGatewayCredential('pakasir');
         return { apiKey: c.api_key || '', slug: c.slug || '' };
     } catch (e) {
         // Fallback terakhir kalau DB belum siap: pakai env langsung.
         return { apiKey: process.env.PAKASIR_API_KEY || '', slug: process.env.PAKASIR_SLUG || '' };
     }
+};
+
+/**
+ * Pilih gateway untuk transaksi BARU sesuai strategi routing (Fase 4).
+ * Return { gatewayId, apiKey, slug }. Kalau tidak ada gateway enabled, fallback env.
+ */
+const pickGatewayForNewTx = () => {
+    try {
+        const db = require('../models/db');
+        const gw = db.getRoutedGateway('pakasir');
+        if (gw && gw.credentials) {
+            return { gatewayId: gw.id, apiKey: gw.credentials.api_key || '', slug: gw.credentials.slug || '' };
+        }
+    } catch (e) { /* fall through ke env */ }
+    return { gatewayId: null, apiKey: process.env.PAKASIR_API_KEY || '', slug: process.env.PAKASIR_SLUG || '' };
 };
 
 /**
@@ -32,7 +53,9 @@ const createQRISPayment = async (orderId, amount) => {
     try {
         log.info(`[QRIS] Creating payment for order ${orderId}, amount: ${amount}`);
 
-        const { apiKey, slug } = getCreds();
+        // Fase 4: pilih gateway sesuai strategi routing. gatewayId dikembalikan ke caller
+        // agar disimpan di order → verifikasi/cek status/webhook pakai gateway yang SAMA.
+        const { gatewayId, apiKey, slug } = pickGatewayForNewTx();
         const response = await axios.post(
             `${PAKASIR_BASE_URL}/transactioncreate/qris`,
             {
@@ -57,6 +80,7 @@ const createQRISPayment = async (orderId, amount) => {
         if (paymentData && paymentData.payment_number) {
             return {
                 success: true,
+                gateway_id: gatewayId, // null kalau pakai credential env (single-gateway lama)
                 data: {
                     order_id: paymentData.order_id,
                     qris_string: paymentData.payment_number, // QR string to convert to image
@@ -89,9 +113,9 @@ const createQRISPayment = async (orderId, amount) => {
  * @param {number} amount - Amount
  * @returns {Promise<Object>} - Payment status
  */
-const checkQRISStatus = async (orderId, amount) => {
+const checkQRISStatus = async (orderId, amount, gatewayId = null) => {
     try {
-        const { apiKey, slug } = getCreds();
+        const { apiKey, slug } = getCreds(gatewayId);
         const response = await axios.get(
             `${PAKASIR_BASE_URL}/transactiondetail`,
             {
@@ -138,9 +162,9 @@ const checkQRISStatus = async (orderId, amount) => {
  * @param {string} orderId - Order ID
  * @returns {Promise<Object>}
  */
-const cancelQRISPayment = async (orderId) => {
+const cancelQRISPayment = async (orderId, gatewayId = null) => {
     try {
-        const { apiKey, slug } = getCreds();
+        const { apiKey, slug } = getCreds(gatewayId);
         const response = await axios.post(
             `${PAKASIR_BASE_URL}/transactioncancel`,
             {
@@ -170,17 +194,44 @@ const cancelQRISPayment = async (orderId) => {
  * @param {Object} webhookData - Webhook payload from PaKasir
  * @returns {Object} - Parsed webhook data
  */
+/**
+ * Kumpulkan semua slug PaKasir yang valid (semua gateway enabled + env fallback).
+ * Fase 4: webhook bisa datang dari project mana pun di antara gateway yang aktif,
+ * jadi project-match harus mempertimbangkan SEMUA slug, bukan cuma satu gateway aktif.
+ * Return Map slug → gatewayId (gatewayId null untuk slug dari env).
+ */
+const getValidSlugMap = () => {
+    const map = new Map();
+    try {
+        const db = require('../models/db');
+        for (const gw of db.getPaymentGateways()) {
+            if (gw.enabled && gw.credentials && gw.credentials.slug) {
+                map.set(gw.credentials.slug, gw.id);
+            }
+        }
+    } catch (e) { /* DB belum siap → andalkan env di bawah */ }
+    const envSlug = process.env.PAKASIR_SLUG;
+    if (envSlug && !map.has(envSlug)) map.set(envSlug, null);
+    return map;
+};
+
 const handleQRISWebhook = (webhookData) => {
     try {
         log.info('[QRIS] Webhook received:', JSON.stringify(webhookData));
 
         const { order_id, status, amount, payment_method, completed_at, project } = webhookData;
 
-        // Verify project matches — STRICT check (slug resolved dari gateway aktif / env)
-        const { slug } = getCreds();
-        if (project && project !== slug) {
-            log.warn(`[QRIS] ❌ Webhook project mismatch: received "${project}", expected "${slug}"`);
-            return { success: false, error: 'Project mismatch' };
+        // Verify project matches — cek terhadap SEMUA slug gateway enabled + env (Fase 4).
+        // Ini mencegah webhook dari project asing diproses, tapi tetap menerima webhook
+        // dari gateway mana pun yang benar-benar kita pakai.
+        let matchedGatewayId = null;
+        if (project) {
+            const slugMap = getValidSlugMap();
+            if (!slugMap.has(project)) {
+                log.warn(`[QRIS] ❌ Webhook project mismatch: received "${project}", tidak cocok dengan gateway aktif mana pun`);
+                return { success: false, error: 'Project mismatch' };
+            }
+            matchedGatewayId = slugMap.get(project);
         }
 
         return {
@@ -189,7 +240,8 @@ const handleQRISWebhook = (webhookData) => {
             status: status, // 'completed' = paid
             amount: amount,
             paymentMethod: payment_method,
-            completedAt: completed_at
+            completedAt: completed_at,
+            gatewayId: matchedGatewayId // gateway yang cocok dgn project webhook (buat verifikasi)
         };
     } catch (error) {
         log.error('[QRIS] Webhook Error:', error.message);
@@ -208,9 +260,9 @@ const handleQRISWebhook = (webhookData) => {
  * @param {number} amount - Amount in IDR
  * @returns {Promise<Object>} - { valid: boolean, status: string }
  */
-const verifyTransactionWithAPI = async (orderId, amount) => {
+const verifyTransactionWithAPI = async (orderId, amount, gatewayId = null) => {
     try {
-        const { apiKey, slug } = getCreds();
+        const { apiKey, slug } = getCreds(gatewayId);
         const response = await axios.get(`${PAKASIR_BASE_URL}/transactiondetail`, {
             params: {
                 project: slug,

@@ -185,7 +185,10 @@ app.post('/webhook/qris', async (req, res) => {
         // Step 4: Double-verify via PaKasir API (recommended by PaKasir docs)
         if (result.status === 'completed' || result.status === 'success') {
             const { verifyTransactionWithAPI } = require('./payments/qris');
-            const apiCheck = await verifyTransactionWithAPI(result.orderId, order.total_idr);
+            // Fase 4: verifikasi pakai gateway yang membuat transaksi (order.gateway_id),
+            // atau gateway yang slug-nya cocok dgn project webhook (result.gatewayId) sbg cadangan.
+            const verifyGatewayId = order.gateway_id || result.gatewayId || null;
+            const apiCheck = await verifyTransactionWithAPI(result.orderId, order.total_idr, verifyGatewayId);
 
             if (apiCheck.valid) {
                 await handlePaymentSuccess(bot, result.orderId, {

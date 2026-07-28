@@ -137,6 +137,17 @@ try {
   console.log('[DB] Added voucher columns to orders table');
 }
 
+// Migration: add gateway_id to orders (Fase 4 — multi-gateway routing).
+// Menyimpan gateway MANA yang dipakai membuat transaksi, supaya verifikasi/cek
+// status/webhook memakai credential (api_key + slug) yang SAMA. Tanpa ini, routing
+// multi-gateway bisa memverifikasi pakai gateway lain → slug mismatch → bayar nyangkut.
+try {
+  db.prepare('SELECT gateway_id FROM orders LIMIT 1').get();
+} catch (e) {
+  db.exec('ALTER TABLE orders ADD COLUMN gateway_id TEXT');
+  console.log('[DB] Added gateway_id column to orders table');
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -540,7 +551,7 @@ const createOrder = (orderData) => {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const id = generateOrderId();
     try {
-      db.prepare(`INSERT INTO orders (id, user_id, product_id, quantity, total_idr, total_usd, payment_method, unique_code, status, stock_ids, delivered_data, reminder_sent, message_id, chat_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', 0, ?, ?, ?, ?)`).run(id, orderData.user_id, orderData.product_id, orderData.quantity, orderData.total_idr, orderData.total_usd || 0, orderData.payment_method, orderData.unique_code || null, orderData.status || 'pending', orderData.message_id || null, orderData.chat_id || null, created_at, orderData.expires_at || null);
+      db.prepare(`INSERT INTO orders (id, user_id, product_id, quantity, total_idr, total_usd, payment_method, unique_code, status, stock_ids, delivered_data, reminder_sent, message_id, chat_id, created_at, expires_at, gateway_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', 0, ?, ?, ?, ?, ?)`).run(id, orderData.user_id, orderData.product_id, orderData.quantity, orderData.total_idr, orderData.total_usd || 0, orderData.payment_method, orderData.unique_code || null, orderData.status || 'pending', orderData.message_id || null, orderData.chat_id || null, created_at, orderData.expires_at || null, orderData.gateway_id || null);
       const newOrder = getOrderById(id);
       dbEvents.emit('order_change', newOrder);
       return newOrder;
@@ -558,7 +569,7 @@ const updateOrder = (orderId, updates, reason) => {
   const order = getOrderById(orderId);
   if (!order) return null;
   const merged = { ...order, ...updates };
-  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, orderId);
+  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=?, gateway_id=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, merged.gateway_id || null, orderId);
   const updatedOrder = getOrderById(orderId);
   dbEvents.emit('order_change', updatedOrder, reason || 'update');
   return updatedOrder;
@@ -891,6 +902,72 @@ const getGatewayCredential = (provider = 'pakasir') => {
   return { source: 'none' };
 };
 
+/**
+ * getGatewayCredentialById — resolver credential untuk gateway SPESIFIK (by id).
+ * Dipakai saat verifikasi/cek status/webhook: order menyimpan gateway_id yang dipakai
+ * membuat transaksi, jadi kita HARUS memakai credential gateway itu (bukan gateway aktif
+ * saat ini, yang bisa berubah karena round-robin / admin menyalakan gateway lain).
+ * Kalau id tidak ketemu (mis. gateway sudah dihapus), fallback ke resolver aktif/env.
+ */
+const getGatewayCredentialById = (gatewayId, provider = 'pakasir') => {
+  if (gatewayId) {
+    const gw = getPaymentGatewayById(gatewayId);
+    if (gw && gw.credentials) {
+      return { source: 'db', gatewayId: gw.id, ...gw.credentials };
+    }
+  }
+  return getGatewayCredential(provider);
+};
+
+// ==================== GATEWAY ROUTING (Fase 4) ====================
+// Strategi routing multi-gateway. Disimpan di tabel settings (live tanpa restart):
+//   - gateway_strategy: 'priority' (default) | 'round_robin' | 'manual'
+//   - gateway_manual_id: id gateway pilihan admin (dipakai saat strategy='manual')
+//   - gateway_rr_index: kursor internal untuk round-robin (auto-managed)
+const ROUTING_STRATEGIES = ['priority', 'round_robin', 'manual'];
+
+const getGatewayStrategy = () => {
+  const s = getConfig('gateway_strategy', null, 'priority');
+  return ROUTING_STRATEGIES.includes(s) ? s : 'priority';
+};
+
+/**
+ * getRoutedGateway — pilih SATU gateway enabled untuk transaksi baru sesuai strategi.
+ *   - priority    : priority ASC, lalu created_at ASC (gateway "utama" dulu).
+ *   - round_robin : bergilir merata antar gateway enabled (load balancing).
+ *   - manual      : gateway yang dipilih admin; fallback ke priority kalau tak valid/mati.
+ * Return objek gateway (parseGateway) atau null kalau tidak ada gateway enabled sama sekali
+ * (caller lalu fallback ke credential env demi backward-compat).
+ */
+const getRoutedGateway = (provider = 'pakasir') => {
+  const enabled = db.prepare(
+    'SELECT * FROM payment_gateways WHERE provider = ? AND enabled = 1 ORDER BY priority ASC, created_at ASC'
+  ).all(provider).map(parseGateway);
+
+  if (enabled.length === 0) return null;
+  if (enabled.length === 1) return enabled[0];
+
+  const strategy = getGatewayStrategy();
+
+  if (strategy === 'manual') {
+    const manualId = getConfig('gateway_manual_id', null, '');
+    const picked = enabled.find(g => g.id === manualId);
+    if (picked) return picked;
+    return enabled[0]; // manual id invalid/mati → fallback prioritas tertinggi
+  }
+
+  if (strategy === 'round_robin') {
+    // Kursor persisten di settings; naikkan tiap pemakaian, modulo jumlah gateway enabled.
+    const prev = parseInt(getConfig('gateway_rr_index', null, 0)) || 0;
+    const idx = prev % enabled.length;
+    updateSettings({ gateway_rr_index: (idx + 1) % enabled.length });
+    return enabled[idx];
+  }
+
+  // default: priority
+  return enabled[0];
+};
+
 // ==================== FLASH SALE ====================
 const isFlashSaleActive = (product) => {
   if (!product || !product.flash_price || !product.flash_start || !product.flash_end) return false;
@@ -967,6 +1044,7 @@ module.exports = {
   // Payment Gateways
   getPaymentGateways, getPaymentGatewayById, getActiveGateway, createPaymentGateway,
   updatePaymentGateway, deletePaymentGateway, getGatewayCredential,
+  getGatewayCredentialById, getRoutedGateway, getGatewayStrategy,
   // Flash Sale
   isFlashSaleActive, getEffectivePrice, setFlashSale, clearFlashSale, getActiveFlashSales, getExpiredFlashSales,
   // Maintenance
