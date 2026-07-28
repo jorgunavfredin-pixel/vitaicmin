@@ -70,11 +70,16 @@ export default function PaymentTab({ showToast }) {
 function GatewayCard({ gw, showToast, onChanged }) {
   const meta = PROVIDER_META[gw.provider] || { label: gw.provider, fields: [] };
   const [label, setLabel] = useState(gw.label);
-
+  const [enabled, setEnabled] = useState(gw.enabled);
   const [creds, setCreds] = useState({});   // hanya field yang diubah
   const [busy, setBusy] = useState('');
   const [testResult, setTestResult] = useState(null);
   const [confirmDel, setConfirmDel] = useState(false);
+
+  useEffect(() => {
+    setEnabled(gw.enabled);
+    setLabel(gw.label);
+  }, [gw.enabled, gw.label]);
 
   const setCred = (k, v) => setCreds((c) => ({ ...c, [k]: v }));
 
@@ -92,12 +97,19 @@ function GatewayCard({ gw, showToast, onChanged }) {
   };
 
   const toggleEnabled = async () => {
+    if (busy) return;
+    const next = !enabled;
+    setEnabled(next);
     setBusy('toggle');
     try {
-      await updateGateway(gw.id, { enabled: !gw.enabled });
-      showToast(`Gateway ${!gw.enabled ? 'diaktifkan' : 'dinonaktifkan'}`);
-      onChanged();
-    } catch (e) { showToast(e.message, 'err'); } finally { setBusy(''); }
+      const result = await updateGateway(gw.id, { enabled: next });
+      setEnabled(result.gateway?.enabled ?? next);
+      showToast(`Gateway ${next ? 'diaktifkan' : 'dinonaktifkan'}`);
+      await onChanged();
+    } catch (e) {
+      setEnabled(!next);
+      showToast(e.message, 'err');
+    } finally { setBusy(''); }
   };
 
   const test = async () => {
@@ -119,16 +131,31 @@ function GatewayCard({ gw, showToast, onChanged }) {
   };
 
   return (
-    <div className={`gw-card ${gw.enabled ? '' : 'disabled'}`}>
+    <div className={`gw-card ${enabled ? '' : 'disabled'}`}>
       <div className="gw-card-head">
         <div className="gw-card-title">
-          <span className="gw-provider-badge">{meta.label}</span>
-          <input className="gw-label-input" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <div className="gw-card-ident">
+            <div className="gw-card-badges">
+              <span className="gw-provider-badge">{meta.label}</span>
+              {gw.buyer_label
+                ? <span className="gw-buyer-badge">Buyer: {gw.buyer_label}</span>
+                : <span className="gw-buyer-badge muted">Tidak tampil ke buyer</span>}
+            </div>
+            <input className="gw-label-input" value={label} onChange={(e) => setLabel(e.target.value)} />
+            <span className="gw-mapping-detail">
+              {gw.buyer_label
+                ? `${gw.buyer_label} menggunakan ${meta.label} · ${gw.label}`
+                : `${meta.label} · ${gw.label}`}
+            </span>
+          </div>
         </div>
         <div className="gw-card-actions">
-          <span className={`gw-status ${gw.enabled ? 'on' : 'off'}`}>{gw.enabled ? 'Aktif' : 'Nonaktif'}</span>
-          <button className="switch-sm" onClick={toggleEnabled} disabled={busy === 'toggle'}>
-            <span className={`switch ${gw.enabled ? 'on' : ''}`}><span className="switch-knob" /></span>
+          <span className={`gw-status ${enabled ? 'on' : 'off'}`}>{enabled ? 'Aktif' : 'Nonaktif'}</span>
+          <button type="button" role="switch" aria-checked={enabled}
+            aria-label={`${enabled ? 'Nonaktifkan' : 'Aktifkan'} ${gw.label}`}
+            className={`gw-toggle ${enabled ? 'on' : ''}`}
+            onClick={toggleEnabled} disabled={!!busy}>
+            <span className="gw-toggle-knob" />
           </button>
         </div>
       </div>

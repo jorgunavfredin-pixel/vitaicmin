@@ -182,13 +182,19 @@ const updateStore = (req, res) => {
 // ---- GET /gateways ----  daftar gateway (credential di-mask)
 const listGateways = (req, res) => {
     try {
+        const activeMap = new Map(
+            gateway.listActiveGateways()
+                .filter(g => g.id)
+                .map(g => [g.id, { qris_number: g.qris_number, buyer_label: g.buyer_label }])
+        );
         const gws = db.getPaymentGateways().map(g => ({
             id: g.id,
             provider: g.provider,
             label: g.label,
             credentials: maskCred(g.credentials),
             enabled: g.enabled,
-            priority: g.priority,
+            qris_number: activeMap.get(g.id)?.qris_number || null,
+            buyer_label: activeMap.get(g.id)?.buyer_label || null,
             updated_at: g.updated_at
         }));
         res.json({ gateways: gws, providers: Object.keys(PROVIDER_FIELDS) });
@@ -232,7 +238,10 @@ const updateGateway = (req, res) => {
         const { label, credentials, enabled, priority } = req.body || {};
         const updates = {};
         if (label !== undefined) updates.label = String(label).trim();
-        if (enabled !== undefined) updates.enabled = !!enabled;
+        if (enabled !== undefined) {
+            if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled harus boolean' });
+            updates.enabled = enabled;
+        }
         if (priority !== undefined) updates.priority = parseInt(priority) || 0;
 
         // Credential: hanya update field yang dikirim & non-kosong (biar bisa ganti api_key
@@ -248,8 +257,20 @@ const updateGateway = (req, res) => {
             if (Object.keys(credUpdate).length) updates.credentials = credUpdate;
         }
 
-        db.updatePaymentGateway(id, updates);
-        res.json({ ok: true, message: 'Gateway diperbarui' });
+        const updated = db.updatePaymentGateway(id, updates);
+        const active = gateway.listActiveGateways();
+        const buyer = active.find(g => g.id === id);
+        res.json({
+            ok: true,
+            message: 'Gateway diperbarui',
+            gateway: {
+                id: updated.id,
+                enabled: updated.enabled,
+                label: updated.label,
+                qris_number: buyer?.qris_number || null,
+                buyer_label: buyer?.buyer_label || null
+            }
+        });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

@@ -502,13 +502,39 @@ const quantityKeyboard = (maxQty, productId, currentQty = 1, categoryId, lang = 
     return Markup.inlineKeyboard(buttons);
 };
 
+// Susun descriptor tombol pembayaran. QRIS selalu 2 kolom; Saldo mengisi slot
+// QRIS ganjil atau mendapat baris sendiri kalau jumlah QRIS genap.
+const buildPaymentButtonRows = (orderId, gateways, qrisEnabled, qrisText, saldoText, saldoCallback) => {
+    if (!qrisEnabled) {
+        return [[
+            { text: `${qrisText} (Maintenance)`, callback: 'noop' },
+            { text: saldoText, callback: saldoCallback }
+        ]];
+    }
+
+    const rows = [];
+    const qris = gateways.map((gw, index) => ({
+        text: `📱 QRIS ${index + 1}`,
+        callback: `pay_qgw_${gw.id || `env-${gw.provider}`}_${orderId}`
+    }));
+    const saldo = { text: saldoText, callback: saldoCallback };
+    for (let i = 0; i < qris.length; i += 2) {
+        const row = qris.slice(i, i + 2);
+        if (row.length === 1 && i === qris.length - 1) row.push(saldo);
+        rows.push(row);
+    }
+    if (qris.length % 2 === 0) rows.push([saldo]);
+    return rows;
+};
+
 const paymentMethodKeyboard = (orderId, lang = 'id') => {
     const db = require('../models/db');
+    const gateway = require('../payments/gateway');
     const settings = db.getSettings();
 
     const texts = {
         id: { qris: '📱 QRIS', saldo: '💰 Saldo', voucher: '🎟️ Pakai Voucher', removeVoucher: '🗑 Hapus Voucher', cancel: '✘ Batalkan' },
-        en: { qris: '📱 QRIS (ID E-Wallet)', saldo: '💰 Balance', voucher: '🎟️ Apply Voucher', removeVoucher: '🗑 Remove Voucher', cancel: '✘ Cancel' }
+        en: { qris: '📱 QRIS', saldo: '💰 Balance', voucher: '🎟️ Apply Voucher', removeVoucher: '🗑 Remove Voucher', cancel: '✘ Cancel' }
     };
     const t = texts[lang] || texts.id;
 
@@ -518,16 +544,21 @@ const paymentMethodKeyboard = (orderId, lang = 'id') => {
         ? Markup.button.callback(t.removeVoucher, `voucher_remove_${orderId}`)
         : Markup.button.callback(t.voucher, `voucher_apply_${orderId}`);
 
-    const qrisBtn = settings.qris_enabled
-        ? Markup.button.callback(t.qris, `pay_qris_${orderId}`)
-        : Markup.button.callback(t.qris + ' (Maintenance)', 'noop');
-
     const saldoBtn = settings.saldo_enabled !== false
         ? Markup.button.callback(t.saldo, `pay_saldo_${orderId}`)
         : Markup.button.callback(t.saldo + ' (Maintenance)', 'noop');
 
+    const paymentRows = buildPaymentButtonRows(
+        orderId,
+        gateway.listActiveGateways(),
+        settings.qris_enabled,
+        t.qris,
+        saldoBtn.text,
+        saldoBtn.callback_data
+    ).map(row => row.map(btn => Markup.button.callback(btn.text, btn.callback)));
+
     return Markup.inlineKeyboard([
-        [qrisBtn, saldoBtn],
+        ...paymentRows,
         [voucherBtn],
         [Markup.button.callback(t.cancel, `pay_cancel_${orderId}`)]
     ]);
@@ -573,20 +604,6 @@ const paymentPendingKeyboard = (orderId, lang = 'id') => {
     ]);
 };
 
-// Pilihan gateway QRIS ketika >1 gateway aktif (Fase 5). Buyer memilih gateway,
-// lalu QRIS di-generate dari gateway itu. Label diberi nomor "QRIS 1/2/…" +
-// nama gateway biar buyer tidak bingung. callback: pay_qgw_<gatewayId>_<orderId>.
-const qrisGatewayChoiceKeyboard = (orderId, gateways, lang = 'id') => {
-    const buttons = gateways.map((gw, i) => {
-        const label = `📱 QRIS ${i + 1} — ${gw.label}`;
-        // gateway id bisa null (dari .env) → pakai token 'env' supaya callback tetap valid.
-        const gid = gw.id || 'env';
-        return [Markup.button.callback(label, `pay_qgw_${gid}_${orderId}`)];
-    });
-    const backText = lang === 'en' ? '⬅️ Back' : '⬅️ Kembali';
-    buttons.push([Markup.button.callback(backText, `pay_select_${orderId}`)]);
-    return Markup.inlineKeyboard(buttons);
-};
 
 const backToMenuKeyboard = (lang = 'id') => {
     const homeText = lang === 'en' ? '🏠 Main Menu' : '🏠 Menu Utama';
@@ -645,5 +662,5 @@ module.exports = {
     paymentPendingKeyboard,
     backToMenuKeyboard,
     historyKeyboard,
-    qrisGatewayChoiceKeyboard
+    buildPaymentButtonRows
 };

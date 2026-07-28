@@ -1164,30 +1164,55 @@ input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
 .gw-list { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
 .gw-card {
   border: 1px solid var(--border); border-radius: 14px; padding: 16px;
-  background: var(--panel-2); transition: border-color .15s, opacity .15s;
+  background: var(--panel-2); transition: border-color .15s, background .15s;
 }
-.gw-card.disabled { opacity: .62; }
-.gw-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.gw-card-title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-.gw-provider-badge {
-  flex-shrink: 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
-  color: #a9c2ff; background: rgba(91,140,255,0.14); border: 1px solid rgba(91,140,255,0.3);
-  padding: 3px 9px; border-radius: 7px;
+.gw-card.disabled { border-color: rgba(255,255,255,.055); background: rgba(255,255,255,.012); }
+.gw-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.gw-card-title { flex: 1; min-width: 0; }
+.gw-card-ident { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.gw-card-badges { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.gw-provider-badge, .gw-buyer-badge {
+  display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 7px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
 }
+.gw-provider-badge { text-transform: uppercase; color: var(--brand); background: rgba(91,140,255,.12); }
+.gw-buyer-badge { color: var(--green); background: rgba(42,202,129,.10); }
+.gw-buyer-badge.muted { color: var(--muted); background: rgba(255,255,255,.055); }
 .gw-label-input {
-  flex: 1; min-width: 0; background: transparent; border: none; border-bottom: 1px dashed var(--border);
-  color: var(--text); font-size: 14px; font-weight: 600; padding: 3px 2px; outline: none;
+  width: min(100%, 360px); min-width: 80px; border: none; border-bottom: 1px dashed transparent;
+  background: transparent; color: var(--text); font-size: 14px; font-weight: 600;
+  padding: 3px 2px; outline: none;
 }
 .gw-label-input:focus { border-bottom-color: var(--brand); }
-.gw-card-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.gw-status { font-size: 11.5px; font-weight: 600; }
+.gw-mapping-detail { color: var(--muted); font-size: 10.5px; line-height: 1.35; }
+.gw-card-actions {
+  display: grid; grid-template-columns: auto 42px; align-items: center; justify-items: end;
+  gap: 9px; min-width: 104px; padding-top: 2px; flex-shrink: 0;
+}
+.gw-status { font-size: 11.5px; font-weight: 700; text-align: right; }
 .gw-status.on { color: var(--green); }
 .gw-status.off { color: var(--muted); }
-.switch-sm { background: none; border: none; padding: 0; cursor: pointer; }
+.gw-toggle {
+  width: 42px; height: 24px; border: 1px solid rgba(255,255,255,.08); border-radius: 999px;
+  background: #2a3348; position: relative; padding: 0; cursor: pointer;
+  transition: background .18s, border-color .18s; flex-shrink: 0;
+}
+.gw-toggle.on { background: linear-gradient(135deg, var(--brand), var(--brand-2)); border-color: transparent; }
+.gw-toggle:disabled { opacity: .55; cursor: wait; }
+.gw-toggle-knob {
+  position: absolute; width: 18px; height: 18px; left: 2px; top: 2px;
+  border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.35);
+  transition: transform .18s;
+}
+.gw-toggle.on .gw-toggle-knob { transform: translateX(18px); }
 
 .gw-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .gw-field { min-width: 0; }
-@media (max-width: 620px) { .gw-fields { grid-template-columns: 1fr; } }
+@media (max-width: 620px) {
+  .gw-card-head { align-items: stretch; flex-direction: column; gap: 10px; }
+  .gw-card-actions { align-self: stretch; grid-template-columns: 1fr 42px; }
+  .gw-fields { grid-template-columns: 1fr; }
+}
 
 .gw-test-result {
   display: flex; align-items: center; gap: 7px; margin-top: 12px;

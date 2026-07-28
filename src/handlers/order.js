@@ -9,7 +9,6 @@ const { cancelOrder } = require('../services/reminder');
 const {
     paymentMethodKeyboard,
     paymentPendingKeyboard,
-    qrisGatewayChoiceKeyboard,
     mainMenuKeyboard
 } = require('../utils/keyboard');
 
@@ -144,31 +143,15 @@ const registerOrderHandler = (bot) => {
             return;
         }
 
-        // >1 gateway → biarkan buyer memilih dulu (hemat API call, sesuai kebijakan).
-        if (activeGateways.length > 1) {
-            await ctx.answerCbQuery();
-            const chooseMsg = lang === 'en'
-                ? '📱 Choose your QRIS payment option:'
-                : '📱 Pilih opsi pembayaran QRIS kamu:';
-            try {
-                await ctx.editMessageText(chooseMsg, {
-                    parse_mode: 'Markdown',
-                    ...qrisGatewayChoiceKeyboard(orderId, activeGateways, lang)
-                });
-            } catch (e) {
-                await ctx.reply(chooseMsg, { ...qrisGatewayChoiceKeyboard(orderId, activeGateways, lang) });
-            }
-            return;
-        }
-
-        // Tepat 1 gateway → langsung generate pakai gateway itu.
+        // Legacy callback dari pesan lama: pakai gateway aktif pertama.
         await ctx.answerCbQuery('Creating QRIS...');
         await generateQrisForOrder(ctx, orderId, activeGateways[0].id, lang);
     });
 
     // Buyer memilih gateway QRIS spesifik (saat >1 aktif). callback: pay_qgw_<gid>_<orderId>
     bot.action(/^pay_qgw_([^_]+)_(.+)$/, async (ctx) => {
-        const gid = ctx.match[1] === 'env' ? null : ctx.match[1];
+        const token = ctx.match[1];
+        const gid = token.startsWith('env-') ? null : token;
         const orderId = ctx.match[2];
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);

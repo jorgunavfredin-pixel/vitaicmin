@@ -79,7 +79,11 @@ const listActiveGateways = () => {
             out.push({ id: null, provider, label: `${providerLabel(provider)} (.env)`, credentials: cred });
         }
     }
-    return out;
+    return out.map((gw, index) => ({
+        ...gw,
+        qris_number: index + 1,
+        buyer_label: `QRIS ${index + 1}`
+    }));
 };
 
 const providerLabel = (provider) => ({ pakasir: 'PaKasir', wijayapay: 'WijayaPay' }[provider] || provider);
