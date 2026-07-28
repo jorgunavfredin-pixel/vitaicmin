@@ -667,7 +667,7 @@ const getDetailedStats = () => {
       today: { ...calculateIncome(todayOrders), total_idr: calculateIncome(todayOrders).total },
       week: { ...calculateIncome(weekOrders) },
       month: { ...calculateIncome(monthOrders) },
-      all_time: { ...calculateIncome(paidOrders) }
+      all_time: { ...calculateIncome(salesOrders) }
     },
     transactions: {
       total: totalTx,
