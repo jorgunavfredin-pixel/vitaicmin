@@ -1198,24 +1198,3 @@ input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
 
 .gw-card-footer { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 .gw-card-footer .a-btn { flex: 1; justify-content: center; min-width: 120px; }
-.field-hint { font-size: 10.5px; color: var(--muted); font-weight: 400; }
-
-/* ---- Gateway routing (Fase 4) ---- */
-.gw-routing {
-  margin-top: 20px; padding: 16px; border: 1px solid var(--border);
-  border-radius: 14px; background: rgba(255,255,255,0.02);
-}
-.gw-routing-active { font-size: 11.5px; color: var(--muted); }
-.gw-routing-active b { color: var(--text); }
-.gw-strategy-opts { display: flex; flex-direction: column; gap: 8px; }
-.gw-strategy-opt {
-  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
-  border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
-  transition: border-color .15s, background .15s;
-}
-.gw-strategy-opt:hover { border-color: var(--brand); }
-.gw-strategy-opt.sel { border-color: var(--brand); background: rgba(91,140,255,0.10); }
-.gw-strategy-opt input { margin-top: 2px; accent-color: var(--brand); flex-shrink: 0; }
-.gw-strategy-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.gw-strategy-body b { font-size: 12.5px; color: var(--text); }
-.gw-strategy-desc { font-size: 11px; color: var(--muted); line-height: 1.4; }

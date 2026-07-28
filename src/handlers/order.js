@@ -2,13 +2,14 @@ const db = require('../models/db');
 const { formatIDR, formatUSD, replacePlaceholders, buildPaymentConfirmation, notifyAdmins } = require('../utils/helpers');
 const { convertIDRtoUSD } = require('../payments/exchange');
 const { getExpirationTime } = require('../services/invoice');
-const { createQRISPayment } = require('../payments/qris');
+const gateway = require('../payments/gateway');
 const { getBalance, deductBalance } = require('../payments/balance');
 const { handlePaymentSuccess } = require('../services/delivery');
 const { cancelOrder } = require('../services/reminder');
 const {
     paymentMethodKeyboard,
     paymentPendingKeyboard,
+    qrisGatewayChoiceKeyboard,
     mainMenuKeyboard
 } = require('../utils/keyboard');
 
@@ -116,7 +117,8 @@ const registerOrderHandler = (bot) => {
         });
     });
 
-    // QRIS payment selected
+    // QRIS payment selected — router: kalau >1 gateway aktif, tampilkan pilihan;
+    // kalau cuma 1 (atau .env tunggal), langsung generate seperti flow lama.
     bot.action(/^pay_qris_(.+)$/, async (ctx) => {
         const orderId = ctx.match[1];
         const userId = ctx.from.id.toString();
@@ -131,23 +133,89 @@ const registerOrderHandler = (bot) => {
         }
 
         const order = db.getOrderById(orderId);
-        // Accept both 'init' (from confirmation) and 'pending' for compatibility
         if (!order || (order.status !== 'init' && order.status !== 'pending')) {
             await ctx.answerCbQuery(locale.error_order_not_found);
             return;
         }
 
-        await ctx.answerCbQuery('Creating QRIS...');
+        const activeGateways = gateway.listActiveGateways();
+        if (activeGateways.length === 0) {
+            await ctx.answerCbQuery(lang === 'en' ? '⚠️ No active payment gateway.' : '⚠️ Tidak ada payment gateway aktif.', { show_alert: true });
+            return;
+        }
 
-        // Update order: set status to pending, add payment method and expiry
+        // >1 gateway → biarkan buyer memilih dulu (hemat API call, sesuai kebijakan).
+        if (activeGateways.length > 1) {
+            await ctx.answerCbQuery();
+            const chooseMsg = lang === 'en'
+                ? '📱 Choose your QRIS payment option:'
+                : '📱 Pilih opsi pembayaran QRIS kamu:';
+            try {
+                await ctx.editMessageText(chooseMsg, {
+                    parse_mode: 'Markdown',
+                    ...qrisGatewayChoiceKeyboard(orderId, activeGateways, lang)
+                });
+            } catch (e) {
+                await ctx.reply(chooseMsg, { ...qrisGatewayChoiceKeyboard(orderId, activeGateways, lang) });
+            }
+            return;
+        }
+
+        // Tepat 1 gateway → langsung generate pakai gateway itu.
+        await ctx.answerCbQuery('Creating QRIS...');
+        await generateQrisForOrder(ctx, orderId, activeGateways[0].id, lang);
+    });
+
+    // Buyer memilih gateway QRIS spesifik (saat >1 aktif). callback: pay_qgw_<gid>_<orderId>
+    bot.action(/^pay_qgw_([^_]+)_(.+)$/, async (ctx) => {
+        const gid = ctx.match[1] === 'env' ? null : ctx.match[1];
+        const orderId = ctx.match[2];
+        const userId = ctx.from.id.toString();
+        const lang = db.getUserLanguage(userId);
+        const locale = require(`../locales/${lang}`);
+
+        const settings = db.getSettings();
+        if (!settings.qris_enabled) {
+            await ctx.answerCbQuery(lang === 'en' ? '⚠️ QRIS is under maintenance.' : '⚠️ QRIS sedang maintenance.', { show_alert: true });
+            return;
+        }
+        const order = db.getOrderById(orderId);
+        if (!order || (order.status !== 'init' && order.status !== 'pending')) {
+            await ctx.answerCbQuery(locale.error_order_not_found);
+            return;
+        }
+        await ctx.answerCbQuery('Creating QRIS...');
+        await generateQrisForOrder(ctx, orderId, gid, lang);
+    });
+
+    /**
+     * Generate QRIS untuk sebuah order via gateway tertentu, lalu kirim invoice+QR ke buyer.
+     * Dipakai baik oleh flow single-gateway maupun setelah buyer memilih gateway.
+     * @param {string|null} gatewayId - id gateway pilihan (null = default/tunggal/.env)
+     */
+    async function generateQrisForOrder(ctx, orderId, gatewayId, lang) {
+        const userId = ctx.from.id.toString();
+        const order = db.getOrderById(orderId);
+        if (!order) return;
+
+        // Atomic claim: hanya satu tap/callback yang boleh membuat QR & mereservasi stok.
+        // Tap kedua melihat status processing dan berhenti, bukan membuat transaksi duplikat.
+        if (!db.claimOrderForPayment(orderId)) {
+            try {
+                await ctx.answerCbQuery(lang === 'en' ? 'Payment is being processed.' : 'Pembayaran sedang diproses.', { show_alert: true });
+            } catch (e) { /* callback query mungkin sudah dijawab */ }
+            return;
+        }
+
+        // Siapkan method + expiry; status tetap processing sampai QR berhasil dibuat.
         const expiresAt = getExpirationTime('qris');
         db.updateOrder(orderId, {
-            status: 'pending', // Now committed - expiry counts
+            status: 'processing',
             payment_method: 'qris',
             expires_at: expiresAt.toISOString()
         });
 
-        // Reserve stock for this order (prevent race condition)
+        // Reserve stock (race guard)
         const prodForReserve = db.getProductById(order.product_id);
         if (prodForReserve && prodForReserve.stock_mode !== 'unlimited') {
             const reserved = db.reserveStock(order.product_id, order.quantity, orderId);
@@ -162,46 +230,36 @@ const registerOrderHandler = (bot) => {
             }
         }
 
-        // Create QRIS payment via PaKasir (gateway dipilih sesuai strategi routing Fase 4)
-        const qrisResult = await createQRISPayment(orderId, order.total_idr);
+        // Create QRIS via dispatcher (provider-agnostic: pakasir/wijayapay)
+        const qrisResult = await gateway.createQRIS(orderId, order.total_idr, gatewayId);
 
         if (!qrisResult.success) {
             console.error('[ORDER] QRIS creation failed:', qrisResult.error);
+            db.releaseReservedStock(orderId);
+            db.updateOrder(orderId, { status: 'cancelled' });
             try { await ctx.deleteMessage(); } catch (e) { }
             const errMsg = lang === 'en'
                 ? '❌ Failed to create QRIS payment. Please try again.'
                 : '❌ Gagal membuat pembayaran QRIS. Silakan coba lagi.';
-            await ctx.reply(errMsg);
+            await ctx.reply(errMsg, { ...mainMenuKeyboard(lang, userId) });
             return;
         }
 
-        // Generate QR image URL from QR string
-        const { generateQRImageUrl, checkQRISStatus, cancelQRISPayment } = require('../payments/qris');
+        // Prefer provider-supplied QR image; else render from qris_string.
         const { generateQRISTwibbon } = require('../utils/qris_twibbon');
-        const qrImageUrl = generateQRImageUrl(qrisResult.data.qris_string);
+        const qrImageUrl = qrisResult.data.qr_image || gateway.generateQRImageUrl(qrisResult.data.qris_string);
 
-        const productName = lang === 'en' ? order.name_en : order.name_id; // Need to fetch product name if not in order object
-        // Fetch product name again to be sure
         const product = db.getProductById(order.product_id);
         const prodName = lang === 'en' ? product.name_en : product.name_id;
 
         const title = lang === 'en' ? '🧾 *ORDER INVOICE*' : '🧾 *INVOICE PESANAN*';
         const l = lang === 'en' ? {
-            orderId: 'Order ID',
-            prod: 'Product',
-            qty: 'Quantity',
-            total: 'TOTAL PAYMENT',
-            status: 'Status   : Waiting for QRIS payment',
-            valid: 'Valid for'
+            orderId: 'Order ID', prod: 'Product', qty: 'Quantity', total: 'TOTAL PAYMENT',
+            status: 'Status   : Waiting for QRIS payment', valid: 'Valid for'
         } : {
-            orderId: 'Order ID',
-            prod: 'Produk',
-            qty: 'Jumlah',
-            total: 'TOTAL BAYAR',
-            status: 'Status   : Menunggu pembayaran QRIS',
-            valid: 'Berlaku'
+            orderId: 'Order ID', prod: 'Produk', qty: 'Jumlah', total: 'TOTAL BAYAR',
+            status: 'Status   : Menunggu pembayaran QRIS', valid: 'Berlaku'
         };
-        // Format total in user's currency
         const totalAmount = qrisResult.data.total_payment || order.total_idr;
         const totalDisplay = lang === 'en'
             ? `$${formatUSD(order.total_usd || totalAmount / 16000)}`
@@ -217,40 +275,31 @@ const registerOrderHandler = (bot) => {
 ⏱ *${l.status}*
 ⏰ *${l.valid} :* 15 ${lang === 'en' ? 'minutes' : 'menit'}`;
 
-        // Send QRIS image with twibbon template
-        try {
-            await ctx.deleteMessage();
-        } catch (e) { }
+        try { await ctx.deleteMessage(); } catch (e) { }
 
         let sentMsg;
         try {
-            // Generate twibbon composited image
             const twibbonBuffer = await generateQRISTwibbon(qrImageUrl);
             sentMsg = await ctx.replyWithPhoto({ source: twibbonBuffer }, {
-                caption: message,
-                parse_mode: 'Markdown',
-                ...paymentPendingKeyboard(orderId, lang)
+                caption: message, parse_mode: 'Markdown', ...paymentPendingKeyboard(orderId, lang)
             });
         } catch (e) {
-            // Fallback to plain QR if compositing fails
             console.error('[QRIS] Twibbon failed, using plain QR:', e.message);
             sentMsg = await ctx.replyWithPhoto(qrImageUrl, {
-                caption: message,
-                parse_mode: 'Markdown',
-                ...paymentPendingKeyboard(orderId, lang)
+                caption: message, parse_mode: 'Markdown', ...paymentPendingKeyboard(orderId, lang)
             });
         }
 
-        // Store message ID + gateway yang dipakai (Fase 4). gateway_id dipakai saat
-        // cek status / verifikasi / webhook agar credential-nya konsisten dengan transaksi.
+        // Simpan message_id + gateway yang dipakai. gateway_id menjamin cek status /
+        // verifikasi / webhook memakai credential gateway yang SAMA dengan transaksi.
         db.updateOrder(orderId, {
+            status: 'pending',
             message_id: sentMsg.message_id,
             gateway_id: qrisResult.gateway_id || null
         });
 
-        // Notify admin
         await notifyAdminNewOrder(ctx.telegram, orderId, order, 'QRIS');
-    });
+    }
 
     // Check Payment Status Manually
     bot.action(/^pay_check_(.+)$/, async (ctx) => {
@@ -262,9 +311,8 @@ const registerOrderHandler = (bot) => {
         if (!order) return;
 
         if (order.payment_method === 'qris') {
-            // QRIS payment — cek pakai gateway yang membuat transaksi (Fase 4)
-            const { checkQRISStatus } = require('../payments/qris');
-            const result = await checkQRISStatus(orderId, order.total_idr, order.gateway_id);
+            // QRIS payment — cek pakai gateway yang membuat transaksi (provider-agnostic)
+            const result = await gateway.checkStatus(orderId, order.total_idr, order.gateway_id);
 
             if (result.success && result.status === 'completed') {
                 await handlePaymentSuccess(bot, orderId);

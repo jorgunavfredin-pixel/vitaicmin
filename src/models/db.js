@@ -216,22 +216,28 @@ db.exec(`
   );
 `);
 
-// Migration: seed gateway PaKasir dari .env kalau tabel masih kosong (backward compatible).
+// Migration: seed gateway dari .env kalau BELUM ada baris untuk provider itu (backward compatible).
 // Ini memastikan sistem yang sudah jalan pakai env tetap bekerja setelah upgrade,
-// TANPA menimpa data kalau admin sudah mengelola gateway dari panel.
+// TANPA menimpa data kalau admin sudah mengelola gateway dari panel. Idempoten:
+// seed hanya kalau provider ybs belum punya baris sama sekali. Fase 5: dukung WijayaPay.
 try {
-  const count = db.prepare('SELECT COUNT(*) AS n FROM payment_gateways').get().n;
-  if (count === 0 && (process.env.PAKASIR_API_KEY || process.env.PAKASIR_SLUG)) {
-    const now = new Date().toISOString();
-    db.prepare(`INSERT INTO payment_gateways (id, provider, label, credentials, enabled, priority, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 1, 0, ?, ?)`).run(
-      'pakasir-default',
-      'pakasir',
-      'PaKasir (dari .env)',
+  const now = new Date().toISOString();
+  const hasProvider = (p) => db.prepare('SELECT COUNT(*) AS n FROM payment_gateways WHERE provider = ?').get(p).n > 0;
+  const insertGw = db.prepare(`INSERT INTO payment_gateways (id, provider, label, credentials, enabled, priority, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 1, ?, ?, ?)`);
+
+  if (!hasProvider('pakasir') && (process.env.PAKASIR_API_KEY || process.env.PAKASIR_SLUG)) {
+    insertGw.run('pakasir-default', 'pakasir', 'PaKasir (dari .env)',
       JSON.stringify({ api_key: process.env.PAKASIR_API_KEY || '', slug: process.env.PAKASIR_SLUG || '' }),
-      now, now
-    );
+      0, now, now);
     console.log('[DB] Seeded default PaKasir gateway from .env');
+  }
+
+  if (!hasProvider('wijayapay') && (process.env.WIJAYAPAY_CODE_MERCHANT || process.env.WIJAYAPAY_API_KEY)) {
+    insertGw.run('wijayapay-default', 'wijayapay', 'WijayaPay (dari .env)',
+      JSON.stringify({ code_merchant: process.env.WIJAYAPAY_CODE_MERCHANT || '', api_key: process.env.WIJAYAPAY_API_KEY || '' }),
+      1, now, now);
+    console.log('[DB] Seeded default WijayaPay gateway from .env');
   }
 } catch (e) {
   console.error('[DB] payment_gateways seed error:', e.message);

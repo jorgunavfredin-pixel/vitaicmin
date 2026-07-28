@@ -3,7 +3,7 @@ const { formatIDR, formatUSD, convertIDRtoUSD, notifyAdmins } = require('../util
 const { Markup } = require('telegraf');
 const { replyWithBanner, editBannerCaption } = require('../utils/banner');
 const { getBalance, getBalanceHistory } = require('../payments/balance');
-const { createQRISPayment, generateQRImageUrl, checkQRISStatus } = require('../payments/qris');
+const gateway = require('../payments/gateway');
 const { addBalance } = require('../payments/balance');
 const { cancelOrder } = require('../services/reminder');
 const {
@@ -870,7 +870,7 @@ const registerKeyboardHandler = (bot) => {
         const topupOrder = db.getOrderById(topupId);
         if (!topupOrder) return;
 
-        const result = await checkQRISStatus(topupId, topupOrder.total_idr, topupOrder.gateway_id);
+        const result = await gateway.checkStatus(topupId, topupOrder.total_idr, topupOrder.gateway_id);
 
         if (result.success && result.status === 'completed') {
             // Add balance
@@ -947,8 +947,9 @@ const registerKeyboardHandler = (bot) => {
             expires_at: new Date(Date.now() + (parseInt(db.getConfig('payment_timeout_minutes', null, 15)) || 15) * 60 * 1000).toISOString()
         });
 
-        // Create QRIS payment
-        const qrisResult = await createQRISPayment(topupOrder.id, amount);
+        // Create QRIS payment (topup pakai gateway default/aktif pertama — pilihan gateway
+        // hanya untuk checkout produk; topup tetap simpel).
+        const qrisResult = await gateway.createQRIS(topupOrder.id, amount, null);
 
         if (!qrisResult.success) {
             try { await ctx.deleteMessage(); } catch (e) { }
@@ -975,7 +976,7 @@ const registerKeyboardHandler = (bot) => {
         let sentMsg;
         try {
             const { generateQRISTwibbon } = require('../utils/qris_twibbon');
-            const qrImageUrl = generateQRImageUrl(qrisResult.data.qris_string);
+            const qrImageUrl = qrisResult.data.qr_image || gateway.generateQRImageUrl(qrisResult.data.qris_string);
             const twibbonBuffer = await generateQRISTwibbon(qrImageUrl);
             sentMsg = await ctx.replyWithPhoto({ source: twibbonBuffer }, {
                 caption: message,
@@ -988,7 +989,7 @@ const registerKeyboardHandler = (bot) => {
                 }
             });
         } catch (e) {
-            const qrImageUrl = generateQRImageUrl(qrisResult.data.qris_string);
+            const qrImageUrl = qrisResult.data.qr_image || gateway.generateQRImageUrl(qrisResult.data.qris_string);
             sentMsg = await ctx.replyWithPhoto(qrImageUrl, {
                 caption: message,
                 parse_mode: 'Markdown',

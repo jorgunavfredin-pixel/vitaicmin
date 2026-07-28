@@ -573,6 +573,21 @@ const paymentPendingKeyboard = (orderId, lang = 'id') => {
     ]);
 };
 
+// Pilihan gateway QRIS ketika >1 gateway aktif (Fase 5). Buyer memilih gateway,
+// lalu QRIS di-generate dari gateway itu. Label diberi nomor "QRIS 1/2/…" +
+// nama gateway biar buyer tidak bingung. callback: pay_qgw_<gatewayId>_<orderId>.
+const qrisGatewayChoiceKeyboard = (orderId, gateways, lang = 'id') => {
+    const buttons = gateways.map((gw, i) => {
+        const label = `📱 QRIS ${i + 1} — ${gw.label}`;
+        // gateway id bisa null (dari .env) → pakai token 'env' supaya callback tetap valid.
+        const gid = gw.id || 'env';
+        return [Markup.button.callback(label, `pay_qgw_${gid}_${orderId}`)];
+    });
+    const backText = lang === 'en' ? '⬅️ Back' : '⬅️ Kembali';
+    buttons.push([Markup.button.callback(backText, `pay_select_${orderId}`)]);
+    return Markup.inlineKeyboard(buttons);
+};
+
 const backToMenuKeyboard = (lang = 'id') => {
     const homeText = lang === 'en' ? '🏠 Main Menu' : '🏠 Menu Utama';
     return Markup.inlineKeyboard([
@@ -629,5 +644,6 @@ module.exports = {
     topupNominalKeyboard,
     paymentPendingKeyboard,
     backToMenuKeyboard,
-    historyKeyboard
+    historyKeyboard,
+    qrisGatewayChoiceKeyboard
 };

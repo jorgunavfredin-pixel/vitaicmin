@@ -176,7 +176,7 @@ app.post('/webhook/qris', async (req, res) => {
             return res.json({ success: true, message: 'Already processed' });
         }
 
-        // Step 3: Verify amount matches 
+        // Step 3: Verify amount matches
         if (result.amount && order.total_idr && result.amount !== order.total_idr) {
             log.warn(`[WEBHOOK] ❌ Amount mismatch for ${result.orderId}: webhook=${result.amount}, db=${order.total_idr}`);
             return res.status(400).json({ error: 'Amount mismatch' });
@@ -217,6 +217,88 @@ app.post('/webhook/qris', async (req, res) => {
     }
 });
 
+// ==================== WIJAYAPAY WEBHOOK ====================
+// WijayaPay mem-POST callback saat status berubah (pending → paid/expired).
+// Payload: { data: { ref_id, trx_reference, payment_methode, total_dibayar, ... }, status: 'paid' }
+// Verifikasi: header X-Signature = md5(code_merchant + api_key + ref_id) memakai credential
+// gateway yang membuat transaksi (order.gateway_id). Lalu double-verify via get-status.
+// WijayaPay mewajibkan endpoint membalas JSON { status: true }, dan IP mereka (45.158.126.118)
+// harus di-whitelist di dashboard WijayaPay.
+app.post('/webhook/wijayapay', async (req, res) => {
+    try {
+        log.info('[WEBHOOK] WijayaPay received:', JSON.stringify(req.body));
+        const crypto = require('crypto');
+        const db = require('./models/db');
+        const wijayapay = require('./payments/providers/wijayapay');
+
+        // Step 1: parse payload → orderId (ref_id), status
+        const parsed = wijayapay.parseCallback(req.body);
+        if (!parsed.success) {
+            log.warn(`[WEBHOOK] ❌ WijayaPay parse failed: ${parsed.error}`);
+            return res.status(400).json({ status: false, error: parsed.error });
+        }
+
+        // Step 2: order harus ada
+        const order = db.getOrderById(parsed.orderId);
+        if (!order) {
+            log.warn(`[WEBHOOK] ❌ WijayaPay order ${parsed.orderId} not found`);
+            return res.status(404).json({ status: false, error: 'Order not found' });
+        }
+
+        // Step 3: resolve credential gateway yang membuat transaksi (wijayapay) untuk verifikasi signature
+        const gw = db.getPaymentGatewayById(order.gateway_id) || null;
+        const creds = (gw && gw.provider === 'wijayapay' && gw.credentials)
+            ? gw.credentials
+            : { code_merchant: process.env.WIJAYAPAY_CODE_MERCHANT || '', api_key: process.env.WIJAYAPAY_API_KEY || '' };
+
+        // Step 4: verifikasi X-Signature (kalau dikirim). md5(code_merchant+api_key+ref_id)
+        const sigHeader = req.headers['x-signature'];
+        if (!sigHeader || !creds.code_merchant || !creds.api_key) {
+            log.warn(`[WEBHOOK] ❌ WijayaPay signature/credential missing for ${parsed.orderId}`);
+            return res.status(401).json({ status: false, error: 'Missing signature' });
+        }
+        const expected = crypto.createHash('md5')
+            .update(`${creds.code_merchant}${creds.api_key}${parsed.orderId}`).digest('hex');
+        const received = String(sigHeader).toLowerCase();
+        const expectedBuf = Buffer.from(expected);
+        const receivedBuf = Buffer.from(received);
+        if (receivedBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(receivedBuf, expectedBuf)) {
+            log.warn(`[WEBHOOK] ❌ WijayaPay signature mismatch for ${parsed.orderId}`);
+            return res.status(401).json({ status: false, error: 'Invalid signature' });
+        }
+
+        // Step 5: idempoten — kalau sudah tidak pending, cukup ack
+        if (order.status !== 'pending') {
+            log.warn(`[WEBHOOK] ⚠️ WijayaPay order ${parsed.orderId} already ${order.status}`);
+            return res.json({ status: true });
+        }
+
+        // Step 6: hanya proses kalau status paid; double-verify authoritative via get-status
+        if (parsed.status === 'completed') {
+            const apiCheck = await wijayapay.verifyTransaction(parsed.orderId, order.total_idr, creds);
+            if (apiCheck.valid || apiCheck.status === 'api_error') {
+                // api_error → tetap proses (payload sudah diverifikasi signature), meniru pola PaKasir
+                await handlePaymentSuccess(bot, parsed.orderId, {
+                    transaction_id: parsed.trxReference || parsed.orderId,
+                    amount: parsed.amount
+                });
+                log.info(`[WEBHOOK] ✅ WijayaPay order ${parsed.orderId} verified & paid`);
+            } else {
+                log.warn(`[WEBHOOK] ❌ WijayaPay ${parsed.orderId} NOT verified (status: ${apiCheck.status})`);
+                return res.status(400).json({ status: false, error: 'Transaction not verified' });
+            }
+        } else {
+            log.info(`[WEBHOOK] WijayaPay ignored status: ${parsed.status} for ${parsed.orderId}`);
+        }
+
+        // WijayaPay mengharapkan { status: true }
+        res.json({ status: true });
+    } catch (error) {
+        log.error('[WEBHOOK] WijayaPay error:', error);
+        res.status(500).json({ status: false, error: error.message });
+    }
+});
+
 // Telegram webhook (optional, for production)
 app.post('/webhook/telegram', (req, res) => {
     bot.handleUpdate(req.body, res);
@@ -237,7 +319,8 @@ const startBot = async () => {
         // Start Express server
         server = app.listen(PORT, '0.0.0.0', () => {
             console.log(`🚀 Webhook server running on port ${PORT}`);
-            console.log(`📍 QRIS Webhook: ${WEBHOOK_URL}/webhook/qris`);
+            console.log(`📍 PaKasir Webhook  : ${WEBHOOK_URL}/webhook/qris`);
+            console.log(`📍 WijayaPay Webhook: ${WEBHOOK_URL}/webhook/wijayapay`);
         });
 
         // Use polling for development

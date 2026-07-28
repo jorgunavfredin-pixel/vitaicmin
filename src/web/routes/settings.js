@@ -11,22 +11,20 @@ const path = require('path');
 const db = require('../../models/db');
 const { getWIBToday } = require('../../utils/helpers');
 const { changePassword, isCustomPassword } = require('../auth');
-const { testConnection } = require('../../payments/qris');
+const gateway = require('../../payments/gateway');
 
 // Key toggle yang boleh diubah dari web (whitelist — jangan izinkan sembarang key).
 const TOGGLE_KEYS = ['maintenance', 'qris_enabled', 'saldo_enabled'];
 
-// Field credential per provider (buat validasi & masking). Fase 4 bisa nambah provider.
-const PROVIDER_FIELDS = {
-    pakasir: ['api_key', 'slug']
-};
+// Field credential per provider (buat validasi & masking). Sumber tunggal dari dispatcher.
+const PROVIDER_FIELDS = gateway.PROVIDER_FIELDS;
 
 // Mask nilai credential untuk ditampilkan (jangan pernah kirim plaintext ke UI).
 const maskCred = (creds = {}) => {
     const out = {};
     for (const [k, v] of Object.entries(creds)) {
-        // slug bukan rahasia berat → tampilkan apa adanya biar admin bisa verifikasi.
-        if (k === 'slug') out[k] = v || null;
+        // slug/code merchant bukan rahasia berat → tampilkan apa adanya biar admin bisa verifikasi.
+        if (k === 'slug' || k === 'code_merchant') out[k] = v || null;
         else out[k] = v ? mask(v) : null;
     }
     return out;
@@ -68,7 +66,12 @@ const getSettings = (req, res) => {
                 support_username: process.env.SUPPORT_USERNAME || null,
                 order_prefix: process.env.ORDER_PREFIX || 'ORD',
                 pakasir_api_key: mask(process.env.PAKASIR_API_KEY),
-                pakasir_slug: process.env.PAKASIR_SLUG || null
+                pakasir_slug: process.env.PAKASIR_SLUG || null,
+                wijayapay_code_merchant: process.env.WIJAYAPAY_CODE_MERCHANT || null,
+                wijayapay_api_key: mask(process.env.WIJAYAPAY_API_KEY),
+                wijayapay_callback_url: process.env.WEBHOOK_URL
+                    ? `${String(process.env.WEBHOOK_URL).replace(/\/$/, '')}/webhook/wijayapay`
+                    : null
             },
             security: {
                 password_source: isCustomPassword() ? 'custom' : 'env'
@@ -199,10 +202,18 @@ const createGateway = (req, res) => {
     try {
         const { provider, label, credentials, enabled } = req.body || {};
         if (!PROVIDER_FIELDS[provider]) return res.status(400).json({ error: 'Provider tidak dikenal' });
+        const cleanCredentials = {};
+        for (const field of PROVIDER_FIELDS[provider]) {
+            const value = credentials && credentials[field] !== undefined
+                ? String(credentials[field]).trim()
+                : '';
+            if (!value) return res.status(400).json({ error: `${field} wajib diisi` });
+            cleanCredentials[field] = value;
+        }
         const gw = db.createPaymentGateway({
             provider,
             label: (label || '').trim() || provider,
-            credentials: credentials || {},
+            credentials: cleanCredentials,
             enabled: enabled !== false
         });
         res.json({ ok: true, message: 'Gateway ditambahkan', id: gw.id });
@@ -263,64 +274,22 @@ const testGateway = async (req, res) => {
         const { id } = req.params;
         const gw = db.getPaymentGatewayById(id);
         if (!gw) return res.status(404).json({ error: 'Gateway tidak ditemukan' });
-        if (gw.provider !== 'pakasir') return res.status(400).json({ error: 'Test belum didukung untuk provider ini' });
-
-        // Pakai credential tersimpan; kalau body kirim credential baru (belum disimpan), pakai itu.
+        // Merge credential tersimpan + field baru yang sedang diedit, supaya bisa dites sebelum simpan.
         const body = req.body || {};
-        const apiKey = (body.api_key && String(body.api_key).trim()) || gw.credentials.api_key;
-        const slug = (body.slug && String(body.slug).trim()) || gw.credentials.slug;
-
-        const result = await testConnection({ apiKey, slug });
+        const allowed = PROVIDER_FIELDS[gw.provider] || [];
+        const creds = { ...(gw.credentials || {}) };
+        for (const field of allowed) {
+            if (body[field] !== undefined && String(body[field]).trim() !== '') {
+                creds[field] = String(body[field]).trim();
+            }
+        }
+        const result = await gateway.testConnection(gw.provider, creds);
         res.json(result);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 };
 
-// Strategi routing yang diizinkan (harus sinkron dengan db.ROUTING_STRATEGIES).
-const ROUTING_STRATEGIES = ['priority', 'round_robin', 'manual'];
-
-// ---- GET /gateways/routing ----  strategi routing + gateway aktif saat ini
-const getRouting = (req, res) => {
-    try {
-        const strategy = db.getGatewayStrategy();
-        const manualId = db.getConfig('gateway_manual_id', null, '') || null;
-        const active = db.getRoutedGateway('pakasir');
-        res.json({
-            strategy,
-            manual_id: manualId,
-            active_gateway: active ? { id: active.id, label: active.label } : null,
-            strategies: ROUTING_STRATEGIES
-        });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-};
-
-// ---- PUT /gateways/routing ----  { strategy, manual_id? }
-const updateRouting = (req, res) => {
-    try {
-        const { strategy, manual_id } = req.body || {};
-        if (!ROUTING_STRATEGIES.includes(strategy)) {
-            return res.status(400).json({ error: 'Strategi tidak dikenal' });
-        }
-        const updates = { gateway_strategy: strategy };
-
-        if (strategy === 'manual') {
-            const gw = manual_id ? db.getPaymentGatewayById(manual_id) : null;
-            if (!gw) return res.status(400).json({ error: 'Pilih gateway yang valid untuk mode manual' });
-            if (!gw.enabled) return res.status(400).json({ error: 'Gateway yang dipilih sedang nonaktif' });
-            updates.gateway_manual_id = manual_id;
-        }
-        // Reset kursor round-robin tiap ganti strategi biar mulai dari gateway prioritas teratas.
-        updates.gateway_rr_index = 0;
-
-        db.updateSettings(updates);
-        res.json({ ok: true, message: 'Strategi routing disimpan', strategy });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-};
 
 const registerSettingsRoutes = (api) => {
     api.get('/settings', getSettings);
@@ -330,9 +299,7 @@ const registerSettingsRoutes = (api) => {
     api.get('/settings/backup', backupDb);
     // Payment gateways
     api.get('/gateways', listGateways);
-    // Routing (Fase 4) — daftar SEBELUM '/gateways/:id' supaya '/routing' tidak ketangkap :id
-    api.get('/gateways/routing', getRouting);
-    api.put('/gateways/routing', updateRouting);
+
     api.post('/gateways', createGateway);
     api.put('/gateways/:id', updateGateway);
     api.delete('/gateways/:id', deleteGateway);
