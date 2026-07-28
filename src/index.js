@@ -145,7 +145,11 @@ bot.catch(async (err, ctx) => {
 // Initialize Express for webhooks
 const app = express();
 // Limit 12mb: broadcast web bisa kirim foto sebagai base64 data URL (default 100kb kekecilan).
-app.use(express.json({ limit: '12mb' }));
+// Simpan raw bytes untuk verifikasi HMAC webhook Xoftware sebelum JSON diubah parser.
+app.use(express.json({
+    limit: '12mb',
+    verify: (req, res, buffer) => { req.rawBody = Buffer.from(buffer); }
+}));
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -300,6 +304,64 @@ app.post('/webhook/wijayapay', async (req, res) => {
     }
 });
 
+// Xoftware webhook: HMAC-SHA256 hex atas RAW body memakai webhook_secret.
+app.post('/webhook/xoftware', async (req, res) => {
+    try {
+        const db = require('./models/db');
+        const xoftware = require('./payments/providers/xoftware');
+        const parsed = xoftware.parseCallback(req.body);
+        if (!parsed.success) return res.status(400).json({ success: false, error: parsed.error });
+
+        const order = db.getOrderById(parsed.orderId);
+        if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+        const gw = order.gateway_id ? db.getPaymentGatewayById(order.gateway_id) : null;
+        const creds = gw?.provider === 'xoftware' ? gw.credentials : {
+            api_key: process.env.XOWFTWARE_API_KEY || '',
+            merchant_id: process.env.XOWFTWARE_MERCHANT_ID || '',
+            webhook_secret: process.env.XOWFTWARE_WEBHOOK_SECRET || ''
+        };
+        if (!xoftware.verifyWebhookSignature(req.rawBody, req.headers['x-signature'], creds.webhook_secret)) {
+            return res.status(401).json({ success: false, error: 'Invalid signature' });
+        }
+        // Mode merchant: amount harus sama dengan harga order. Mode user dapat lebih
+        // besar karena fee ditambahkan ke tagihan buyer, tetapi tidak boleh lebih kecil.
+        const feeDirection = creds.fee_direction === 'user' ? 'user' : 'merchant';
+        if (parsed.amount && order.total_idr &&
+            ((feeDirection === 'merchant' && parsed.amount !== order.total_idr) ||
+             (feeDirection === 'user' && parsed.amount < order.total_idr))) {
+            return res.status(400).json({ success: false, error: 'Amount mismatch' });
+        }
+        if (!db.claimWebhookEvent(parsed.eventId, 'xoftware', parsed.orderId)) {
+            return res.json({ success: true, duplicate: true });
+        }
+        log.info(`[PAYMENT] provider=xoftware event=webhook order=${parsed.orderId} ` +
+            `status=${parsed.status} amount=${parsed.amount || '-'} reference=${parsed.transactionId || '-'}`);
+
+        if (order.status !== 'pending') return res.json({ success: true });
+        if (parsed.status === 'completed') {
+            const verified = await xoftware.verifyTransaction(parsed.orderId, order.total_idr, creds);
+            if (!verified.valid) {
+                // Biarkan retry webhook berikutnya mencoba ulang jika status API belum sinkron/transient error.
+                db.releaseWebhookEvent(parsed.eventId);
+                return res.status(400).json({ success: false, error: `Transaction not verified (${verified.status})` });
+            }
+            const delivered = await handlePaymentSuccess(bot, parsed.orderId, {
+                transaction_id: parsed.transactionId || parsed.orderId,
+                amount: parsed.amount
+            });
+            if (!delivered) {
+                db.releaseWebhookEvent(parsed.eventId);
+                return res.status(500).json({ success: false, error: 'Delivery failed' });
+            }
+            log.info(`[PAYMENT] provider=xoftware event=verified order=${parsed.orderId} status=paid`);
+        }
+        res.json({ success: true });
+    } catch (error) {
+        log.error('[WEBHOOK] Xoftware error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Telegram webhook (optional, for production)
 app.post('/webhook/telegram', (req, res) => {
     bot.handleUpdate(req.body, res);
@@ -322,6 +384,7 @@ const startBot = async () => {
             console.log(`🚀 Webhook server running on port ${PORT}`);
             console.log(`📍 PaKasir Webhook  : ${WEBHOOK_URL}/webhook/qris`);
             console.log(`📍 WijayaPay Webhook: ${WEBHOOK_URL}/webhook/wijayapay`);
+            console.log(`📍 Xoftware Webhook : ${WEBHOOK_URL}/webhook/xoftware`);
         });
 
         // Use polling for development

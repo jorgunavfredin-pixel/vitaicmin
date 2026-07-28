@@ -17,6 +17,14 @@ const PROVIDER_META = {
       { key: 'code_merchant', label: 'Code Merchant', secret: false, placeholder: 'cth: WP692f1bafd86' },
       { key: 'api_key', label: 'API Key', secret: true, placeholder: 'Masukkan API Key' }
     ]
+  },
+  xoftware: {
+    label: 'Xoftware Pay',
+    fields: [
+      { key: 'api_key', label: 'API Key', secret: true, placeholder: 'Masukkan API Key' },
+      { key: 'merchant_id', label: 'Merchant ID', secret: false, placeholder: 'cth: 12345' },
+      { key: 'webhook_secret', label: 'Webhook Secret', secret: true, placeholder: 'Masukkan Webhook Secret' }
+    ]
   }
 };
 
@@ -72,6 +80,7 @@ function GatewayCard({ gw, showToast, onChanged }) {
   const [label, setLabel] = useState(gw.label);
   const [enabled, setEnabled] = useState(gw.enabled);
   const [creds, setCreds] = useState({});   // hanya field yang diubah
+  const [feeDirection, setFeeDirection] = useState(gw.credentials.fee_direction || 'merchant');
   const [busy, setBusy] = useState('');
   const [testResult, setTestResult] = useState(null);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -88,6 +97,9 @@ function GatewayCard({ gw, showToast, onChanged }) {
     try {
       const payload = { label };
       if (Object.keys(creds).length) payload.credentials = creds;
+      if (gw.provider === 'xoftware') {
+        payload.credentials = { ...(payload.credentials || {}), fee_direction: feeDirection };
+      }
 
       await updateGateway(gw.id, payload);
       showToast('Gateway disimpan');
@@ -173,6 +185,15 @@ function GatewayCard({ gw, showToast, onChanged }) {
             />
           </div>
         ))}
+        {gw.provider === 'xoftware' && (
+          <div className="gw-field">
+            <label className="field-label">Biaya QRIS ditanggung</label>
+            <select className="select-field" value={feeDirection} onChange={(e) => setFeeDirection(e.target.value)}>
+              <option value="merchant">Merchant — dipotong dari settlement</option>
+              <option value="user">Buyer — ditambahkan ke tagihan</option>
+            </select>
+          </div>
+        )}
 
       </div>
 
@@ -216,6 +237,7 @@ function AddGatewayModal({ providers, onClose, showToast, onDone }) {
   const [label, setLabel] = useState('');
   const [creds, setCreds] = useState({});
   const [busy, setBusy] = useState(false);
+  const [feeDirection, setFeeDirection] = useState('merchant');
   const meta = PROVIDER_META[provider] || { label: provider, fields: [] };
 
   const submit = async () => {
@@ -224,7 +246,8 @@ function AddGatewayModal({ providers, onClose, showToast, onDone }) {
     }
     setBusy(true);
     try {
-      const r = await createGateway({ provider, label: label || meta.label, credentials: creds, enabled: true });
+      const credentials = provider === 'xoftware' ? { ...creds, fee_direction: feeDirection } : creds;
+      const r = await createGateway({ provider, label: label || meta.label, credentials, enabled: true });
       showToast(r.message);
       onDone();
     } catch (e) { showToast(e.message, 'err'); } finally { setBusy(false); }
@@ -253,6 +276,15 @@ function AddGatewayModal({ providers, onClose, showToast, onDone }) {
               value={creds[f.key] ?? ''} onChange={(e) => setCreds((c) => ({ ...c, [f.key]: e.target.value }))} />
           </div>
         ))}
+        {provider === 'xoftware' && (
+          <div>
+            <label className="field-label" style={{ marginTop: 12 }}>Biaya QRIS ditanggung</label>
+            <select className="select-field" style={{ width: '100%' }} value={feeDirection} onChange={(e) => setFeeDirection(e.target.value)}>
+              <option value="merchant">Merchant — dipotong dari settlement</option>
+              <option value="user">Buyer — ditambahkan ke tagihan</option>
+            </select>
+          </div>
+        )}
 
         <div className="modal-actions" style={{ marginTop: 18 }}>
           <button className="btn-ghost" onClick={onClose}>Batal</button>

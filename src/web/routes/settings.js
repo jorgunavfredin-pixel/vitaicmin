@@ -23,8 +23,8 @@ const PROVIDER_FIELDS = gateway.PROVIDER_FIELDS;
 const maskCred = (creds = {}) => {
     const out = {};
     for (const [k, v] of Object.entries(creds)) {
-        // slug/code merchant bukan rahasia berat → tampilkan apa adanya biar admin bisa verifikasi.
-        if (k === 'slug' || k === 'code_merchant') out[k] = v || null;
+        // Identifier/setting non-secret ditampilkan apa adanya.
+        if (k === 'slug' || k === 'code_merchant' || k === 'merchant_id' || k === 'fee_direction') out[k] = v || null;
         else out[k] = v ? mask(v) : null;
     }
     return out;
@@ -216,6 +216,9 @@ const createGateway = (req, res) => {
             if (!value) return res.status(400).json({ error: `${field} wajib diisi` });
             cleanCredentials[field] = value;
         }
+        if (provider === 'xoftware') {
+            cleanCredentials.fee_direction = credentials?.fee_direction === 'user' ? 'user' : 'merchant';
+        }
         const gw = db.createPaymentGateway({
             provider,
             label: (label || '').trim() || provider,
@@ -255,6 +258,12 @@ const updateGateway = (req, res) => {
                 }
             }
             if (Object.keys(credUpdate).length) updates.credentials = credUpdate;
+            if (existing.provider === 'xoftware' && credentials.fee_direction !== undefined) {
+                updates.credentials = {
+                    ...(updates.credentials || {}),
+                    fee_direction: credentials.fee_direction === 'user' ? 'user' : 'merchant'
+                };
+            }
         }
 
         const updated = db.updatePaymentGateway(id, updates);

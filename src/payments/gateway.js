@@ -18,7 +18,8 @@ const log = require('../utils/logger');
 
 const ADAPTERS = {
     pakasir: require('./providers/pakasir'),
-    wijayapay: require('./providers/wijayapay')
+    wijayapay: require('./providers/wijayapay'),
+    xoftware: require('./providers/xoftware')
 };
 
 const getAdapter = (provider) => ADAPTERS[provider] || null;
@@ -29,7 +30,8 @@ const SUPPORTED_PROVIDERS = Object.keys(ADAPTERS);
 // Field credential per provider (buat validasi & masking di web admin).
 const PROVIDER_FIELDS = {
     pakasir: ['api_key', 'slug'],
-    wijayapay: ['code_merchant', 'api_key']
+    wijayapay: ['code_merchant', 'api_key'],
+    xoftware: ['api_key', 'merchant_id', 'webhook_secret']
 };
 
 /**
@@ -46,6 +48,13 @@ const envCredential = (provider) => {
         const code_merchant = process.env.WIJAYAPAY_CODE_MERCHANT || '';
         const api_key = process.env.WIJAYAPAY_API_KEY || '';
         if (code_merchant || api_key) return { code_merchant, api_key };
+    }
+    if (provider === 'xoftware') {
+        const api_key = process.env.XOWFTWARE_API_KEY || '';
+        const merchant_id = process.env.XOWFTWARE_MERCHANT_ID || '';
+        const webhook_secret = process.env.XOWFTWARE_WEBHOOK_SECRET || '';
+        const fee_direction = process.env.XOWFTWARE_FEE_DIRECTION === 'user' ? 'user' : 'merchant';
+        if (api_key || merchant_id || webhook_secret) return { api_key, merchant_id, webhook_secret, fee_direction };
     }
     return null;
 };
@@ -86,7 +95,7 @@ const listActiveGateways = () => {
     }));
 };
 
-const providerLabel = (provider) => ({ pakasir: 'PaKasir', wijayapay: 'WijayaPay' }[provider] || provider);
+const providerLabel = (provider) => ({ pakasir: 'PaKasir', wijayapay: 'WijayaPay', xoftware: 'Xoftware Pay' }[provider] || provider);
 
 const hasCompleteCreds = (provider, creds) => {
     if (!creds) return false;
@@ -125,13 +134,13 @@ const resolveGateway = (gatewayId) => {
  * @param {string|null} gatewayId - id gateway pilihan buyer (null = default/tunggal)
  * @returns {Promise<{success, gateway_id, provider, data?, error?}>}
  */
-const createQRIS = async (orderId, amount, gatewayId = null) => {
+const createQRIS = async (orderId, amount, gatewayId = null, options = {}) => {
     const gw = resolveGateway(gatewayId);
     if (!gw) return { success: false, error: 'Tidak ada payment gateway aktif' };
     const adapter = getAdapter(gw.provider);
     if (!adapter) return { success: false, error: `Provider ${gw.provider} tidak didukung` };
 
-    const r = await adapter.createQRIS(orderId, amount, gw.credentials);
+    const r = await adapter.createQRIS(orderId, amount, gw.credentials, options);
     return { ...r, gateway_id: gw.id, provider: gw.provider };
 };
 

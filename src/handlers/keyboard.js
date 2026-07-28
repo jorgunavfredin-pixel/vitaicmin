@@ -933,6 +933,7 @@ const registerKeyboardHandler = (bot) => {
     async function processTopup(ctx, userId, amount, lang) {
         // Convert to USD for display
         const usdAmount = await convertIDRtoUSD(amount);
+        const timeoutMinutes = parseInt(db.getConfig('payment_timeout_minutes', null, 15)) || 15;
 
         // Create a topup order in DB
         const topupOrder = db.createOrder({
@@ -944,12 +945,17 @@ const registerKeyboardHandler = (bot) => {
             payment_method: 'qris',
             chat_id: ctx.chat.id,
             status: 'pending',
-            expires_at: new Date(Date.now() + (parseInt(db.getConfig('payment_timeout_minutes', null, 15)) || 15) * 60 * 1000).toISOString()
+            expires_at: new Date(Date.now() + timeoutMinutes * 60 * 1000).toISOString()
         });
 
-        // Create QRIS payment (topup pakai gateway default/aktif pertama — pilihan gateway
-        // hanya untuk checkout produk; topup tetap simpel).
-        const qrisResult = await gateway.createQRIS(topupOrder.id, amount, null);
+        // Topup memakai gateway aktif pertama. Xoftware menerima timeout toko secara native;
+        // provider lain tetap dibersihkan berdasarkan expiry lokal order.
+        const qrisResult = await gateway.createQRIS(topupOrder.id, amount, null, {
+            timeout_minutes: timeoutMinutes,
+            user_id: userId,
+            customer_name: ctx.from?.first_name || 'Telegram Buyer',
+            metadata: { customer: { id: userId, name: ctx.from?.first_name || 'Telegram Buyer' } }
+        });
 
         if (!qrisResult.success) {
             try { await ctx.deleteMessage(); } catch (e) { }
@@ -969,7 +975,7 @@ const registerKeyboardHandler = (bot) => {
         }
 
         const title = lang === 'en' ? '📥 *TOP UP BALANCE*' : '📥 *TOPUP SALDO*';
-        const message = `${title}\n\n💰 *Amount:* ${amountDisplay}\n🆔 *ID:* \`${topupOrder.id}\`\n⏰ *${lang === 'en' ? 'Valid for' : 'Berlaku'}:* 15 ${lang === 'en' ? 'minutes' : 'menit'}\n\n⏳ ${lang === 'en' ? 'Waiting for QRIS payment...' : 'Menunggu pembayaran QRIS...'}`;
+        const message = `${title}\n\n💰 *Amount:* ${amountDisplay}\n🆔 *ID:* \`${topupOrder.id}\`\n⏰ *${lang === 'en' ? 'Valid for' : 'Berlaku'}:* ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n⏳ ${lang === 'en' ? 'Waiting for QRIS payment...' : 'Menunggu pembayaran QRIS...'}`;
 
         try { await ctx.deleteMessage(); } catch (e) { }
 

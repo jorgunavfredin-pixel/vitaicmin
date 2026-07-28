@@ -206,13 +206,20 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS payment_gateways (
     id TEXT PRIMARY KEY,
-    provider TEXT,          -- 'pakasir' | (future providers)
-    label TEXT,             -- nama tampilan yang admin kasih
-    credentials TEXT,       -- JSON string { api_key, slug, ... } — sensitif
+    provider TEXT,
+    label TEXT,
+    credentials TEXT,
     enabled INTEGER DEFAULT 1,
-    priority INTEGER DEFAULT 0,  -- untuk multi-gateway routing (Fase 4)
+    priority INTEGER DEFAULT 0,
     created_at TEXT,
     updated_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS webhook_events (
+    event_id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    order_id TEXT,
+    received_at TEXT NOT NULL
   );
 `);
 
@@ -238,6 +245,16 @@ try {
       JSON.stringify({ code_merchant: process.env.WIJAYAPAY_CODE_MERCHANT || '', api_key: process.env.WIJAYAPAY_API_KEY || '' }),
       1, now, now);
     console.log('[DB] Seeded default WijayaPay gateway from .env');
+  }
+  if (!hasProvider('xoftware') && (process.env.XOWFTWARE_API_KEY || process.env.XOWFTWARE_MERCHANT_ID)) {
+    insertGw.run('xoftware-default', 'xoftware', 'Xoftware Pay (dari .env)',
+      JSON.stringify({
+        api_key: process.env.XOWFTWARE_API_KEY || '',
+        merchant_id: process.env.XOWFTWARE_MERCHANT_ID || '',
+        webhook_secret: process.env.XOWFTWARE_WEBHOOK_SECRET || '',
+        fee_direction: process.env.XOWFTWARE_FEE_DIRECTION === 'user' ? 'user' : 'merchant'
+      }), 2, now, now);
+    console.log('[DB] Seeded default Xoftware gateway from .env');
   }
 } catch (e) {
   console.error('[DB] payment_gateways seed error:', e.message);
@@ -891,6 +908,17 @@ const deletePaymentGateway = (id) => {
   db.prepare('DELETE FROM payment_gateways WHERE id = ?').run(id);
 };
 
+// Atomic webhook idempotency claim. true hanya untuk event pertama.
+const claimWebhookEvent = (eventId, provider, orderId) => {
+  const result = db.prepare(`INSERT OR IGNORE INTO webhook_events (event_id, provider, order_id, received_at)
+    VALUES (?, ?, ?, ?)`).run(eventId, provider, orderId || null, new Date().toISOString());
+  return result.changes === 1;
+};
+
+const releaseWebhookEvent = (eventId) => {
+  db.prepare('DELETE FROM webhook_events WHERE event_id = ?').run(eventId);
+};
+
 /**
  * getGatewayCredential — resolver credential untuk provider aktif.
  * Prioritas: gateway aktif di DB > process.env (backward compat) > ''.
@@ -1050,7 +1078,7 @@ module.exports = {
   // Payment Gateways
   getPaymentGateways, getPaymentGatewayById, getActiveGateway, createPaymentGateway,
   updatePaymentGateway, deletePaymentGateway, getGatewayCredential,
-  getGatewayCredentialById, getRoutedGateway, getGatewayStrategy,
+  getGatewayCredentialById, getRoutedGateway, getGatewayStrategy, claimWebhookEvent, releaseWebhookEvent,
   // Flash Sale
   isFlashSaleActive, getEffectivePrice, setFlashSale, clearFlashSale, getActiveFlashSales, getExpiredFlashSales,
   // Maintenance

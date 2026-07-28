@@ -213,8 +213,20 @@ const registerOrderHandler = (bot) => {
             }
         }
 
-        // Create QRIS via dispatcher (provider-agnostic: pakasir/wijayapay)
-        const qrisResult = await gateway.createQRIS(orderId, order.total_idr, gatewayId);
+        // Create QRIS via dispatcher. Xoftware menerima timeout toko secara native;
+        // PaKasir/WijayaPay tetap memakai timeout lokal yang sama untuk cleanup order/chat/stok.
+        const timeoutMinutes = parseInt(db.getConfig('payment_timeout_minutes', null, 15)) || 15;
+        const productForMeta = db.getProductById(order.product_id);
+        const userForMeta = db.getUser(userId) || {};
+        const qrisResult = await gateway.createQRIS(orderId, order.total_idr, gatewayId, {
+            timeout_minutes: timeoutMinutes,
+            user_id: userId,
+            customer_name: userForMeta.first_name || 'Telegram Buyer',
+            metadata: {
+                customer: { id: userId, name: userForMeta.first_name || 'Telegram Buyer' },
+                products: [{ product_code: order.product_id, product_name: productForMeta?.name_id || order.product_id }]
+            }
+        });
 
         if (!qrisResult.success) {
             console.error('[ORDER] QRIS creation failed:', qrisResult.error);
@@ -256,7 +268,7 @@ const registerOrderHandler = (bot) => {
 • *${l.total}:* ${totalDisplay}
 
 ⏱ *${l.status}*
-⏰ *${l.valid} :* 15 ${lang === 'en' ? 'minutes' : 'menit'}`;
+⏰ *${l.valid} :* ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}`;
 
         try { await ctx.deleteMessage(); } catch (e) { }
 
