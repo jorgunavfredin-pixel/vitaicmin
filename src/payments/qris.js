@@ -72,8 +72,6 @@ const createQRISPayment = async (orderId, amount) => {
             }
         );
 
-        log.info('[QRIS] Response:', JSON.stringify(response.data));
-
         // PaKasir returns: { payment: { project, order_id, ... } }
         const paymentData = response.data.payment || response.data;
 
@@ -128,8 +126,6 @@ const checkQRISStatus = async (orderId, amount, gatewayId = null) => {
                 timeout: 10000
             }
         );
-
-        log.info('[QRIS] Status check:', JSON.stringify(response.data));
 
         // PaKasir returns: { transaction: { status, completed_at, ... } }
         const txData = response.data.transaction || response.data;
@@ -217,8 +213,6 @@ const getValidSlugMap = () => {
 
 const handleQRISWebhook = (webhookData) => {
     try {
-        log.info('[QRIS] Webhook received:', JSON.stringify(webhookData));
-
         const { order_id, status, amount, payment_method, completed_at, project } = webhookData;
 
         // Verify project matches — cek terhadap SEMUA slug gateway enabled + env (Fase 4).

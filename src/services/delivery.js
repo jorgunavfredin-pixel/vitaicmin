@@ -406,7 +406,7 @@ ${warrantyHtml}
         // Notify admin with compact invoice
         await notifyAdminPaymentComplete(bot, orderId, order, product, stockToDeliver);
 
-        log.info(`Order ${orderId} payment success and delivered`);
+        log.info(`[PAYMENT] event=delivered order=${orderId} product=${order.product_id} quantity=${order.quantity}`);
         return true;
     } catch (error) {
         log.error(`Payment success handling error for ${orderId}:`, error);

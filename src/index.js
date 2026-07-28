@@ -155,14 +155,14 @@ app.get('/', (req, res) => {
 // PaKasir QRIS webhook
 app.post('/webhook/qris', async (req, res) => {
     try {
-        log.info('[WEBHOOK] QRIS received:', JSON.stringify(req.body));
-
         // Step 1: Parse & validate project slug
         const result = handleQRISWebhook(req.body);
         if (!result.success) {
             log.warn(`[WEBHOOK] ❌ Rejected: ${result.error}`);
             return res.status(400).json({ error: result.error });
         }
+        log.info(`[PAYMENT] provider=pakasir event=webhook order=${result.orderId} ` +
+            `status=${result.status} amount=${result.amount || '-'} project=${req.body?.project || '-'}`);
 
         // Step 2: Verify order exists & is pending
         const db = require('./models/db');
@@ -195,7 +195,7 @@ app.post('/webhook/qris', async (req, res) => {
                     transaction_id: result.transactionId || result.orderId,
                     amount: result.amount
                 });
-                log.info(`[WEBHOOK] ✅ Order ${result.orderId} verified & paid`);
+                log.info(`[PAYMENT] provider=pakasir event=verified order=${result.orderId} status=paid`);
             } else if (apiCheck.status === 'api_error') {
                 log.warn(`[WEBHOOK] ⚠️ API verify failed, processing webhook data for ${result.orderId}`);
                 await handlePaymentSuccess(bot, result.orderId, {
@@ -226,7 +226,6 @@ app.post('/webhook/qris', async (req, res) => {
 // harus di-whitelist di dashboard WijayaPay.
 app.post('/webhook/wijayapay', async (req, res) => {
     try {
-        log.info('[WEBHOOK] WijayaPay received:', JSON.stringify(req.body));
         const crypto = require('crypto');
         const db = require('./models/db');
         const wijayapay = require('./payments/providers/wijayapay');
@@ -237,6 +236,8 @@ app.post('/webhook/wijayapay', async (req, res) => {
             log.warn(`[WEBHOOK] ❌ WijayaPay parse failed: ${parsed.error}`);
             return res.status(400).json({ status: false, error: parsed.error });
         }
+        log.info(`[PAYMENT] provider=wijayapay event=webhook order=${parsed.orderId} ` +
+            `status=${parsed.status} amount=${parsed.amount || '-'} reference=${parsed.trxReference || '-'}`);
 
         // Step 2: order harus ada
         const order = db.getOrderById(parsed.orderId);
@@ -282,7 +283,7 @@ app.post('/webhook/wijayapay', async (req, res) => {
                     transaction_id: parsed.trxReference || parsed.orderId,
                     amount: parsed.amount
                 });
-                log.info(`[WEBHOOK] ✅ WijayaPay order ${parsed.orderId} verified & paid`);
+                log.info(`[PAYMENT] provider=wijayapay event=verified order=${parsed.orderId} status=paid`);
             } else {
                 log.warn(`[WEBHOOK] ❌ WijayaPay ${parsed.orderId} NOT verified (status: ${apiCheck.status})`);
                 return res.status(400).json({ status: false, error: 'Transaction not verified' });

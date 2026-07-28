@@ -67,26 +67,36 @@ const writeToFile = (level, message) => {
     }
 };
 
+// Paksa satu event = satu baris. Payload upstream kadang berisi tutorial multiline;
+// tanpa sanitasi, satu log entry terlihat seperti puluhan baris dan sulit dibaca.
+const oneLine = (value) => String(value).replace(/\s+/g, ' ').trim();
+
+const stringifyArg = (value, includeStack = false) => {
+    if (value instanceof Error) {
+        return oneLine(includeStack && value.stack ? `${value.message} | ${value.stack}` : value.message);
+    }
+    if (typeof value === 'object' && value !== null) {
+        try { return oneLine(JSON.stringify(value)); } catch (e) { return '[unserializable object]'; }
+    }
+    return oneLine(value);
+};
+
 // Logger methods
 const logger = {
     info: (...args) => {
-        const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+        const msg = args.map(a => stringifyArg(a)).join(' ');
         console.log(msg);
         writeToFile('INFO', msg);
     },
 
     warn: (...args) => {
-        const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+        const msg = args.map(a => stringifyArg(a)).join(' ');
         console.warn(msg);
         writeToFile('WARN', msg);
     },
 
     error: (...args) => {
-        const msg = args.map(a => {
-            if (a instanceof Error) return `${a.message}\n${a.stack}`;
-            if (typeof a === 'object') return JSON.stringify(a);
-            return String(a);
-        }).join(' ');
+        const msg = args.map(a => stringifyArg(a, true)).join(' ');
         console.error(msg);
         writeToFile('ERROR', msg);
     }

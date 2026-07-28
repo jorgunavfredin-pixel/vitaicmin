@@ -70,11 +70,13 @@ const createQRIS = async (orderId, amount, creds = {}) => {
             timeout: 15000
         });
 
-        log.info('[WIJAYAPAY] Create response:', JSON.stringify(response.data));
-
         const body = response.data || {};
         const data = body.data || body;
         const qrString = data.qr_string || data.qris_string;
+
+        log.info(`[PAYMENT] provider=wijayapay event=create order=${data.ref_id || orderId} ` +
+            `amount=${data.total_bayar || amount} fee=${data.total_fee || 0} ` +
+            `reference=${data.trx_reference || '-'} expired=${data.expired || '-'}`);
 
         if (body.success !== false && qrString) {
             return {
@@ -93,7 +95,8 @@ const createQRIS = async (orderId, amount, creds = {}) => {
         }
         return { success: false, error: body.message || body.error || 'Gagal membuat QRIS WijayaPay' };
     } catch (error) {
-        log.error('[WIJAYAPAY] Create error:', error.response?.data || error.message);
+        log.error(`[PAYMENT] provider=wijayapay event=create_failed order=${orderId} ` +
+            `http=${error.response?.status || '-'} error=${error.response?.data?.message || error.message}`);
         return { success: false, error: error.response?.data?.message || error.message };
     }
 };
@@ -110,9 +113,10 @@ const checkStatus = async (orderId, amount, creds = {}) => {
             params: { code_merchant: codeMerchant, api_key: apiKey, ref_id: String(orderId) },
             timeout: 10000
         });
-        log.info('[WIJAYAPAY] Status check:', JSON.stringify(response.data));
         const body = response.data || {};
         const raw = body.status_pembayaran || body.status || body.data?.status_pembayaran || body.data?.status;
+        log.info(`[PAYMENT] provider=wijayapay event=status order=${orderId} status=${normalizeStatus(raw)} ` +
+            `reference=${body.data?.trx_reference || '-'}`);
         if (raw) return { success: true, status: normalizeStatus(raw) };
         return { success: false, error: 'Status tidak ditemukan' };
     } catch (error) {
