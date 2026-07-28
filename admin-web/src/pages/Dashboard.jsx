@@ -14,6 +14,15 @@ const PERIODS = [
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const compact = (n) => new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(n || 0);
 
+export function RevenueBreakdown({ month, allTime }) {
+  return (
+    <div className="stat-breakdown">
+      <div className="stat-breakdown-row"><span>Bulan ini</span><b>{rupiah(month)}</b></div>
+      <div className="stat-breakdown-row"><span>All time</span><b>{rupiah(allTime)}</b></div>
+    </div>
+  );
+}
+
 const STATUS = {
   pending: { label: 'Pending', cls: 'st-pending' },
   paid: { label: 'Dibayar', cls: 'st-paid' },
@@ -72,7 +81,7 @@ export default function Dashboard() {
   return (
     <div className="dash">
       <div className="stat-grid">
-        <StatCard accent="green" icon="cash" label="Omzet Hari Ini" value={rupiah(c.revenueToday)} sub={`Bulan ini: ${rupiah(c.revenueMonth)}`} />
+        <StatCard accent="green" icon="cash" label="Omzet Hari Ini" value={rupiah(c.revenueToday)} sub={<RevenueBreakdown month={c.revenueMonth} allTime={c.revenueAllTime} />} />
         <StatCard accent="blue" icon="receipt" label="Total Order" value={compact(c.ordersTotal)} sub={`${c.ordersPending} pending • ${c.ordersSuccess} sukses`} />
         <StatCard accent="violet" icon="check" label="Success Rate" value={`${c.successRate}%`} sub={`${c.ordersSuccess} order berhasil`} />
         <StatCard accent="amber" icon="users" label="Total User" value={compact(c.totalUsers)} sub={`${c.totalProducts} produk aktif`} />
