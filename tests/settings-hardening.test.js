@@ -178,3 +178,44 @@ test('cleanup QRIS processing expired dan active topup detection', () => {
   `);
   assert.deepEqual(out, { recovered: 1, status: 'cancelled', reserved: 0, active: true });
 });
+
+test('voucher hold mencegah user memakai kode sama di dua order', () => {
+  const out = runScenario(`
+    db.createVoucher({code:'HEMAT',type:'percent',value:10});
+    const a=db.createOrder({user_id:'1',product_id:'P',quantity:1,total_idr:1000,status:'init'});
+    const b=db.createOrder({user_id:'1',product_id:'P',quantity:1,total_idr:1000,status:'init'});
+    const first=db.claimVoucherHold('HEMAT','1',a.id);
+    const duplicate=db.claimVoucherHold('HEMAT','1',b.id);
+    const released=db.releaseVoucherHold(a.id);
+    const afterRelease=db.claimVoucherHold('HEMAT','1',b.id);
+    console.log(JSON.stringify({first,duplicate,released,afterRelease}));
+  `);
+  assert.deepEqual(out, { first: true, duplicate: false, released: true, afterRelease: true });
+});
+
+test('product settlement mengubah voucher hold menjadi redemption atomik', () => {
+  const out = runScenario(`
+    db._db.prepare("INSERT INTO products (id,name_id,stock_mode,active,created_at) VALUES ('PV','Produk','limited',1,?)").run(new Date().toISOString());
+    db._db.prepare("INSERT INTO stock (id,product_id,data,sold,added_at) VALUES ('SV','PV','credential',0,?)").run(new Date().toISOString());
+    db.createVoucher({code:'SAVE',type:'percent',value:10});
+    const order=db.createOrder({user_id:'9',product_id:'PV',quantity:1,total_idr:900,status:'pending'});
+    db.updateOrder(order.id,{voucher_code:'SAVE'}); db.claimVoucherHold('SAVE','9',order.id); db.reserveStock('PV',1,order.id); db.claimOrderForDelivery(order.id);
+    const ok=db.completeProductOrder(order.id,['SV'],['credential']);
+    const holds=db._db.prepare('SELECT COUNT(*) n FROM voucher_holds WHERE order_id=?').get(order.id).n;
+    const redeemed=db.hasUserRedeemedVoucher('SAVE','9');
+    console.log(JSON.stringify({ok,holds,redeemed,status:db.getOrderById(order.id).status}));
+  `);
+  assert.deepEqual(out, { ok: true, holds: 0, redeemed: true, status: 'delivered' });
+});
+
+test('expired voucher holds dipurge ringan', () => {
+  const out = runScenario(`
+    db.createVoucher({code:'OLD',type:'fixed',value:100});
+    const o=db.createOrder({user_id:'3',product_id:'P',quantity:1,total_idr:1000,status:'init'});
+    db.claimVoucherHold('OLD','3',o.id,'2000-01-01T00:00:00.000Z');
+    const purged=db.purgeExpiredVoucherHolds();
+    const left=db._db.prepare('SELECT COUNT(*) n FROM voucher_holds').get().n;
+    console.log(JSON.stringify({purged,left}));
+  `);
+  assert.deepEqual(out, { purged: 1, left: 0 });
+});

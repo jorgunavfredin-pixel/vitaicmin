@@ -47,8 +47,10 @@ bot.telegram.setMyCommands([
 
 // ==================== RATE LIMITER ====================
 const rateLimitMap = new Map();
+const paymentActionMap = new Map();
 const RATE_LIMIT_MAX = 30;       // max messages
 const RATE_LIMIT_WINDOW = 60000; // per 60 seconds
+const PAYMENT_ACTION_COOLDOWN = 2500;
 
 bot.use(async (ctx, next) => {
     if (!ctx.from) return next();
@@ -59,6 +61,17 @@ bot.use(async (ctx, next) => {
     if (adminIds.includes(userId)) return next();
 
     const now = Date.now();
+    const callbackData = ctx.callbackQuery?.data || '';
+    const expensivePaymentAction = /^(pay_qris_|pay_qgw_|pay_check_|pay_saldo_|topup_qgw_|topup_check_)/.test(callbackData);
+    if (expensivePaymentAction) {
+        const key = `${userId}:${callbackData}`;
+        const last = paymentActionMap.get(key) || 0;
+        if (now - last < PAYMENT_ACTION_COOLDOWN) {
+            try { await ctx.answerCbQuery('⏳ Mohon tunggu sebentar…'); } catch (_) { }
+            return;
+        }
+        paymentActionMap.set(key, now);
+    }
     const userData = rateLimitMap.get(userId) || { timestamps: [], warned: false };
 
     // Remove old timestamps outside window
@@ -75,7 +88,8 @@ bot.use(async (ctx, next) => {
                 const msg = lang === 'en'
                     ? '⚠️ Too many messages! Please wait a moment.'
                     : '⚠️ Terlalu banyak pesan! Harap tunggu sebentar.';
-                await ctx.reply(msg);
+                if (ctx.callbackQuery) await ctx.answerCbQuery(msg, { show_alert: true });
+                else await ctx.reply(msg);
             } catch (e) { }
         }
         return; // Drop the message
@@ -95,6 +109,9 @@ setInterval(() => {
     for (const [userId, data] of rateLimitMap) {
         data.timestamps = data.timestamps.filter(t => now - t < RATE_LIMIT_WINDOW);
         if (data.timestamps.length === 0) rateLimitMap.delete(userId);
+    }
+    for (const [key, timestamp] of paymentActionMap) {
+        if (now - timestamp > RATE_LIMIT_WINDOW) paymentActionMap.delete(key);
     }
 }, 5 * 60 * 1000);
 

@@ -501,7 +501,8 @@ const registerMenuHandler = (bot) => {
             chatId: ctx.chat.id,
             checkoutMessageId,
             promptMessageId: promptMsg.message_id,
-            categoryId: product.category_id
+            categoryId: product.category_id,
+            expiresAt: Date.now() + 10 * 60 * 1000
         });
     });
 
@@ -510,6 +511,12 @@ const registerMenuHandler = (bot) => {
         const userId = ctx.from.id.toString();
         const state = qtyInputStates.get(userId);
         if (!state) return next();
+        const isPromptReply = ctx.message.reply_to_message?.message_id === state.promptMessageId;
+        if (state.expiresAt <= Date.now()) {
+            qtyInputStates.delete(userId);
+            return next();
+        }
+        if (String(ctx.chat.id) !== String(state.chatId) || !isPromptReply) return next();
 
         const raw = ctx.message.text.trim();
         // Only consume pure numbers; anything else falls through to other handlers

@@ -403,8 +403,7 @@ ${warrantyHtml}
         );
         if (!settled) throw new Error('PRODUCT_SETTLEMENT_FAILED');
 
-        // Record voucher redemption only after Telegram delivery + DB settlement.
-        if (order.voucher_code) db.redeemVoucher(order.voucher_code, order.user_id, orderId);
+        // Voucher hold → redemption is committed inside completeProductOrder().
 
         // Update ORDER MASUK status to ✅ Completed
         const { updateOrderMasukCompleted } = require('../handlers/order');

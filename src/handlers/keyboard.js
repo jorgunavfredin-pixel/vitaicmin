@@ -116,6 +116,10 @@ const registerKeyboardHandler = (bot) => {
     // H4: drop stale topup state whenever the user taps another menu button,
     // so a leaked state never swallows voucher/admin text input later.
     const clearTopupState = (ctx) => { if (ctx.from) topupInputStates.delete(ctx.from.id.toString()); };
+    const setTopupInputState = (ctx, userId) => topupInputStates.set(userId, {
+        chatId: ctx.chat.id,
+        expiresAt: Date.now() + 10 * 60 * 1000
+    });
 
     // List Produk - show numbered category list
     bot.hears(['🛒 List Produk', '🛒 Products'], async (ctx) => {
@@ -609,7 +613,7 @@ const registerKeyboardHandler = (bot) => {
         }
 
         const qrisEnabled = db.getSettings().qris_enabled;
-        if (qrisEnabled) topupInputStates.set(userId, true);
+        if (qrisEnabled) setTopupInputState(ctx, userId);
         else topupInputStates.delete(userId);
 
         const minDisplay = lang === 'en' ? '$0.06' : 'Rp 1.000';
@@ -669,8 +673,14 @@ const registerKeyboardHandler = (bot) => {
     // Text handler for custom topup amount
     bot.on('text', async (ctx, next) => {
         const userId = ctx.from.id.toString();
+        const state = topupInputStates.get(userId);
 
-        if (!topupInputStates.has(userId)) return next();
+        if (!state) return next();
+        if (state.expiresAt <= Date.now()) {
+            topupInputStates.delete(userId);
+            return next();
+        }
+        if (String(ctx.chat.id) !== String(state.chatId)) return next();
 
         const lang = db.getUserLanguage(userId);
 
@@ -877,7 +887,7 @@ const registerKeyboardHandler = (bot) => {
             balanceDisplay = `Rp ${formatIDR(balance)}`;
         }
 
-        topupInputStates.set(userId, true);
+        setTopupInputState(ctx, userId);
 
         const minDisplay = lang === 'en' ? '$0.06' : 'Rp 1.000';
 
@@ -906,7 +916,7 @@ const registerKeyboardHandler = (bot) => {
             balanceDisplay = `Rp ${formatIDR(balance)}`;
         }
 
-        topupInputStates.set(userId, true);
+        setTopupInputState(ctx, userId);
 
         const minDisplay = lang === 'en' ? '$0.06' : 'Rp 1.000';
 

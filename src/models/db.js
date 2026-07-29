@@ -204,6 +204,16 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_vred_user ON voucher_redemptions(user_id);
 
+  CREATE TABLE IF NOT EXISTS voucher_holds (
+    voucher_code TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    order_id TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(voucher_code, user_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_vhold_expiry ON voucher_holds(expires_at);
+
   CREATE TABLE IF NOT EXISTS payment_gateways (
     id TEXT PRIMARY KEY,
     provider TEXT,
@@ -576,10 +586,12 @@ const recoverStaleQrisProcessing = (nowIso = new Date().toISOString()) => db.tra
   const rows = db.prepare(`SELECT id FROM orders WHERE status = 'processing' AND payment_method = 'qris'
     AND expires_at IS NOT NULL AND expires_at <= ?`).all(nowIso);
   const release = db.prepare('UPDATE stock SET reserved_by = NULL, reserved_at = NULL WHERE reserved_by = ? AND sold = 0');
+  const releaseVoucher = db.prepare('DELETE FROM voucher_holds WHERE order_id = ?');
   const cancel = db.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ? AND status = 'processing'");
   let recovered = 0;
   for (const row of rows) {
     release.run(row.id);
+    releaseVoucher.run(row.id);
     recovered += cancel.run(row.id).changes;
   }
   return recovered;
@@ -711,6 +723,14 @@ const completeProductOrder = (orderId, stockIds, deliveredData, paymentProof = n
   const sell = db.prepare('UPDATE stock SET sold = 1, sold_to = ?, sold_at = ?, order_id = ? WHERE id = ? AND sold = 0 AND reserved_by = ?');
   for (const id of ids) {
     if (sell.run(order.user_id, now, order.id, id, order.id).changes !== 1) throw new Error('STOCK_SETTLEMENT_MISMATCH');
+  }
+  if (order.voucher_code) {
+    const hold = db.prepare('SELECT 1 FROM voucher_holds WHERE voucher_code = UPPER(?) AND user_id = ? AND order_id = ?').get(order.voucher_code, order.user_id, order.id);
+    if (!hold) throw new Error('VOUCHER_HOLD_MISSING');
+    const redemptionId = `VRD-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    db.prepare('INSERT INTO voucher_redemptions (id,voucher_code,user_id,order_id,redeemed_at) VALUES (?,UPPER(?),?,?,?)')
+      .run(redemptionId, order.voucher_code, order.user_id, order.id, now);
+    db.prepare('DELETE FROM voucher_holds WHERE order_id = ?').run(order.id);
   }
   const result = db.prepare(`UPDATE orders SET status = 'delivered', paid_at = ?, delivered_at = ?,
     payment_proof = ?, stock_ids = ?, delivered_data = ? WHERE id = ? AND status = 'processing_delivery'`)
@@ -891,6 +911,35 @@ const calculateDiscount = (totalIDR, voucher) => {
 const hasUserRedeemedVoucher = (code, userId) => {
   const r = db.prepare('SELECT 1 FROM voucher_redemptions WHERE voucher_code = UPPER(?) AND user_id = ?').get(code, userId);
   return !!r;
+};
+
+const claimVoucherHold = (code, userId, orderId, expiresAt) => db.transaction(() => {
+  const voucherCode = String(code || '').trim().toUpperCase();
+  const uid = String(userId);
+  const now = new Date().toISOString();
+  db.prepare('DELETE FROM voucher_holds WHERE expires_at <= ?').run(now);
+  if (hasUserRedeemedVoucher(voucherCode, uid)) return false;
+  const existing = db.prepare('SELECT order_id FROM voucher_holds WHERE voucher_code = ? AND user_id = ?').get(voucherCode, uid);
+  if (existing) return existing.order_id === orderId;
+  const expiry = expiresAt || new Date(Date.now() + 30 * 60 * 1000).toISOString();
+  try {
+    db.prepare(`INSERT INTO voucher_holds (voucher_code,user_id,order_id,expires_at,created_at)
+      VALUES (?,?,?,?,?)`).run(voucherCode, uid, orderId, expiry, now);
+    return true;
+  } catch (_) { return false; }
+})();
+
+const releaseVoucherHold = (orderId) => {
+  return db.prepare('DELETE FROM voucher_holds WHERE order_id = ?').run(orderId).changes > 0;
+};
+
+const refreshVoucherHold = (orderId, expiresAt) => {
+  if (!expiresAt) return false;
+  return db.prepare('UPDATE voucher_holds SET expires_at = ? WHERE order_id = ?').run(expiresAt, orderId).changes > 0;
+};
+
+const purgeExpiredVoucherHolds = (nowIso = new Date().toISOString()) => {
+  return db.prepare('DELETE FROM voucher_holds WHERE expires_at <= ?').run(nowIso).changes;
 };
 
 // Record a redemption at payment success. Returns false if this user already redeemed the code.
@@ -1188,7 +1237,7 @@ module.exports = {
   // Stats
   getStats, getDetailedStats, getTopSpenders, getSoldQtyByProduct,
   // Vouchers
-  getVouchers, getVoucherByCode, createVoucher, useVoucher, deleteVoucher, calculateDiscount, hasUserRedeemedVoucher, redeemVoucher,
+  getVouchers, getVoucherByCode, createVoucher, useVoucher, deleteVoucher, calculateDiscount, hasUserRedeemedVoucher, redeemVoucher, claimVoucherHold, releaseVoucherHold, refreshVoucherHold, purgeExpiredVoucherHolds,
   // Settings
   getSettings, updateSettings, getConfig, backupDatabase,
   // Payment Gateways

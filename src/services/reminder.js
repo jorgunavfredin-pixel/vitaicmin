@@ -49,6 +49,7 @@ const checkPendingOrders = async () => {
     const now = new Date();
     const recovered = db.recoverStaleQrisProcessing(now.toISOString());
     if (recovered) log.warn(`[RECOVERY] cancelled ${recovered} stale QRIS processing order(s) and released stock`);
+    db.purgeExpiredVoucherHolds(now.toISOString());
     const pendingOrders = db.getPendingOrders();
 
     for (const order of pendingOrders) {
@@ -150,6 +151,7 @@ const handleOrderExpired = async (order) => {
 
         // Release reserved stock
         db.releaseReservedStock(order.id);
+        db.releaseVoucherHold(order.id);
 
         // Update order status
         db.updateOrder(order.id, { status: 'expired' });
@@ -190,6 +192,7 @@ const cancelOrder = async (orderId) => {
 
         // Release reserved stock
         db.releaseReservedStock(orderId);
+        db.releaseVoucherHold(orderId);
 
         // Update order status
         db.updateOrder(orderId, { status: 'cancelled' });

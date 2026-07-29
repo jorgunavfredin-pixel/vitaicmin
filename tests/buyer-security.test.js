@@ -46,3 +46,17 @@ test('callback sensitif memakai centralized ownership guard dan quantity validat
   }
   assert.match(order, /Number\.isInteger\(quantity\).*quantity < 1.*quantity > 999/s);
 });
+
+test('input state memiliki TTL/chat binding dan payment callback punya cooldown', () => {
+  const root = path.join(__dirname, '..');
+  const menu = fs.readFileSync(path.join(root, 'src/handlers/menu.js'), 'utf8');
+  const order = fs.readFileSync(path.join(root, 'src/handlers/order.js'), 'utf8');
+  const keyboard = fs.readFileSync(path.join(root, 'src/handlers/keyboard.js'), 'utf8');
+  const index = fs.readFileSync(path.join(root, 'src/index.js'), 'utf8');
+  assert.match(menu, /expiresAt: Date\.now\(\) \+ 10 \* 60 \* 1000/);
+  assert.match(menu, /reply_to_message\?\.message_id === state\.promptMessageId/);
+  assert.match(order, /voucherStates\.set\(userId, \{[\s\S]*chatId:[\s\S]*expiresAt:/);
+  assert.match(keyboard, /setTopupInputState[\s\S]*expiresAt:/);
+  assert.match(index, /PAYMENT_ACTION_COOLDOWN/);
+  assert.match(index, /ctx\.answerCbQuery\(msg, \{ show_alert: true \}\)/);
+});

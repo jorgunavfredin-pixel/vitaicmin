@@ -198,6 +198,7 @@ const registerOrderHandler = (bot) => {
 
         // Siapkan method + expiry; status tetap processing sampai QR berhasil dibuat.
         const expiresAt = getExpirationTime('qris');
+        db.refreshVoucherHold(orderId, expiresAt.toISOString());
         db.updateOrder(orderId, {
             status: 'processing',
             payment_method: 'qris',
@@ -209,6 +210,7 @@ const registerOrderHandler = (bot) => {
         if (prodForReserve && prodForReserve.stock_mode !== 'unlimited') {
             const reserved = db.reserveStock(order.product_id, order.quantity, orderId);
             if (!reserved) {
+                db.releaseVoucherHold(orderId);
                 db.updateOrder(orderId, { status: 'cancelled' });
                 try { await ctx.deleteMessage(); } catch (e) { }
                 const errMsg = lang === 'en'
@@ -237,6 +239,7 @@ const registerOrderHandler = (bot) => {
         if (!qrisResult.success) {
             console.error('[ORDER] QRIS creation failed:', qrisResult.error);
             db.releaseReservedStock(orderId);
+            db.releaseVoucherHold(orderId);
             db.updateOrder(orderId, { status: 'cancelled' });
             try { await ctx.deleteMessage(); } catch (e) { }
             const errMsg = lang === 'en'
@@ -348,10 +351,12 @@ const registerOrderHandler = (bot) => {
 
         // If order is still in 'init' stage (at confirmation), delete it entirely
         if (order.status === 'init') {
+            db.releaseVoucherHold(orderId);
             db.deleteOrder(orderId); // Completely remove from DB
         } else {
             // If already pending (payment method selected), release reserved stock + cancel
             db.releaseReservedStock(orderId);
+            db.releaseVoucherHold(orderId);
             db.updateOrder(orderId, { status: 'cancelled' });
         }
 
@@ -412,6 +417,7 @@ const registerOrderHandler = (bot) => {
         if (product && product.stock_mode !== 'unlimited') {
             const stockCount = db.getAvailableStockCount(order.product_id);
             if (stockCount < order.quantity) {
+                db.releaseVoucherHold(orderId);
                 db.updateOrder(orderId, { status: 'cancelled' });
                 try { await ctx.deleteMessage(); } catch (e) { }
                 const errMsg = lang === 'en'
@@ -480,19 +486,22 @@ const registerOrderHandler = (bot) => {
 
         await ctx.answerCbQuery();
 
-        // Set voucher input state
-        voucherStates.set(userId, orderId);
-
         const prompt = lang === 'en'
             ? '🎟️ *Apply Voucher*\n\nType your voucher code below:'
             : '🎟️ *Pakai Voucher*\n\nKetik kode voucher kamu di bawah:';
 
         try { await ctx.deleteMessage(); } catch (e) { }
-        await ctx.reply(prompt, {
+        const promptMsg = await ctx.reply(prompt, {
             parse_mode: 'Markdown',
             reply_markup: {
                 inline_keyboard: [[{ text: lang === 'en' ? '✘ Cancel' : '✘ Batal', callback_data: `voucher_cancel_${orderId}` }]]
             }
+        });
+        voucherStates.set(userId, {
+            orderId,
+            chatId: ctx.chat.id,
+            promptMessageId: promptMsg.message_id,
+            expiresAt: Date.now() + 10 * 60 * 1000
         });
     });
 
@@ -530,6 +539,7 @@ const registerOrderHandler = (bot) => {
         }
 
         if (order.voucher_code) {
+            db.releaseVoucherHold(orderId);
             // Restore original totals and clear voucher fields (voucher was never consumed)
             db.updateOrder(orderId, {
                 voucher_code: null,
@@ -556,9 +566,15 @@ const registerOrderHandler = (bot) => {
     // Text handler for voucher code input
     bot.on('text', async (ctx, next) => {
         const userId = ctx.from.id.toString();
-        const orderId = voucherStates.get(userId);
+        const state = voucherStates.get(userId);
 
-        if (!orderId) return next();
+        if (!state) return next();
+        if (state.expiresAt <= Date.now()) {
+            voucherStates.delete(userId);
+            return next();
+        }
+        if (String(ctx.chat.id) !== String(state.chatId)) return next();
+        const orderId = state.orderId;
 
         const lang = db.getUserLanguage(userId);
         const code = ctx.message.text.trim().toUpperCase();
@@ -595,6 +611,14 @@ const registerOrderHandler = (bot) => {
         // SUCCESS: voucher hanya boleh mengubah draft order milik user ini.
         const order = getOwnedOrder(ctx, orderId, { statuses: ['init'] });
         if (!order) return rejectOrderAccess(ctx, lang);
+
+        if (!db.claimVoucherHold(code, userId, orderId)) {
+            const msg = lang === 'en'
+                ? '❌ This voucher is already held or redeemed by another order.'
+                : '❌ Voucher ini sedang dipakai atau sudah digunakan di order lain.';
+            await ctx.reply(msg);
+            return;
+        }
 
         const discountAmount = db.calculateDiscount(order.total_idr, voucher);
         const finalPrice = order.total_idr - discountAmount;
