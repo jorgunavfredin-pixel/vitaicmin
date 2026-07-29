@@ -112,6 +112,7 @@ const registerKeyboardHandler = (bot) => {
     // Store topup input states (userId -> true). Declared up-front so the menu
     // navigation handlers below can clear it when the user leaves the Saldo menu.
     const topupInputStates = new Map();
+    const topupCreationLocks = new Set();
     // H4: drop stale topup state whenever the user taps another menu button,
     // so a leaked state never swallows voucher/admin text input later.
     const clearTopupState = (ctx) => { if (ctx.from) topupInputStates.delete(ctx.from.id.toString()); };
@@ -793,8 +794,21 @@ const registerKeyboardHandler = (bot) => {
         if (!selected) {
             return ctx.answerCbQuery(lang === 'en' ? 'This QRIS gateway is no longer active.' : 'Gateway QRIS ini sudah tidak aktif.', { show_alert: true });
         }
-        await ctx.answerCbQuery(lang === 'en' ? 'Creating QRIS...' : 'Membuat QRIS...');
-        await processTopup(ctx, userId, amount, lang, gatewayId);
+        const activeTopup = db.getActiveTopupOrderByUser(userId);
+        if (activeTopup || topupCreationLocks.has(userId)) {
+            const message = lang === 'en'
+                ? `A top up invoice is already active${activeTopup ? `: ${activeTopup.id}` : ''}.`
+                : `Invoice topup masih aktif${activeTopup ? `: ${activeTopup.id}` : ''}.`;
+            return ctx.answerCbQuery(message, { show_alert: true });
+        }
+
+        topupCreationLocks.add(userId);
+        await ctx.answerCbQuery(lang === 'en' ? 'Processing QR...' : 'Memproses QR...');
+        try {
+            await processTopup(ctx, userId, amount, lang, gatewayId);
+        } finally {
+            topupCreationLocks.delete(userId);
+        }
     });
 
     // Deposit History

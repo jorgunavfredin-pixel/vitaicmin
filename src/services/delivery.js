@@ -267,27 +267,18 @@ const handlePaymentSuccess = async (bot, orderId, paymentData = {}) => {
                 db.releaseOrderDeliveryClaim(orderId);
                 return false;
             }
-            stockToDeliver = availableStock.slice(0, order.quantity);
+            if (product.stock_mode !== 'unlimited') {
+                const reserved = db.reserveStock(order.product_id, order.quantity, orderId);
+                if (!reserved) {
+                    db.releaseOrderDeliveryClaim(orderId);
+                    return false;
+                }
+                stockToDeliver = db.getReservedStock(orderId).slice(0, order.quantity);
+            } else {
+                stockToDeliver = availableStock.slice(0, order.quantity);
+            }
         }
         const stockIds = stockToDeliver.map(s => s.id);
-
-        // Mark stock as sold
-        db.markStockAsSold(stockIds, order.user_id, orderId);
-
-        // Update order to delivered
-        db.updateOrder(orderId, {
-            status: 'delivered',
-            paid_at: new Date().toISOString(),
-            delivered_at: new Date().toISOString(),
-            payment_proof: paymentData.txHash || paymentData.transaction_id || null,
-            stock_ids: stockIds,
-            delivered_data: stockToDeliver.map(s => s.data)
-        });
-
-        // Record voucher redemption ONLY now that payment succeeded (per-user single use).
-        if (order.voucher_code) {
-            db.redeemVoucher(order.voucher_code, order.user_id, orderId);
-        }
 
         // Get user language
         const lang = db.getUserLanguage(order.user_id);
@@ -318,7 +309,8 @@ const handlePaymentSuccess = async (bot, orderId, paymentData = {}) => {
 
         const FILE_THRESHOLD = 20;
 
-        if (order.quantity > FILE_THRESHOLD) {
+        // Telegram receipt prevents duplicate credential delivery after a crash/retry.
+        if (!order.delivery_message_id && order.quantity > FILE_THRESHOLD) {
             // === LARGE ORDER: send accounts as .txt file ===
             const fs = require('fs');
             const path = require('path');
@@ -362,19 +354,17 @@ ${warrantyHtml}
 
             await bot.telegram.sendMessage(order.chat_id || order.user_id, chatMessage, { parse_mode: 'HTML', message_effect_id: '5046509860389126442' });
 
-            // Send .txt file
-            await bot.telegram.sendDocument(order.chat_id || order.user_id, {
+            // Send .txt file and persist Telegram receipt before final DB settlement.
+            const sentDocument = await bot.telegram.sendDocument(order.chat_id || order.user_id, {
                 source: filePath,
                 filename: `${orderId}.txt`
             });
+            db.updateOrder(orderId, { delivery_message_id: sentDocument.message_id });
 
             // Cleanup temp file
             try { fs.unlinkSync(filePath); } catch (e) { }
 
-            // Save delivery message ID
-            db.updateOrder(orderId, { delivery_message_id: null });
-
-        } else {
+        } else if (!order.delivery_message_id) {
             // === NORMAL ORDER: send accounts in message ===
             const title = lang === 'en' ? '🎉 <b>PAYMENT SUCCESSFUL</b>' : '🎉 <b>PEMBAYARAN BERHASIL</b>';
             const l = lang === 'en' ? {
@@ -404,6 +394,17 @@ ${warrantyHtml}
             const sentDelivery = await bot.telegram.sendMessage(order.chat_id || order.user_id, combinedMessage, { parse_mode: 'HTML', message_effect_id: '5046509860389126442' });
             db.updateOrder(orderId, { delivery_message_id: sentDelivery.message_id });
         }
+
+        const settled = db.completeProductOrder(
+            orderId,
+            stockIds,
+            stockToDeliver.map(s => s.data),
+            paymentData.txHash || paymentData.transaction_id || null
+        );
+        if (!settled) throw new Error('PRODUCT_SETTLEMENT_FAILED');
+
+        // Record voucher redemption only after Telegram delivery + DB settlement.
+        if (order.voucher_code) db.redeemVoucher(order.voucher_code, order.user_id, orderId);
 
         // Update ORDER MASUK status to ✅ Completed
         const { updateOrderMasukCompleted } = require('../handlers/order');

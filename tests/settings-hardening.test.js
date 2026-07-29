@@ -134,3 +134,47 @@ test('polling queue hanya QRIS pending valid dan terikat gateway', () => {
   `);
   assert.deepEqual(out.ids, [out.good]);
 });
+
+test('reservasi stok atomik dan idempotent per order', () => {
+  const out = runScenario(`
+    db._db.prepare("INSERT INTO products (id,name_id,stock_mode,active,created_at) VALUES ('P','Produk','limited',1,?)").run(new Date().toISOString());
+    db._db.prepare("INSERT INTO stock (id,product_id,data,sold,added_at) VALUES ('S1','P','a',0,?),('S2','P','b',0,?)").run(new Date().toISOString(),new Date().toISOString());
+    const a=db.reserveStock('P',2,'ORDER-A'); const again=db.reserveStock('P',2,'ORDER-A'); const b=db.reserveStock('P',1,'ORDER-B');
+    console.log(JSON.stringify({a,again,b,reserved:db.getReservedStock('ORDER-A').length}));
+  `);
+  assert.equal(out.a.length, 2);
+  assert.deepEqual(out.again, out.a);
+  assert.equal(out.b, null);
+  assert.equal(out.reserved, 2);
+});
+
+test('product settlement mengubah stok dan order dalam satu transaksi', () => {
+  const out = runScenario(`
+    db._db.prepare("INSERT INTO products (id,name_id,stock_mode,active,created_at) VALUES ('P','Produk','limited',1,?)").run(new Date().toISOString());
+    db._db.prepare("INSERT INTO stock (id,product_id,data,sold,added_at) VALUES ('S1','P','credential',0,?)").run(new Date().toISOString());
+    const order=db.createOrder({user_id:'1',product_id:'P',quantity:1,total_idr:1000,status:'pending'});
+    db.reserveStock('P',1,order.id); db.claimOrderForDelivery(order.id);
+    const before=db.getOrderById(order.id).status; const ok=db.completeProductOrder(order.id,['S1'],['credential'],'TX');
+    const after=db.getOrderById(order.id); const stock=db._db.prepare("SELECT sold,order_id FROM stock WHERE id='S1'").get();
+    console.log(JSON.stringify({before,ok,status:after.status,proof:after.payment_proof,sold:stock.sold,stockOrder:stock.order_id,orderId:order.id}));
+  `);
+  assert.equal(out.before, 'processing_delivery');
+  assert.equal(out.ok, true);
+  assert.equal(out.status, 'delivered');
+  assert.equal(out.proof, 'TX');
+  assert.equal(out.sold, 1);
+  assert.equal(out.stockOrder, out.orderId);
+});
+
+test('cleanup QRIS processing expired dan active topup detection', () => {
+  const out = runScenario(`
+    db._db.prepare("INSERT INTO products (id,name_id,stock_mode,active,created_at) VALUES ('P','Produk','limited',1,?)").run(new Date().toISOString());
+    db._db.prepare("INSERT INTO stock (id,product_id,data,sold,added_at) VALUES ('S1','P','a',0,?)").run(new Date().toISOString());
+    const stale=db.createOrder({user_id:'1',product_id:'P',quantity:1,total_idr:1000,status:'processing',payment_method:'qris',expires_at:'2000-01-01T00:00:00.000Z'});
+    db.reserveStock('P',1,stale.id);
+    const topup=db.createOrder({user_id:'2',product_id:'TOPUP',quantity:1,total_idr:5000,status:'pending',payment_method:'qris'});
+    const recovered=db.recoverStaleQrisProcessing();
+    console.log(JSON.stringify({recovered,status:db.getOrderById(stale.id).status,reserved:db.getReservedStock(stale.id).length,active:db.getActiveTopupOrderByUser('2').id===topup.id}));
+  `);
+  assert.deepEqual(out, { recovered: 1, status: 'cancelled', reserved: 0, active: true });
+});

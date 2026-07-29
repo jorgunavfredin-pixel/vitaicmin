@@ -46,8 +46,10 @@ const initReminderService = (botInstance) => {
 const checkPendingOrders = async () => {
     if (!bot) return;
 
-    const pendingOrders = db.getPendingOrders();
     const now = new Date();
+    const recovered = db.recoverStaleQrisProcessing(now.toISOString());
+    if (recovered) log.warn(`[RECOVERY] cancelled ${recovered} stale QRIS processing order(s) and released stock`);
+    const pendingOrders = db.getPendingOrders();
 
     for (const order of pendingOrders) {
         const expiresAt = new Date(order.expires_at);

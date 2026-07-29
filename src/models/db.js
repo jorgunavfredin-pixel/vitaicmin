@@ -436,20 +436,33 @@ const getUnsoldUnreservedStock = (productId) => {
   return db.prepare('SELECT * FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NULL').all(productId);
 };
 
-const reserveStock = (productId, quantity, orderId) => {
-  const available = db.prepare('SELECT id FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NULL LIMIT ?').all(productId, quantity);
-  if (available.length < quantity) {
-    console.log(`[STOCK] Reserve failed for order ${orderId} — need ${quantity}, available ${available.length}`);
-    return null;
-  }
-  const update = db.prepare('UPDATE stock SET reserved_by = ?, reserved_at = ? WHERE id = ?');
+const reserveStockTxn = db.transaction((productId, quantity, orderId) => {
+  if (!Number.isInteger(quantity) || quantity < 1) return null;
+
+  // Idempotent retry: use this order's existing reservation first.
+  const existing = db.prepare('SELECT id FROM stock WHERE reserved_by = ? AND sold = 0 LIMIT ?').all(orderId, quantity);
+  if (existing.length >= quantity) return existing.map(s => s.id);
+
+  const need = quantity - existing.length;
+  const available = db.prepare('SELECT id FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NULL LIMIT ?').all(productId, need);
+  if (available.length < need) return null;
+
   const now = new Date().toISOString();
-  const batch = db.transaction(() => {
-    available.forEach(s => update.run(orderId, now, s.id));
-  });
-  batch();
-  console.log(`[STOCK] Reserved ${quantity} item(s) for order ${orderId}`);
-  return available.map(s => s.id);
+  const claim = db.prepare('UPDATE stock SET reserved_by = ?, reserved_at = ? WHERE id = ? AND sold = 0 AND reserved_by IS NULL');
+  for (const row of available) {
+    if (claim.run(orderId, now, row.id).changes !== 1) throw new Error('STOCK_RESERVATION_RACE');
+  }
+
+  const ids = [...existing.map(s => s.id), ...available.map(s => s.id)];
+  console.log(`[STOCK] Reserved ${ids.length} item(s) for order ${orderId}`);
+  return ids;
+});
+const reserveStock = (productId, quantity, orderId) => {
+  try { return reserveStockTxn(productId, quantity, orderId); }
+  catch (error) {
+    if (error.message === 'STOCK_RESERVATION_RACE') return null;
+    throw error;
+  }
 };
 
 const releaseReservedStock = (orderId) => {
@@ -552,6 +565,25 @@ const getPendingOrders = () => {
     reminder_sent: o.reminder_sent === 1
   }));
 };
+
+const getActiveTopupOrderByUser = (userId) => {
+  const row = db.prepare(`SELECT id FROM orders WHERE user_id = ? AND product_id = 'TOPUP'
+    AND status IN ('pending','processing','processing_delivery') ORDER BY created_at DESC LIMIT 1`).get(String(userId));
+  return row ? getOrderById(row.id) : null;
+};
+
+const recoverStaleQrisProcessing = (nowIso = new Date().toISOString()) => db.transaction(() => {
+  const rows = db.prepare(`SELECT id FROM orders WHERE status = 'processing' AND payment_method = 'qris'
+    AND expires_at IS NOT NULL AND expires_at <= ?`).all(nowIso);
+  const release = db.prepare('UPDATE stock SET reserved_by = NULL, reserved_at = NULL WHERE reserved_by = ? AND sold = 0');
+  const cancel = db.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ? AND status = 'processing'");
+  let recovered = 0;
+  for (const row of rows) {
+    release.run(row.id);
+    recovered += cancel.run(row.id).changes;
+  }
+  return recovered;
+})();
 
 // Bounded polling queue: hanya QRIS pending, belum expired, dan gateway pembuatnya jelas.
 const getPendingQRISOrders = (limit = 50) => {
@@ -668,6 +700,22 @@ const completeTopupOrder = (orderId) => db.transaction(() => {
     VALUES (?, ?, 'topup', ?, 'qris', ?, 'Topup via QRIS', ?, ?)`).run(`bal_${Date.now()}_${order.id}`, order.user_id, order.total_idr, order.id, balance, now);
   db.prepare("UPDATE orders SET status = 'delivered', paid_at = ?, delivered_at = ? WHERE id = ? AND status = 'processing_delivery'").run(now, now, order.id);
   return true;
+})();
+
+// Product settlement runs only AFTER Telegram accepted the buyer delivery.
+const completeProductOrder = (orderId, stockIds, deliveredData, paymentProof = null) => db.transaction(() => {
+  const order = db.prepare("SELECT * FROM orders WHERE id = ? AND product_id != 'TOPUP' AND status = 'processing_delivery'").get(orderId);
+  if (!order) return false;
+  const ids = Array.isArray(stockIds) ? stockIds : [];
+  const now = new Date().toISOString();
+  const sell = db.prepare('UPDATE stock SET sold = 1, sold_to = ?, sold_at = ?, order_id = ? WHERE id = ? AND sold = 0 AND reserved_by = ?');
+  for (const id of ids) {
+    if (sell.run(order.user_id, now, order.id, id, order.id).changes !== 1) throw new Error('STOCK_SETTLEMENT_MISMATCH');
+  }
+  const result = db.prepare(`UPDATE orders SET status = 'delivered', paid_at = ?, delivered_at = ?,
+    payment_proof = ?, stock_ids = ?, delivered_data = ? WHERE id = ? AND status = 'processing_delivery'`)
+    .run(now, now, paymentProof, JSON.stringify(ids), JSON.stringify(deliveredData || []), order.id);
+  return result.changes === 1;
 })();
 
 // ==================== USERS ====================
@@ -1134,7 +1182,7 @@ module.exports = {
   // Stock
   getStock, getStockByProduct, getAvailableStockCount, getUnsoldUnreservedStock, addStock, addBulkStock, markStockAsSold, restoreStock, deleteStock, clearProductStock, removeLastStock, reserveStock, releaseReservedStock, getReservedStock,
   // Orders
-  getOrders, getOrderById, getOrdersByUser, getPendingOrders, getPendingQRISOrders, generateOrderId, createOrder, updateOrder, deleteOrder, claimOrderForPayment, claimOrderForDelivery, releaseOrderDeliveryClaim, claimOrderForExpiry, releaseOrderExpiryClaim, recoverPaymentClaims, completeTopupOrder,
+  getOrders, getOrderById, getOrdersByUser, getPendingOrders, getPendingQRISOrders, getActiveTopupOrderByUser, recoverStaleQrisProcessing, generateOrderId, createOrder, updateOrder, deleteOrder, claimOrderForPayment, claimOrderForDelivery, releaseOrderDeliveryClaim, claimOrderForExpiry, releaseOrderExpiryClaim, recoverPaymentClaims, completeTopupOrder, completeProductOrder,
   // Users
   getUsers, getUser, createOrUpdateUser, setUserLanguage, getUserLanguage,
   // Stats
