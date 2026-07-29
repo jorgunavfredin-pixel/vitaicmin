@@ -1,6 +1,7 @@
 const db = require('../models/db');
 const { formatIDR, formatUSD, replacePlaceholders, buildPaymentConfirmation } = require('../utils/helpers');
 const { convertIDRtoUSD } = require('../payments/exchange');
+const { calculateBulkPrice } = require('../utils/bulkPricing');
 const { createQRISPayment, generateQRImageUrl } = require('../payments/qris');
 const { getExpirationTime } = require('../services/invoice');
 const {
@@ -13,54 +14,53 @@ const {
 
 async function generateCheckoutMessage(product, quantity, lang) {
     const effectivePrice = db.getEffectivePrice(product);
-    let totalIDR = effectivePrice * quantity;
-    let discountPercent = 0;
-    let discountAmount = 0;
-    let discountMinQty = 0;
-
-    // Apply qty discount only if NOT flash sale
-    if (!db.isFlashSaleActive(product) && product.qty_discounts) {
-        try {
-            const tiers = JSON.parse(product.qty_discounts);
-            if (Array.isArray(tiers) && tiers.length > 0) {
-                const sorted = tiers.sort((a, b) => b.min_qty - a.min_qty);
-                const match = sorted.find(t => quantity >= t.min_qty);
-                if (match) {
-                    discountPercent = match.percent;
-                    discountMinQty = match.min_qty;
-                    discountAmount = Math.floor(totalIDR * discountPercent / 100);
-                    totalIDR = totalIDR - discountAmount;
-                }
-            }
-        } catch (e) { }
-    }
+    const isFlash = db.isFlashSaleActive(product);
+    const pricing = calculateBulkPrice(effectivePrice, quantity, product.qty_discounts, isFlash);
+    const totalIDR = pricing.total;
+    const discountAmount = pricing.discount_amount;
 
     const name = lang === 'en' ? product.name_en : product.name_id;
     const desc = lang === 'en' ? (product.description_en || '-') : (product.description_id || '-');
     const stock = product.stock_mode === 'unlimited' ? '♾ Unlimited' : db.getAvailableStockCount(product.id);
 
     // Show price in USD for English, IDR for Indonesian
-    let priceText, totalText, discountText = '';
+    let priceText, totalText, discountText = '', bulkDetails = '';
     if (lang === 'en') {
         const usdPrice = await convertIDRtoUSD(effectivePrice);
         const usdTotal = await convertIDRtoUSD(totalIDR);
         priceText = `$${formatUSD(usdPrice)}`;
         totalText = `$${formatUSD(usdTotal)}`;
-        if (discountPercent > 0) {
+        if (pricing.tier) {
             const usdSaved = await convertIDRtoUSD(discountAmount);
-            discountText = `\n• <b>Discount:</b>  -${discountPercent}% (buy ${discountMinQty}+) = -$${formatUSD(usdSaved)}`;
+            const activeUnit = `$${formatUSD(await convertIDRtoUSD(pricing.unit_price))}`;
+            discountText = pricing.tier.type === 'fixed_price'
+                ? `\n• <b>Active Price:</b> ${activeUnit} / pcs (Min. ${pricing.tier.min_qty})`
+                : `\n• <b>Bulk:</b> -${pricing.tier.percent}% (Min. ${pricing.tier.min_qty}) = -$${formatUSD(usdSaved)}`;
         }
     } else {
         priceText = `Rp ${formatIDR(effectivePrice)}`;
         totalText = `Rp ${formatIDR(totalIDR)}`;
-        if (discountPercent > 0) {
-            discountText = `\n• <b>Diskon:</b>  -${discountPercent}% (Min. ${discountMinQty}) = -Rp ${formatIDR(discountAmount)}`;
+        if (pricing.tier) {
+            discountText = pricing.tier.type === 'fixed_price'
+                ? `\n• <b>Harga aktif:</b> Rp ${formatIDR(pricing.unit_price)} / pcs (Min. ${pricing.tier.min_qty})`
+                : `\n• <b>Grosir:</b> -${pricing.tier.percent}% (Min. ${pricing.tier.min_qty}) = -Rp ${formatIDR(discountAmount)}`;
         }
     }
 
-    const savingsText = discountPercent > 0
+    const savingsText = pricing.tier
         ? (lang === 'en' ? ` (saved $${formatUSD(await convertIDRtoUSD(discountAmount))})` : ` (hemat Rp ${formatIDR(discountAmount)})`)
         : '';
+
+    if (!isFlash && pricing.tiers.length) {
+        const rows = [];
+        for (const tier of pricing.tiers) {
+            const value = tier.type === 'fixed_price'
+                ? (lang === 'en' ? `$${formatUSD(await convertIDRtoUSD(tier.price))}/pcs` : `Rp ${formatIDR(tier.price)}/pcs`)
+                : `${tier.percent}%`;
+            rows.push(`• Min. ${tier.min_qty} pcs → ${value}`);
+        }
+        bulkDetails = `\n💰 <b>${lang === 'en' ? 'Bulk Prices' : 'Harga Grosir'}:</b>\n${rows.join('\n')}\n`;
+    }
 
     const title = lang === 'en' ? '🧾 CHECKOUT PRODUCT' : '🧾 CHECKOUT PRODUK';
     const l = lang === 'en' ? {
@@ -90,12 +90,12 @@ async function generateCheckoutMessage(product, quantity, lang) {
 ━━━━━━━━━━━━━━
 • <b>${l.qty}:</b>  ${quantity} pcs${discountText}
 • <b>${l.total}:</b>   <b>${totalText}</b>${savingsText}
-• <b>${l.desc}:</b> ${desc}    
+• <b>${l.desc}:</b> ${desc}
 ━━━━━━━━━━━━━━
+${bulkDetails}
 
 <i>${l.prompt}</i>`;
 }
-
 /**
  * Register menu handlers
  * @param {Object} bot - Telegraf bot instance
@@ -423,23 +423,8 @@ const registerMenuHandler = (bot) => {
         await ctx.answerCbQuery();
 
         const effectivePrice = db.getEffectivePrice(product);
-        let totalIDR = effectivePrice * quantity;
-
-        // Apply qty discount only if NOT flash sale
-        if (!db.isFlashSaleActive(product) && product.qty_discounts) {
-            try {
-                const tiers = JSON.parse(product.qty_discounts);
-                if (Array.isArray(tiers) && tiers.length > 0) {
-                    const sorted = tiers.sort((a, b) => b.min_qty - a.min_qty);
-                    const match = sorted.find(t => quantity >= t.min_qty);
-                    if (match) {
-                        const discountAmount = Math.floor(totalIDR * match.percent / 100);
-                        totalIDR = totalIDR - discountAmount;
-                    }
-                }
-            } catch (e) { }
-        }
-
+        const pricing = calculateBulkPrice(effectivePrice, quantity, product.qty_discounts, db.isFlashSaleActive(product));
+        const totalIDR = pricing.total;
         const totalUSD = await convertIDRtoUSD(totalIDR);
 
         // Create order without expiry (user is still deciding payment method)

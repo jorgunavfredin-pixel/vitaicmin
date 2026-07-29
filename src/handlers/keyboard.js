@@ -1,5 +1,6 @@
 const db = require('../models/db');
 const { formatIDR, formatUSD, convertIDRtoUSD, notifyAdmins, escapeHtml } = require('../utils/helpers');
+const { normalizeBulkTiers } = require('../utils/bulkPricing');
 const { Markup } = require('telegraf');
 const { replyWithBanner, editBannerCaption } = require('../utils/banner');
 const { getBalance, getBalanceHistory } = require('../payments/balance');
@@ -251,14 +252,14 @@ const registerKeyboardHandler = (bot) => {
 
             // Show discount info if set and not on flash sale
             if (!isFlash && prod.qty_discounts) {
-                try {
-                    const tiers = JSON.parse(prod.qty_discounts);
-                    if (Array.isArray(tiers) && tiers.length > 0) {
-                        const first = tiers.sort((a, b) => a.min_qty - b.min_qty)[0];
-                        const bulkLabel = lang === 'en' ? 'Bulk' : 'Grosir';
-                        msg += `┊💰 <b>${bulkLabel}:</b> ${first.percent}% (Min. ${first.min_qty})\n`;
-                    }
-                } catch (e) { }
+                const first = normalizeBulkTiers(prod.qty_discounts, prod.price_idr)[0];
+                if (first) {
+                    const bulkLabel = lang === 'en' ? 'Bulk' : 'Grosir';
+                    const value = first.type === 'fixed_price'
+                        ? `${lang === 'en' ? '$' + formatUSD(await convertIDRtoUSD(first.price)) : 'Rp ' + formatIDR(first.price)}/pcs`
+                        : `${first.percent}%`;
+                    msg += `┊💰 <b>${bulkLabel}:</b> ${value} (Min. ${first.min_qty})\n`;
+                }
             }
 
             msg += `┊🗒 <b>${labels.desc}:</b> ${desc}\n`;

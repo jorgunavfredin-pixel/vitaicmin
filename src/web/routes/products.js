@@ -218,19 +218,34 @@ const clearFlashSale = (req, res) => {
 
 const setBulkDiscount = (req, res) => {
     const { id } = req.params;
-    const { tiers } = req.body; // Array of { min_qty, percent }
+    const { tiers } = req.body;
 
     const prod = db.getProductById(id);
     if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
 
     let qtyDiscountsStr = '';
     if (Array.isArray(tiers) && tiers.length > 0) {
-        const validTiers = tiers
-            .map(t => ({ min_qty: parseInt(t.min_qty), percent: parseInt(t.percent) }))
-            .filter(t => !isNaN(t.min_qty) && t.min_qty >= 2 && !isNaN(t.percent) && t.percent > 0 && t.percent < 100)
-            .sort((a, b) => a.min_qty - b.min_qty);
+        const validTiers = tiers.map(t => {
+            const minQty = parseInt(t.min_qty);
+            const type = t.type === 'fixed_price' ? 'fixed_price' : 'percent';
+            if (!Number.isInteger(minQty) || minQty < 2) return null;
+            if (type === 'fixed_price') {
+                const price = parseInt(t.price ?? t.value);
+                if (!Number.isInteger(price) || price <= 0 || price >= prod.price_idr) return null;
+                return { min_qty: minQty, type, price };
+            }
+            const percent = parseInt(t.percent ?? t.value);
+            if (!Number.isInteger(percent) || percent <= 0 || percent >= 100) return null;
+            return { min_qty: minQty, type, percent };
+        }).filter(Boolean).sort((a, b) => a.min_qty - b.min_qty);
 
-        qtyDiscountsStr = validTiers.length > 0 ? JSON.stringify(validTiers) : '';
+        if (validTiers.length !== tiers.length) {
+            return res.status(400).json({ error: 'Tier grosir tidak valid. Harga/pcs harus di bawah harga normal.' });
+        }
+        if (new Set(validTiers.map(t => t.min_qty)).size !== validTiers.length) {
+            return res.status(400).json({ error: 'Minimal jumlah pada setiap tier harus unik.' });
+        }
+        qtyDiscountsStr = JSON.stringify(validTiers);
     }
 
     const updated = db.updateProduct(id, { qty_discounts: qtyDiscountsStr });

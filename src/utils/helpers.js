@@ -1,5 +1,6 @@
 const axios = require('axios');
 const exchange = require('../payments/exchange');
+const { calculateBulkPrice } = require('./bulkPricing');
 
 // Format currency to IDR
 const formatIDR = (amount) => {
@@ -242,25 +243,19 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
     msg += `• <b>${l.price}:</b> ${priceText} / pcs\n`;
     msg += `• <b>${l.qty}:</b> ${order.quantity} pcs\n`;
 
-    // Show qty discount info if applicable
-    if (!isFlash && product.qty_discounts) {
-        try {
-            const tiers = JSON.parse(product.qty_discounts);
-            if (Array.isArray(tiers) && tiers.length > 0) {
-                const sorted = tiers.sort((a, b) => b.min_qty - a.min_qty);
-                const match = sorted.find(t => order.quantity >= t.min_qty);
-                if (match) {
-                    const subtotal = effectivePrice * order.quantity;
-                    const discountAmount = Math.floor(subtotal * match.percent / 100);
-                    if (lang === 'en') {
-                        const usdSaved = await convertFn(discountAmount);
-                        msg += `• <b>Discount:</b> -${match.percent}% (buy ${match.min_qty}+) = -$${formatUSD(usdSaved)}\n`;
-                    } else {
-                        msg += `• <b>Diskon:</b> -${match.percent}% (Min. ${match.min_qty}) = -Rp ${formatIDR(discountAmount)}\n`;
-                    }
-                }
-            }
-        } catch (e) { }
+    // Show the active bulk tier using the same engine as checkout/order totals.
+    const bulkPricing = calculateBulkPrice(effectivePrice, order.quantity, product.qty_discounts, isFlash);
+    if (bulkPricing.tier) {
+        if (bulkPricing.tier.type === 'fixed_price') {
+            const unitText = lang === 'en'
+                ? `$${formatUSD(await convertFn(bulkPricing.unit_price))}`
+                : `Rp ${formatIDR(bulkPricing.unit_price)}`;
+            msg += `• <b>${lang === 'en' ? 'Active Price' : 'Harga aktif'}:</b> ${unitText} / pcs (Min. ${bulkPricing.tier.min_qty})\n`;
+        } else if (lang === 'en') {
+            msg += `• <b>Bulk:</b> -${bulkPricing.tier.percent}% (Min. ${bulkPricing.tier.min_qty}) = -$${formatUSD(await convertFn(bulkPricing.discount_amount))}\n`;
+        } else {
+            msg += `• <b>Grosir:</b> -${bulkPricing.tier.percent}% (Min. ${bulkPricing.tier.min_qty}) = -Rp ${formatIDR(bulkPricing.discount_amount)}\n`;
+        }
     }
 
 

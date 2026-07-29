@@ -660,12 +660,16 @@ function FlashSaleModal({ prod, onClose, onSaved }) {
 function BulkDiscountModal({ prod, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [tiers, setTiers] = useState(prod.parsed_qty_discounts || []);
-  const addTier = () => setTiers([...tiers, { min_qty: 2, percent: 10 }]);
+  const [tiers, setTiers] = useState((prod.parsed_qty_discounts || []).map(t => ({ ...t, type: t.type || (t.price != null ? 'fixed_price' : 'percent') })));
+  const addTier = () => setTiers([...tiers, { min_qty: 2, type: 'percent', percent: 10 }]);
   const removeTier = (idx) => setTiers(tiers.filter((_, i) => i !== idx));
   const updateTier = (idx, field, val) => {
     const updated = [...tiers];
-    updated[idx][field] = parseInt(val) || 0;
+    if (field === 'type') {
+      updated[idx] = val === 'fixed_price'
+        ? { min_qty: updated[idx].min_qty, type: val, price: Math.max(1, Math.floor(prod.price_idr * 0.85)) }
+        : { min_qty: updated[idx].min_qty, type: 'percent', percent: 10 };
+    } else updated[idx][field] = parseInt(val) || 0;
     setTiers(updated);
   };
   const handleSave = async () => {
@@ -682,7 +686,7 @@ function BulkDiscountModal({ prod, onClose, onSaved }) {
           <button className="x" onClick={onClose}><Icon name="x" /></button>
         </div>
         <p style={{ fontSize: 13, color: '#8a93a6', margin: '0 0 14px' }}>
-          Atur diskon persentase berdasarkan jumlah pcs pembelian (bulk purchase).
+          Atur diskon persen atau harga per pcs berdasarkan minimal jumlah pembelian.
         </p>
         {err && <div className="empty error-panel" style={{ marginBottom: 12 }}>{err}</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 280, overflowY: 'auto' }}>
@@ -696,8 +700,15 @@ function BulkDiscountModal({ prod, onClose, onSaved }) {
                 <span style={{ fontSize: 13, color: '#8a93a6', minWidth: 44 }}>Beli &ge;</span>
                 <input type="number" min="2" className="qty-field" style={{ width: 80 }} value={t.min_qty} onChange={(e) => updateTier(idx, 'min_qty', e.target.value)} />
                 <span style={{ fontSize: 13, color: '#8a93a6' }}>pcs</span>
-                <input type="number" min="1" max="99" className="qty-field" style={{ width: 80 }} value={t.percent} onChange={(e) => updateTier(idx, 'percent', e.target.value)} />
-                <span style={{ fontSize: 13, color: '#8a93a6' }}>%</span>
+                <select className="select-field" style={{ width: 112 }} value={t.type || 'percent'} onChange={(e) => updateTier(idx, 'type', e.target.value)}>
+                  <option value="percent">Persen</option>
+                  <option value="fixed_price">Harga/pcs</option>
+                </select>
+                {t.type === 'fixed_price' ? (
+                  <input type="number" min="1" max={Math.max(1, prod.price_idr - 1)} className="qty-field" style={{ width: 105 }} value={t.price || 0} onChange={(e) => updateTier(idx, 'price', e.target.value)} />
+                ) : (
+                  <><input type="number" min="1" max="99" className="qty-field" style={{ width: 80 }} value={t.percent || 0} onChange={(e) => updateTier(idx, 'percent', e.target.value)} /><span style={{ fontSize: 13, color: '#8a93a6' }}>%</span></>
+                )}
                 <button type="button" className="x" style={{ color: '#ff6b6b', marginLeft: 'auto' }} onClick={() => removeTier(idx)}><Icon name="x" size={16} /></button>
               </div>
             ))
