@@ -42,6 +42,12 @@ test('admin dan buyer memakai schema percent/fixed price yang sama', () => {
   assert.match(api, /price >= prod\.price_idr/);
   assert.match(admin, /Harga\/pcs/);
   assert.match(admin, /value="fixed_price"/);
+  assert.match(admin, /bulk-discount-modal/);
+  assert.match(admin, /bulk-active/);
+  assert.doesNotMatch(admin, /maxHeight: 280/);
+  const css = fs.readFileSync(path.join(root, 'admin-web/src/styles.css'), 'utf8');
+  assert.match(css, /\.bulk-discount-modal[^}]*max-width: 760px/);
+  assert.match(css, /\.a-btn\.bulk-active/);
   assert.match(menu, /calculateBulkPrice/);
   assert.match(menu, /Harga Grosir/);
 });

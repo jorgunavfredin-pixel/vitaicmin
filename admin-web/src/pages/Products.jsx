@@ -265,7 +265,7 @@ export default function Products() {
                             <button className="ic-btn" onClick={() => setStockDrawerProd(p)} title="Kelola Stok"><Icon name="box" /></button>
                             <button className="ic-btn" onClick={() => setEditingProduct(p)} title="Edit Produk"><Icon name="edit" /></button>
                             <button className="ic-btn" style={{ color: p.is_flash_active ? '#ff6b6b' : undefined }} onClick={() => setFlashModalProd(p)} title="Flash Sale"><Icon name="flash" /></button>
-                            <button className="ic-btn" onClick={() => setBulkModalProd(p)} title="Diskon Grosir"><Icon name="discount" /></button>
+                            <button className={`ic-btn ${p.parsed_qty_discounts?.length ? 'bulk-active' : ''}`} onClick={() => setBulkModalProd(p)} title="Diskon Grosir"><Icon name="discount" /></button>
                             <button className="ic-btn ic-danger" onClick={() => setDeleteModalProd(p)} title="Hapus"><Icon name="trash" /></button>
                           </div>
                         </td>
@@ -435,7 +435,7 @@ function ProductCard({ p, onEdit, onFlash, onBulk, onStock, onDelete, onToggle }
         <button className="a-btn a-green btn-icon" onClick={onStock}><Icon name="box" size={15} /> Stok</button>
         <button className="a-btn a-blue btn-icon" onClick={onEdit}><Icon name="edit" size={15} /> Edit</button>
         <button className="a-btn a-amber btn-icon" onClick={onFlash} style={{ color: p.is_flash_active ? '#ff6b6b' : undefined }}><Icon name="flash" size={15} /> Flash</button>
-        <button className="a-btn a-violet btn-icon" onClick={onBulk}><Icon name="discount" size={15} /> Bulk</button>
+        <button className={`a-btn a-violet btn-icon ${p.parsed_qty_discounts?.length ? 'bulk-active' : ''}`} onClick={onBulk}><Icon name="discount" size={15} /> Bulk</button>
         <button className="a-btn a-red" onClick={onDelete}><Icon name="trash" size={15} /></button>
       </div>
     </div>
@@ -680,7 +680,7 @@ function BulkDiscountModal({ prod, onClose, onSaved }) {
 
   return (
     <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ maxWidth: 460, textAlign: 'left' }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="modal bulk-discount-modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3 className="h3-icon"><Icon name="discount" size={18} /> Diskon Grosir: {prod.name_id}</h3>
           <button className="x" onClick={onClose}><Icon name="x" /></button>
@@ -689,7 +689,7 @@ function BulkDiscountModal({ prod, onClose, onSaved }) {
           Atur diskon persen atau harga per pcs berdasarkan minimal jumlah pembelian.
         </p>
         {err && <div className="empty error-panel" style={{ marginBottom: 12 }}>{err}</div>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 280, overflowY: 'auto' }}>
+        <div className="bulk-tier-list">
           {tiers.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 20, color: '#8a93a6', fontSize: 13 }}>
               Belum ada tier diskon grosir. Klik tombol di bawah untuk menambahkan.

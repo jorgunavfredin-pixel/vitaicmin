@@ -672,7 +672,15 @@ button { font-family: inherit; cursor: pointer; }
 .modal-header h3 { margin: 0; font-size: 16px; }
 .modal.modal-lg { max-width: 640px; text-align: left; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.tier-row { display: flex; gap: 10px; align-items: center; }
+.bulk-discount-modal { width: min(760px, calc(100vw - 32px)); max-width: 760px; text-align: left; }
+.bulk-tier-list { display: flex; flex-direction: column; gap: 12px; }
+.tier-row { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,.025); }
+.ic-btn.bulk-active { color: #c4b5fd; background: rgba(124,58,237,.18); border-color: rgba(139,92,246,.48); }
+.a-btn.bulk-active { color: #fff; background: linear-gradient(135deg,#7c3aed,#9333ea); border-color: #a78bfa; box-shadow: 0 0 0 1px rgba(167,139,250,.15), 0 6px 16px rgba(124,58,237,.2); }
+@media (max-width: 720px) {
+  .bulk-discount-modal { width: min(94vw, 760px); }
+  .tier-row { flex-wrap: wrap; }
+}
 
 /* ============ STOCK DRAWER ============ */
 .drawer.drawer-wide { width: 500px; max-width: 96vw; }
