@@ -60,3 +60,23 @@ test('input state memiliki TTL/chat binding dan payment callback punya cooldown'
   assert.match(index, /PAYMENT_ACTION_COOLDOWN/);
   assert.match(index, /ctx\.answerCbQuery\(msg, \{ show_alert: true \}\)/);
 });
+
+test('buyer UX memakai live settings, HTML aman, WIB, statistik produk, dan fee aktual', () => {
+  const root = path.join(__dirname, '..');
+  const start = fs.readFileSync(path.join(root, 'src/handlers/start.js'), 'utf8');
+  const keyboard = fs.readFileSync(path.join(root, 'src/handlers/keyboard.js'), 'utf8');
+  const order = fs.readFileSync(path.join(root, 'src/handlers/order.js'), 'utf8');
+  const support = fs.readFileSync(path.join(root, 'src/handlers/support.js'), 'utf8');
+  const security = fs.readFileSync(path.join(root, 'src/utils/buyerSecurity.js'), 'utf8');
+  assert.match(start, /o\.product_id !== 'TOPUP'/);
+  assert.match(start, /timeZone: 'Asia\/Jakarta'/);
+  assert.match(keyboard, /getLiveStoreName = \(\) => escapeHtml\(db\.getConfig/);
+  assert.match(keyboard, /filter\(o => o\.status !== 'init'\)/);
+  assert.match(keyboard, /buyerFee = Math\.max\(0, totalPayment - amount\)/);
+  assert.match(order, /buyerFee = Math\.max\(0, totalAmount - order\.total_idr\)/);
+  assert.match(order, /caption: message, parse_mode: 'HTML'/);
+  assert.match(support, /db\.getConfig\('support_username'/);
+  assert.match(support, /escapeHtml\(supportHours\)/);
+  assert.match(security, /settings\.maintenance/);
+  assert.match(security, /user\?\.banned/);
+});

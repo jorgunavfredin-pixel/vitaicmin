@@ -166,7 +166,7 @@ const escapeMarkdown = (text) => {
  */
 const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData = null) => {
     const product = db.getProductById(order.product_id);
-    const productName = lang === 'en' ? product.name_en : product.name_id;
+    const productName = escapeHtml(lang === 'en' ? product.name_en : product.name_id);
     const isFlash = db.isFlashSaleActive(product);
     const effectivePrice = db.getEffectivePrice(product);
 
@@ -276,7 +276,7 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
         }
         msg += `<b>${l.subtotal}:</b> ${subtotalText}\n`;
         msg += `${l.voucherApplied}\n`;
-        msg += `• <b>${l.codeVoucher}:</b> ${voucherData.code} (${voucherData.discountDesc})\n\n`;
+        msg += `• <b>${l.codeVoucher}:</b> ${escapeHtml(voucherData.code)} (${escapeHtml(voucherData.discountDesc)})\n\n`;
         msg += `<b>${l.total}:</b> ${totalText}\n`;
     } else {
         // Without voucher: just Total

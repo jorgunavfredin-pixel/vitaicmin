@@ -34,4 +34,22 @@ const privateChatOnly = async (ctx, next) => {
   } catch (_) { }
 };
 
-module.exports = { isPrivateChat, isOwnedOrder, getOwnedOrder, rejectOrderAccess, privateChatOnly };
+const assertCanStartTransaction = async (ctx, lang = 'id') => {
+  const userId = String(ctx.from?.id || '');
+  const settings = db.getSettings();
+  const user = db.getUser(userId);
+  let message = '';
+  if (user?.banned) {
+    message = lang === 'en' ? '🚫 Your account has been suspended.' : '🚫 Akun Anda telah disuspend.';
+  } else if (settings.maintenance) {
+    message = lang === 'en' ? '⚠️ Store is under maintenance. Please try again later.' : '⚠️ Toko sedang maintenance. Silakan coba lagi nanti.';
+  }
+  if (!message) return true;
+  try {
+    if (ctx.callbackQuery) await ctx.answerCbQuery(message, { show_alert: true });
+    else await ctx.reply(message);
+  } catch (_) { }
+  return false;
+};
+
+module.exports = { isPrivateChat, isOwnedOrder, getOwnedOrder, rejectOrderAccess, privateChatOnly, assertCanStartTransaction };

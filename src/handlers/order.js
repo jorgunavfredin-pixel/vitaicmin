@@ -1,12 +1,12 @@
 const db = require('../models/db');
-const { formatIDR, formatUSD, replacePlaceholders, buildPaymentConfirmation, notifyAdmins } = require('../utils/helpers');
+const { formatIDR, formatUSD, replacePlaceholders, buildPaymentConfirmation, notifyAdmins, escapeHtml } = require('../utils/helpers');
 const { convertIDRtoUSD } = require('../payments/exchange');
 const { getExpirationTime } = require('../services/invoice');
 const gateway = require('../payments/gateway');
 const { getBalance, deductBalance } = require('../payments/balance');
 const { handlePaymentSuccess } = require('../services/delivery');
 const { cancelOrder } = require('../services/reminder');
-const { getOwnedOrder, rejectOrderAccess } = require('../utils/buyerSecurity');
+const { getOwnedOrder, rejectOrderAccess, assertCanStartTransaction } = require('../utils/buyerSecurity');
 const {
     paymentMethodKeyboard,
     paymentPendingKeyboard,
@@ -130,6 +130,8 @@ const registerOrderHandler = (bot) => {
         const lang = db.getUserLanguage(userId);
         const locale = require(`../locales/${lang}`);
 
+        if (!await assertCanStartTransaction(ctx, lang)) return;
+
         // Check if QRIS is enabled
         const settings = db.getSettings();
         if (!settings.qris_enabled) {
@@ -162,6 +164,8 @@ const registerOrderHandler = (bot) => {
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
         const locale = require(`../locales/${lang}`);
+
+        if (!await assertCanStartTransaction(ctx, lang)) return;
 
         const settings = db.getSettings();
         if (!settings.qris_enabled) {
@@ -252,30 +256,35 @@ const registerOrderHandler = (bot) => {
         const { renderPaymentImage, getPlainQR } = require('../services/qrisCustom');
 
         const product = db.getProductById(order.product_id);
-        const prodName = lang === 'en' ? product.name_en : product.name_id;
+        const prodName = escapeHtml(lang === 'en' ? product.name_en : product.name_id);
 
-        const title = lang === 'en' ? '🧾 *ORDER INVOICE*' : '🧾 *INVOICE PESANAN*';
+        const title = lang === 'en' ? '🧾 <b>ORDER INVOICE</b>' : '🧾 <b>INVOICE PESANAN</b>';
         const l = lang === 'en' ? {
             orderId: 'Order ID', prod: 'Product', qty: 'Quantity', total: 'TOTAL PAYMENT',
-            status: 'Status   : Waiting for QRIS payment', valid: 'Valid for'
+            status: 'Status: Waiting for QRIS payment', valid: 'Valid for', fee: 'Gateway Fee'
         } : {
             orderId: 'Order ID', prod: 'Produk', qty: 'Jumlah', total: 'TOTAL BAYAR',
-            status: 'Status   : Menunggu pembayaran QRIS', valid: 'Berlaku'
+            status: 'Status: Menunggu pembayaran QRIS', valid: 'Berlaku', fee: 'Biaya Gateway'
         };
         const totalAmount = qrisResult.data.total_payment || order.total_idr;
+        const buyerFee = Math.max(0, totalAmount - order.total_idr);
         const totalDisplay = lang === 'en'
-            ? `$${formatUSD(order.total_usd || totalAmount / 16000)}`
+            ? `$${formatUSD(await convertIDRtoUSD(totalAmount))}`
             : `Rp ${formatIDR(totalAmount)}`;
+        const feeDisplay = lang === 'en'
+            ? `$${formatUSD(await convertIDRtoUSD(buyerFee))}`
+            : `Rp ${formatIDR(buyerFee)}`;
 
         const message = `${title}
 
-🆔 *${l.orderId}:* \`${orderId}\`
-• *${l.prod}:* ${prodName}
-• *${l.qty}:* ${order.quantity} pcs
-• *${l.total}:* ${totalDisplay}
+🆔 <b>${l.orderId}:</b> <code>${escapeHtml(orderId)}</code>
+• <b>${l.prod}:</b> ${prodName}
+• <b>${l.qty}:</b> ${order.quantity} pcs
+• <b>${l.fee}:</b> ${feeDisplay}
+• <b>${l.total}:</b> ${totalDisplay}
 
-⏱ *${l.status}*
-⏰ *${l.valid} :* ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}`;
+⏱ <b>${l.status}</b>
+⏰ <b>${l.valid}:</b> ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}`;
 
         try { await ctx.deleteMessage(); } catch (e) { }
 
@@ -283,13 +292,13 @@ const registerOrderHandler = (bot) => {
         try {
             const image = await renderPaymentImage(qrisResult.data);
             sentMsg = await ctx.replyWithPhoto({ source: image.buffer }, {
-                caption: message, parse_mode: 'Markdown', ...paymentPendingKeyboard(orderId, lang)
+                caption: message, parse_mode: 'HTML', ...paymentPendingKeyboard(orderId, lang)
             });
         } catch (e) {
             console.error('[QRIS] Custom render failed, using plain QR:', e.message);
             const plainQR = await getPlainQR(qrisResult.data);
             sentMsg = await ctx.replyWithPhoto({ source: plainQR }, {
-                caption: message, parse_mode: 'Markdown', ...paymentPendingKeyboard(orderId, lang)
+                caption: message, parse_mode: 'HTML', ...paymentPendingKeyboard(orderId, lang)
             });
         }
 
@@ -373,6 +382,8 @@ const registerOrderHandler = (bot) => {
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
         const locale = require(`../locales/${lang}`);
+
+        if (!await assertCanStartTransaction(ctx, lang)) return;
 
         // Check if Saldo is enabled
         const settings = db.getSettings();

@@ -13,25 +13,20 @@ const generateWelcome = async (ctx, lang = 'id') => {
     // Get user transaction total
     const userOrders = db.getOrdersByUser(userId);
     const userTotal = userOrders
-        .filter(o => o.status === 'delivered' || o.status === 'paid')
+        .filter(o => o.product_id !== 'TOPUP' && (o.status === 'delivered' || o.status === 'paid'))
         .reduce((sum, o) => sum + o.total_idr, 0);
 
     // Get bot stats
     const allOrders = db.getOrders();
-    const soldOrders = allOrders.filter(o => o.status === 'delivered' || o.status === 'paid');
+    const soldOrders = allOrders.filter(o => o.product_id !== 'TOPUP' && (o.status === 'delivered' || o.status === 'paid'));
     const totalSold = soldOrders.reduce((sum, o) => sum + o.quantity, 0);
     const totalUsers = Object.keys(db.getUsers()).length;
 
     // Format date
-    const now = new Date();
-    const days = lang === 'en'
-        ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-        : ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-    const months = lang === 'en'
-        ? ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-        : ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-
-    const dateStr = `${days[now.getDay()]}, ${now.getDate().toString().padStart(2, '0')} ${months[now.getMonth()]} ${now.getFullYear()} ${now.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })}`;
+    const dateStr = new Date().toLocaleString(lang === 'en' ? 'en-US' : 'id-ID', {
+        timeZone: 'Asia/Jakarta', weekday: 'long', day: '2-digit', month: 'long',
+        year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
 
     const userBalance = getBalance(userId);
 
@@ -44,7 +39,7 @@ ${dateStr} (GMT+7)
 └ <b>ID :</b> <code>${userId}</code>
 └ <b>Username :</b> ${username}
 └ <b>Balance :</b> $${formatUSD(balanceUSD)}
-└ <b>Transactions :</b> $${formatUSD(await convertIDRtoUSD(userTotal))}
+└ <b>Total Purchases :</b> $${formatUSD(await convertIDRtoUSD(userTotal))}
 
 <b>BOT Stats :</b>
 └ <b>Sold :</b> ${totalSold} pcs
@@ -62,7 +57,7 @@ ${dateStr}
 └ <b>ID :</b> <code>${userId}</code>
 └ <b>Username :</b> ${username}
 └ <b>Saldo :</b> Rp ${formatIDR(userBalance)}
-└ <b>Transaksi :</b> Rp ${formatIDR(userTotal)}
+└ <b>Total Belanja :</b> Rp ${formatIDR(userTotal)}
 
 <b>BOT Stats :</b>
 └ <b>Terjual :</b> ${totalSold} pcs

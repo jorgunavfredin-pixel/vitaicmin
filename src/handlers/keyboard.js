@@ -5,7 +5,7 @@ const { replyWithBanner, editBannerCaption } = require('../utils/banner');
 const { getBalance, getBalanceHistory } = require('../payments/balance');
 const gateway = require('../payments/gateway');
 const { cancelOrder } = require('../services/reminder');
-const { getOwnedOrder, rejectOrderAccess } = require('../utils/buyerSecurity');
+const { getOwnedOrder, rejectOrderAccess, assertCanStartTransaction } = require('../utils/buyerSecurity');
 const { handlePaymentSuccess } = require('../services/delivery');
 const {
     mainMenuKeyboard,
@@ -30,7 +30,7 @@ const generateCategoryListMsg = (categories, page, lang) => {
     // Payment info header
     // Simple welcome message
     const storeName = db.getConfig('store_name', 'STORE_NAME', 'Store');
-    let msg = `👋 Hiiii.....\nWelcome to <b>${storeName}</b>\n\n`;
+    let msg = `👋 Hiiii.....\nWelcome to <b>${escapeHtml(storeName)}</b>\n\n`;
 
     // Show active flash sales
     const activeFS = db.getActiveFlashSales();
@@ -394,20 +394,20 @@ const registerKeyboardHandler = (bot) => {
         const now = new Date();
         const dateStr = now.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-        const header = lang === 'en' ? '📦 *Stock Status*' : '📦 *Status Stok*';
+        const header = lang === 'en' ? '📦 <b>Stock Status</b>' : '📦 <b>Status Stok</b>';
         const timeLabel = 'Update';
         const summaryLabel = lang === 'en'
-            ? `📊 *Total: ${totalCat} Category • ${totalProd} Products Ready*`
-            : `📊 *Total: ${totalCat} Kategori • ${totalProd} Produk Ready*`;
+            ? `📊 <b>Total: ${totalCat} Category • ${totalProd} Products Ready</b>`
+            : `📊 <b>Total: ${totalCat} Kategori • ${totalProd} Produk Ready</b>`;
 
-        let msg = `${header}\n🕐 _${timeLabel}: ${dateStr}_\n`;
+        let msg = `${header}\n🕐 <i>${timeLabel}: ${dateStr}</i>\n`;
 
         for (const { cat, readyProducts } of pageItems) {
-            const catName = lang === 'en' ? cat.name_en : cat.name_id;
-            msg += `\n*${catName}*\n`;
+            const catName = escapeHtml(lang === 'en' ? cat.name_en : cat.name_id);
+            msg += `\n<b>${catName}</b>\n`;
             for (const prod of readyProducts) {
                 const stock = prod.stock_mode === 'unlimited' ? '♾' : db.getAvailableStockCount(prod.id);
-                const name = lang === 'en' ? prod.name_en : prod.name_id;
+                const name = escapeHtml(lang === 'en' ? prod.name_en : prod.name_id);
                 const unit = stock === '♾' ? '' : ' pcs';
                 msg += `↳  ${name}: ${stock}${unit}\n`;
             }
@@ -444,7 +444,7 @@ const registerKeyboardHandler = (bot) => {
         }
 
         const { msg, buttons } = buildStockMsg(stockCategories, totalCat, totalProd, 0, lang);
-        await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
+        await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
     });
 
     // Stock page navigation
@@ -457,7 +457,7 @@ const registerKeyboardHandler = (bot) => {
         const { msg, buttons } = buildStockMsg(stockCategories, totalCat, totalProd, page, lang);
 
         await ctx.answerCbQuery();
-        await ctx.editMessageText(msg, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
+        await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
     });
 
     // Stock refresh
@@ -470,7 +470,7 @@ const registerKeyboardHandler = (bot) => {
 
         await ctx.answerCbQuery('⟳ Refresh');
         try {
-            await ctx.editMessageText(msg, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
+            await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
         } catch (e) { /* message unchanged */ }
     });
 
@@ -490,12 +490,14 @@ const registerKeyboardHandler = (bot) => {
         const items = orders.slice(start, start + HISTORY_PER_PAGE);
 
         let msg = lang === 'en'
-            ? `📜 *Transaction History*\n\n`
-            : `📜 *Riwayat Transaksi*\n\n`;
+            ? `📜 <b>Transaction History</b>\n\n`
+            : `📜 <b>Riwayat Transaksi</b>\n\n`;
 
         items.forEach(order => {
             const statusMap = {
                 pending: '⏳ PENDING',
+                processing: '⚙️ PROCESSING',
+                processing_delivery: '📦 DELIVERING',
                 paid: '💰 PAID',
                 delivered: '✅ SUCCESS',
                 cancelled: '❌ CANCELLED',
@@ -508,14 +510,14 @@ const registerKeyboardHandler = (bot) => {
                 itemName = lang === 'en' ? 'Balance Top Up' : 'Topup Saldo';
             } else {
                 const product = db.getProductById(order.product_id);
-                itemName = `${product?.name_id || 'Unknown'} ×${order.quantity}`;
+                itemName = `${escapeHtml(lang === 'en' ? (product?.name_en || 'Unknown') : (product?.name_id || 'Unknown'))} ×${order.quantity}`;
             }
 
             const priceDisplay = (lang === 'en' && order.total_usd)
                 ? `$${formatUSD(order.total_usd)}`
                 : `Rp ${formatIDR(order.total_idr)}`;
 
-            msg += `╭─ \`${order.id}\`\n`;
+            msg += `╭─ <code>${escapeHtml(order.id)}</code>\n`;
             msg += `│ Status : ${statusText}\n`;
             msg += `│ Item   : ${itemName}\n`;
             msg += `│ Total  : ${priceDisplay}\n`;
@@ -532,7 +534,7 @@ const registerKeyboardHandler = (bot) => {
         const lang = db.getUserLanguage(userId);
         const locale = require(`../locales/${lang}`);
 
-        const orders = db.getOrdersByUser(userId).slice(0, MAX_HISTORY);
+        const orders = db.getOrdersByUser(userId).filter(o => o.status !== 'init').slice(0, MAX_HISTORY);
 
         if (orders.length === 0) {
             await ctx.reply(locale.no_transactions || (lang === 'en' ? 'No transactions yet.' : 'Belum ada transaksi.'));
@@ -548,7 +550,7 @@ const registerKeyboardHandler = (bot) => {
         }
 
         await ctx.reply(msg, {
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             reply_markup: buttons.length ? { inline_keyboard: buttons } : undefined
         });
     });
@@ -558,7 +560,7 @@ const registerKeyboardHandler = (bot) => {
         const page = parseInt(ctx.match[1]);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
-        const orders = db.getOrdersByUser(userId).slice(0, MAX_HISTORY);
+        const orders = db.getOrdersByUser(userId).filter(o => o.status !== 'init').slice(0, MAX_HISTORY);
 
         const { msg, totalPages } = buildHistoryMsg(orders, page, lang);
         const buttons = [];
@@ -568,7 +570,7 @@ const registerKeyboardHandler = (bot) => {
         if (row.length) buttons.push(row);
 
         await ctx.editMessageText(msg, {
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             reply_markup: buttons.length ? { inline_keyboard: buttons } : undefined
         });
         await ctx.answerCbQuery();
@@ -589,14 +591,23 @@ const registerKeyboardHandler = (bot) => {
         clearTopupState(ctx);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
-        const locale = require(`../locales/${lang}`);
-
-        await ctx.reply(locale.support_message, { parse_mode: 'Markdown' });
+        const supportUser = String(db.getConfig('support_username', 'SUPPORT_USERNAME', 'admin')).replace(/^@/, '');
+        const supportHours = db.getConfig('support_hours', 'SUPPORT_HOURS', '09:00 - 22:00 WIB');
+        const msg = lang === 'en'
+            ? `💬 <b>Customer Support</b>\n\nFor assistance, contact admin:\n\n👤 @${escapeHtml(supportUser)}\n🕐 ${escapeHtml(supportHours)}`
+            : `💬 <b>Customer Support</b>\n\nUntuk bantuan, hubungi admin:\n\n👤 @${escapeHtml(supportUser)}\n🕐 ${escapeHtml(supportHours)}`;
+        await ctx.reply(msg, { parse_mode: 'HTML' });
     });
 
     // ==================== SALDO / BALANCE ====================
 
-    const storeName = db.getConfig('store_name', 'STORE_NAME', 'Store');
+    const getLiveStoreName = () => escapeHtml(db.getConfig('store_name', 'STORE_NAME', 'Store'));
+    const buildSaldoMessage = (lang, balanceDisplay, minDisplay, qrisEnabled = true) => {
+        const title = lang === 'en' ? `Your Balance at ${getLiveStoreName()}` : `Detail Saldo Anda di ${getLiveStoreName()}`;
+        const balanceLabel = lang === 'en' ? 'Your current balance' : 'Saldo Anda saat ini';
+        if (!qrisEnabled) return `💰 <b>${title}</b>\n\n💵 ${balanceLabel}: <b>${balanceDisplay}</b>\n\n⚠️ ${lang === 'en' ? 'QRIS top up is currently under maintenance.' : 'Topup QRIS sedang maintenance.'}`;
+        return `💰 <b>${title}</b>\n\n💵 ${balanceLabel}: <b>${balanceDisplay}</b>\n\n📥 <b>${lang === 'en' ? 'Want to top up?' : 'Mau isi saldo?'}</b>\n• ${lang === 'en' ? 'Select a nominal below' : 'Silakan pilih nominal dibawah ini'}\n• ${lang === 'en' ? 'Or type an amount directly (min. $0.1)' : `Atau langsung ketik angka (min. ${minDisplay})`}:`;
+    };
 
     // Saldo Menu - show balance + topup nominals directly
     bot.hears(/^💰 (Saldo|Balance)/, async (ctx) => {
@@ -617,18 +628,12 @@ const registerKeyboardHandler = (bot) => {
         else topupInputStates.delete(userId);
 
         const minDisplay = lang === 'en' ? '$0.06' : 'Rp 1.000';
-        const msg = qrisEnabled
-            ? (lang === 'en'
-                ? `💰 *Your Balance at ${storeName}*\n\n💵 Your current balance: *${balanceDisplay}*\n\n📥 *Want to top up?*\n• Select a nominal below\n• Or type an amount directly (min. $0.1):`
-                : `💰 *Detail Saldo Anda di ${storeName}*\n\n💵 Saldo Anda saat ini: *${balanceDisplay}*\n\n📥 *Mau isi saldo?*\n• Silakan pilih nominal dibawah ini\n• Atau langsung ketik angka (min. ${minDisplay}):`)
-            : (lang === 'en'
-                ? `💰 *Your Balance at ${storeName}*\n\n💵 Your current balance: *${balanceDisplay}*\n\n⚠️ QRIS top up is currently under maintenance.`
-                : `💰 *Detail Saldo Anda di ${storeName}*\n\n💵 Saldo Anda saat ini: *${balanceDisplay}*\n\n⚠️ Topup QRIS sedang maintenance.`);
+        const msg = buildSaldoMessage(lang, balanceDisplay, minDisplay, qrisEnabled);
 
         const keyboard = qrisEnabled
             ? topupNominalKeyboard(lang)
             : { reply_markup: { inline_keyboard: [[{ text: lang === 'en' ? '📜 Deposit History' : '📜 Riwayat Deposit', callback_data: 'saldo_history' }]] } };
-        await ctx.reply(msg, { parse_mode: 'Markdown', ...keyboard });
+        await ctx.reply(msg, { parse_mode: 'HTML', ...keyboard });
     });
 
     // Topup - USD nominal selected (English) → convert to IDR and confirm
@@ -770,6 +775,7 @@ const registerKeyboardHandler = (bot) => {
         const amount = parseInt(ctx.match[1]);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
+        if (!await assertCanStartTransaction(ctx, lang)) return;
         const settings = db.getSettings();
         if (!settings.qris_enabled) {
             return ctx.answerCbQuery(lang === 'en' ? 'QRIS is under maintenance.' : 'QRIS sedang maintenance.', { show_alert: true });
@@ -796,6 +802,7 @@ const registerKeyboardHandler = (bot) => {
         const amount = parseInt(ctx.match[2]);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
+        if (!await assertCanStartTransaction(ctx, lang)) return;
         if (!db.getSettings().qris_enabled) {
             return ctx.answerCbQuery(lang === 'en' ? 'QRIS is under maintenance.' : 'QRIS sedang maintenance.', { show_alert: true });
         }
@@ -840,10 +847,10 @@ const registerKeyboardHandler = (bot) => {
 
         if (history.length === 0) {
             const emptyMsg = lang === 'en'
-                ? `📜 *Deposit History*\n\n📭 No history yet.\n\n💰 Balance: ${balanceDisplay}`
-                : `📜 *Riwayat Deposit*\n\n📭 Belum ada riwayat.\n\n💰 Saldo: ${balanceDisplay}`;
+                ? `📜 <b>Deposit History</b>\n\n📭 No history yet.\n\n💰 Balance: ${balanceDisplay}`
+                : `📜 <b>Riwayat Deposit</b>\n\n📭 Belum ada riwayat.\n\n💰 Saldo: ${balanceDisplay}`;
             await ctx.editMessageText(emptyMsg, {
-                parse_mode: 'Markdown',
+                parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [[{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back' }]]
                 }
@@ -851,7 +858,7 @@ const registerKeyboardHandler = (bot) => {
             return;
         }
 
-        const title = lang === 'en' ? '📜 *Deposit History*\n' : '📜 *Riwayat Deposit*\n';
+        const title = lang === 'en' ? '📜 <b>Deposit History</b>\n' : '📜 <b>Riwayat Deposit</b>\n';
         let msg = title;
 
         history.forEach(h => {
@@ -859,13 +866,13 @@ const registerKeyboardHandler = (bot) => {
             const absAmount = Math.abs(h.amount);
             const date = new Date(h.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
             msg += `\n${icon} Rp ${formatIDR(absAmount)} — ${date}`;
-            if (h.note) msg += `\n    _${h.note}_`;
+            if (h.note) msg += `\n    <i>${escapeHtml(h.note)}</i>`;
         });
 
         msg += `\n\n💰 ${lang === 'en' ? 'Balance' : 'Saldo'}: ${balanceDisplay}`;
 
         await ctx.editMessageText(msg, {
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             reply_markup: {
                 inline_keyboard: [[{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back' }]]
             }
@@ -891,12 +898,10 @@ const registerKeyboardHandler = (bot) => {
 
         const minDisplay = lang === 'en' ? '$0.06' : 'Rp 1.000';
 
-        const msg = lang === 'en'
-            ? `💰 *Your Balance at ${storeName}*\n\n💵 Your current balance: *${balanceDisplay}*\n\n📥 *Want to top up?*\n• Select a nominal below\n• Or type an amount directly (min. $0.1):`
-            : `💰 *Detail Saldo Anda di ${storeName}*\n\n💵 Saldo Anda saat ini: *${balanceDisplay}*\n\n📥 *Mau isi saldo?*\n• Silakan pilih nominal dibawah ini\n• Atau langsung ketik angka (min. ${minDisplay}):`;
+        const msg = buildSaldoMessage(lang, balanceDisplay, minDisplay, true);
 
         await ctx.editMessageText(msg, {
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             ...topupNominalKeyboard(lang)
         });
     });
@@ -920,13 +925,11 @@ const registerKeyboardHandler = (bot) => {
 
         const minDisplay = lang === 'en' ? '$0.06' : 'Rp 1.000';
 
-        const msg = lang === 'en'
-            ? `💰 *Your Balance at ${storeName}*\n\n💵 Your current balance: *${balanceDisplay}*\n\n📥 *Want to top up?*\n• Select a nominal below\n• Or type an amount directly (min. $0.1):`
-            : `💰 *Detail Saldo Anda di ${storeName}*\n\n💵 Saldo Anda saat ini: *${balanceDisplay}*\n\n📥 *Mau isi saldo?*\n• Silakan pilih nominal dibawah ini\n• Atau langsung ketik angka (min. ${minDisplay}):`;
+        const msg = buildSaldoMessage(lang, balanceDisplay, minDisplay, true);
 
         try { await ctx.deleteMessage(); } catch (e) { }
         await ctx.reply(msg, {
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             ...topupNominalKeyboard(lang)
         });
     });
@@ -1019,16 +1022,17 @@ const registerKeyboardHandler = (bot) => {
             return;
         }
 
-        let amountDisplay;
-        if (lang === 'en') {
-            const amtUsd = await convertIDRtoUSD(amount);
-            amountDisplay = `$${formatUSD(amtUsd)}`;
-        } else {
-            amountDisplay = `Rp ${formatIDR(amount)}`;
-        }
+        const totalPayment = qrisResult.data.total_payment || amount;
+        const buyerFee = Math.max(0, totalPayment - amount);
+        const displayMoney = async (value) => lang === 'en'
+            ? `$${formatUSD(await convertIDRtoUSD(value))}`
+            : `Rp ${formatIDR(value)}`;
+        const amountDisplay = await displayMoney(amount);
+        const feeDisplay = await displayMoney(buyerFee);
+        const totalDisplay = await displayMoney(totalPayment);
 
-        const title = lang === 'en' ? '📥 *TOP UP BALANCE*' : '📥 *TOPUP SALDO*';
-        const message = `${title}\n\n💰 *Amount:* ${amountDisplay}\n🆔 *ID:* \`${topupOrder.id}\`\n⏰ *${lang === 'en' ? 'Valid for' : 'Berlaku'}:* ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n⏳ ${lang === 'en' ? 'Waiting for QRIS payment...' : 'Menunggu pembayaran QRIS...'}`;
+        const title = lang === 'en' ? '📥 <b>TOP UP BALANCE</b>' : '📥 <b>TOPUP SALDO</b>';
+        const message = `${title}\n\n💰 <b>${lang === 'en' ? 'Balance received' : 'Saldo masuk'}:</b> ${amountDisplay}\n• <b>${lang === 'en' ? 'Gateway Fee' : 'Biaya Gateway'}:</b> ${feeDisplay}\n• <b>${lang === 'en' ? 'Total Payment' : 'Total Bayar'}:</b> ${totalDisplay}\n🆔 <b>ID:</b> <code>${escapeHtml(topupOrder.id)}</code>\n⏰ <b>${lang === 'en' ? 'Valid for' : 'Berlaku'}:</b> ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n⏳ ${lang === 'en' ? 'Waiting for QRIS payment...' : 'Menunggu pembayaran QRIS...'}`;
 
         try { await ctx.deleteMessage(); } catch (e) { }
 
@@ -1038,7 +1042,7 @@ const registerKeyboardHandler = (bot) => {
             const image = await renderPaymentImage(qrisResult.data);
             sentMsg = await ctx.replyWithPhoto({ source: image.buffer }, {
                 caption: message,
-                parse_mode: 'Markdown',
+                parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [
                         [{ text: lang === 'en' ? '🔄 Check Status' : '🔄 Cek Status', callback_data: `topup_check_${topupOrder.id}` }],
@@ -1051,7 +1055,7 @@ const registerKeyboardHandler = (bot) => {
             const plainQR = await getPlainQR(qrisResult.data);
             sentMsg = await ctx.replyWithPhoto({ source: plainQR }, {
                 caption: message,
-                parse_mode: 'Markdown',
+                parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [
                         [{ text: lang === 'en' ? '🔄 Check Status' : '🔄 Cek Status', callback_data: `topup_check_${topupOrder.id}` }],
