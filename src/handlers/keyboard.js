@@ -1,5 +1,5 @@
 const db = require('../models/db');
-const { formatIDR, formatUSD, convertIDRtoUSD, notifyAdmins } = require('../utils/helpers');
+const { formatIDR, formatUSD, convertIDRtoUSD, notifyAdmins, escapeHtml } = require('../utils/helpers');
 const { Markup } = require('telegraf');
 const { replyWithBanner, editBannerCaption } = require('../utils/banner');
 const { getBalance, getBalanceHistory } = require('../payments/balance');
@@ -55,8 +55,8 @@ const generateCategoryListMsg = (categories, page, lang) => {
 
     items.forEach((cat, idx) => {
         const num = start + idx + 1;
-        const name = lang === 'en' ? cat.name_en : cat.name_id;
-        msg += `┊ [ ${num} ] <b>${name.toUpperCase()}</b>\n`;
+        const name = escapeHtml(String(lang === 'en' ? cat.name_en : cat.name_id).toUpperCase());
+        msg += `┊ [ ${num} ] <b>${name}</b>\n`;
     });
 
     msg += '╰─────────────────\n\n';
@@ -1072,4 +1072,4 @@ const registerKeyboardHandler = (bot) => {
     }
 };
 
-module.exports = { registerKeyboardHandler };
+module.exports = { registerKeyboardHandler, generateCategoryListMsg };

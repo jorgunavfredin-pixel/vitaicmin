@@ -80,3 +80,10 @@ test('buyer UX memakai live settings, HTML aman, WIB, statistik produk, dan fee 
   assert.match(security, /settings\.maintenance/);
   assert.match(security, /user\?\.banned/);
 });
+
+test('runtime category renderer mengimpor escapeHtml dan aman untuk karakter HTML', () => {
+  const { generateCategoryListMsg } = require('../src/handlers/keyboard');
+  const msg = generateCategoryListMsg([{ id: 'C1', name_id: 'A&B <Promo>', name_en: 'A&B <Promo>' }], 0, 'id');
+  assert.match(msg, /A&amp;B &lt;PROMO&gt;/i);
+  assert.doesNotMatch(msg, /A&B <Promo>/i);
+});
