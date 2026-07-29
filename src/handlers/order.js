@@ -6,6 +6,7 @@ const gateway = require('../payments/gateway');
 const { getBalance, deductBalance } = require('../payments/balance');
 const { handlePaymentSuccess } = require('../services/delivery');
 const { cancelOrder } = require('../services/reminder');
+const { getOwnedOrder, rejectOrderAccess } = require('../utils/buyerSecurity');
 const {
     paymentMethodKeyboard,
     paymentPendingKeyboard,
@@ -25,6 +26,11 @@ const registerOrderHandler = (bot) => {
         const lang = db.getUserLanguage(userId);
         const locale = require(`../locales/${lang}`);
 
+        if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
+            await ctx.answerCbQuery(lang === 'en' ? 'Invalid quantity.' : 'Jumlah tidak valid.', { show_alert: true });
+            return;
+        }
+
         // Maintenance mode check
         const settings = db.getSettings();
         if (settings.maintenance) {
@@ -40,13 +46,13 @@ const registerOrderHandler = (bot) => {
         }
 
         const product = db.getProductById(productId);
-        if (!product) {
+        if (!product || product.active === false) {
             await ctx.answerCbQuery(locale.error_general);
             return;
         }
 
         const stockCount = db.getAvailableStockCount(productId);
-        if (stockCount < quantity) {
+        if (product.stock_mode !== 'unlimited' && stockCount < quantity) {
             await ctx.answerCbQuery(locale.error_no_stock);
             return;
         }
@@ -92,9 +98,9 @@ const registerOrderHandler = (bot) => {
         const lang = db.getUserLanguage(userId);
         const locale = require(`../locales/${lang}`);
 
-        const order = db.getOrderById(orderId);
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['init', 'pending'] });
         if (!order) {
-            await ctx.answerCbQuery(locale.error_order_not_found);
+            await rejectOrderAccess(ctx, lang);
             return;
         }
 
@@ -131,9 +137,9 @@ const registerOrderHandler = (bot) => {
             return;
         }
 
-        const order = db.getOrderById(orderId);
-        if (!order || (order.status !== 'init' && order.status !== 'pending')) {
-            await ctx.answerCbQuery(locale.error_order_not_found);
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['init', 'pending'] });
+        if (!order) {
+            await rejectOrderAccess(ctx, lang);
             return;
         }
 
@@ -162,9 +168,9 @@ const registerOrderHandler = (bot) => {
             await ctx.answerCbQuery(lang === 'en' ? '⚠️ QRIS is under maintenance.' : '⚠️ QRIS sedang maintenance.', { show_alert: true });
             return;
         }
-        const order = db.getOrderById(orderId);
-        if (!order || (order.status !== 'init' && order.status !== 'pending')) {
-            await ctx.answerCbQuery(locale.error_order_not_found);
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['init', 'pending'] });
+        if (!order) {
+            await rejectOrderAccess(ctx, lang);
             return;
         }
         await ctx.answerCbQuery('Creating QRIS...');
@@ -178,8 +184,8 @@ const registerOrderHandler = (bot) => {
      */
     async function generateQrisForOrder(ctx, orderId, gatewayId, lang) {
         const userId = ctx.from.id.toString();
-        const order = db.getOrderById(orderId);
-        if (!order) return;
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['init', 'pending'] });
+        if (!order) return rejectOrderAccess(ctx, lang);
 
         // Atomic claim: hanya satu tap/callback yang boleh membuat QR & mereservasi stok.
         // Tap kedua melihat status processing dan berhenti, bukan membuat transaksi duplikat.
@@ -298,11 +304,13 @@ const registerOrderHandler = (bot) => {
     // Check Payment Status Manually
     bot.action(/^pay_check_(.+)$/, async (ctx) => {
         const orderId = ctx.match[1];
+        const userId = ctx.from.id.toString();
+        const lang = db.getUserLanguage(userId);
+
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['pending'] });
+        if (!order) return rejectOrderAccess(ctx, lang);
 
         await ctx.answerCbQuery('Checking status...');
-
-        const order = db.getOrderById(orderId);
-        if (!order) return;
 
         if (order.payment_method === 'qris') {
             // QRIS payment — cek pakai gateway yang membuat transaksi (provider-agnostic)
@@ -329,14 +337,14 @@ const registerOrderHandler = (bot) => {
     // Cancel Order
     bot.action(/^pay_cancel_(.+)$/, async (ctx) => {
         const orderId = ctx.match[1];
-        const lang = db.getUserLanguage(ctx.from.id.toString());
-        await ctx.answerCbQuery();
+        const userId = ctx.from.id.toString();
+        const lang = db.getUserLanguage(userId);
 
-        const order = db.getOrderById(orderId);
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['init', 'pending'] });
         if (!order) {
-            await ctx.deleteMessage();
-            return;
+            return rejectOrderAccess(ctx, lang);
         }
+        await ctx.answerCbQuery();
 
         // If order is still in 'init' stage (at confirmation), delete it entirely
         if (order.status === 'init') {
@@ -368,9 +376,9 @@ const registerOrderHandler = (bot) => {
             return;
         }
 
-        const order = db.getOrderById(orderId);
-        if (!order || (order.status !== 'init' && order.status !== 'pending')) {
-            await ctx.answerCbQuery(locale.error_order_not_found);
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['init', 'pending'] });
+        if (!order) {
+            await rejectOrderAccess(ctx, lang);
             return;
         }
 
@@ -455,9 +463,9 @@ const registerOrderHandler = (bot) => {
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
 
-        const order = db.getOrderById(orderId);
-        if (!order || order.user_id !== userId) {
-            await ctx.answerCbQuery('❌ Order not found');
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['init'] });
+        if (!order) {
+            await rejectOrderAccess(ctx, lang);
             return;
         }
 
@@ -497,8 +505,8 @@ const registerOrderHandler = (bot) => {
         voucherStates.delete(userId);
         await ctx.answerCbQuery();
 
-        const order = db.getOrderById(orderId);
-        if (!order) return;
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['init'] });
+        if (!order) return rejectOrderAccess(ctx, lang);
 
         const confirmMsg = await buildPaymentConfirmation(order, lang, db, convertIDRtoUSD);
 
@@ -515,9 +523,9 @@ const registerOrderHandler = (bot) => {
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
 
-        const order = db.getOrderById(orderId);
-        if (!order || order.user_id !== userId) {
-            await ctx.answerCbQuery('❌ Order not found');
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['init'] });
+        if (!order) {
+            await rejectOrderAccess(ctx, lang);
             return;
         }
 
@@ -574,7 +582,8 @@ const registerOrderHandler = (bot) => {
 
             try { await ctx.telegram.deleteMessage(ctx.chat.id, sentMsg.message_id); } catch (e) { }
 
-            const order = db.getOrderById(orderId);
+            const order = getOwnedOrder(ctx, orderId, { statuses: ['init'] });
+            if (!order) return rejectOrderAccess(ctx, lang);
             const confirmMsg = await buildPaymentConfirmation(order, lang, db, convertIDRtoUSD);
             await ctx.reply(confirmMsg, {
                 parse_mode: 'HTML',
@@ -583,8 +592,9 @@ const registerOrderHandler = (bot) => {
             return;
         }
 
-        // SUCCESS: Apply voucher!
-        const order = db.getOrderById(orderId);
+        // SUCCESS: voucher hanya boleh mengubah draft order milik user ini.
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['init'] });
+        if (!order) return rejectOrderAccess(ctx, lang);
 
         const discountAmount = db.calculateDiscount(order.total_idr, voucher);
         const finalPrice = order.total_idr - discountAmount;

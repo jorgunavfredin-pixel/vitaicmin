@@ -5,6 +5,7 @@ const { replyWithBanner, editBannerCaption } = require('../utils/banner');
 const { getBalance, getBalanceHistory } = require('../payments/balance');
 const gateway = require('../payments/gateway');
 const { cancelOrder } = require('../services/reminder');
+const { getOwnedOrder, rejectOrderAccess } = require('../utils/buyerSecurity');
 const { handlePaymentSuccess } = require('../services/delivery');
 const {
     mainMenuKeyboard,
@@ -910,11 +911,10 @@ const registerKeyboardHandler = (bot) => {
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
 
-        await ctx.answerCbQuery(lang === 'en' ? 'Checking...' : 'Mengecek...');
+        const topupOrder = getOwnedOrder(ctx, topupId, { statuses: ['pending'], productId: 'TOPUP' });
+        if (!topupOrder) return rejectOrderAccess(ctx, lang);
 
-        // Check QRIS status
-        const topupOrder = db.getOrderById(topupId);
-        if (!topupOrder) return;
+        await ctx.answerCbQuery(lang === 'en' ? 'Checking...' : 'Mengecek...');
 
         const result = await gateway.checkStatus(topupId, topupOrder.total_idr, topupOrder.gateway_id);
 
@@ -939,8 +939,12 @@ const registerKeyboardHandler = (bot) => {
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
 
+        const topupOrder = getOwnedOrder(ctx, topupId, { statuses: ['pending'], productId: 'TOPUP' });
+        if (!topupOrder) return rejectOrderAccess(ctx, lang);
+
         await ctx.answerCbQuery();
-        await cancelOrder(topupId);
+        const cancelled = await cancelOrder(topupId);
+        if (!cancelled) return rejectOrderAccess(ctx, lang);
 
         const msg = lang === 'en' ? '❌ Top up cancelled.' : '❌ Topup dibatalkan.';
         await ctx.reply(msg, { ...mainMenuKeyboard(lang, userId) });

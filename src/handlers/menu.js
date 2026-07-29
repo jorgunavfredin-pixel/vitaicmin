@@ -388,6 +388,11 @@ const registerMenuHandler = (bot) => {
         const locale = require(`../locales/${lang}`);
         clearQtyPrompt(ctx);
 
+        if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
+            await ctx.answerCbQuery(lang === 'en' ? 'Invalid quantity.' : 'Jumlah tidak valid.', { show_alert: true });
+            return;
+        }
+
         // Maintenance mode check
         const settings = db.getSettings();
         if (settings.maintenance) {
@@ -403,6 +408,10 @@ const registerMenuHandler = (bot) => {
         }
 
         const product = db.getProductById(productId);
+        if (!product || product.active === false) {
+            await ctx.answerCbQuery(locale.error_general, { show_alert: true });
+            return;
+        }
 
         // Check stock again
         const stockCount = db.getAvailableStockCount(productId);

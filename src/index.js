@@ -4,6 +4,7 @@ require('./utils/validateConfig'); // Validate .env on startup
 const { Telegraf, session } = require('telegraf');
 const express = require('express');
 const log = require('./utils/logger');
+const { privateChatOnly } = require('./utils/buyerSecurity');
 
 // Import handlers
 const { registerStartHandler } = require('./handlers/start');
@@ -84,6 +85,9 @@ bot.use(async (ctx, next) => {
     rateLimitMap.set(userId, userData);
     return next();
 });
+
+// Buyer transactions and delivered credentials are private-chat only.
+bot.use(privateChatOnly);
 
 // Auto-cleanup rate limit map every 5 minutes
 setInterval(() => {
