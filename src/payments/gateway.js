@@ -31,7 +31,7 @@ const SUPPORTED_PROVIDERS = Object.keys(ADAPTERS);
 const PROVIDER_FIELDS = {
     pakasir: ['api_key', 'slug'],
     wijayapay: ['code_merchant', 'api_key'],
-    xoftware: ['api_key', 'merchant_id', 'webhook_secret']
+    xoftware: ['api_key', 'merchant_id', 'webhook_secret', 'registered_notify_url']
 };
 
 /**
@@ -53,10 +53,19 @@ const envCredential = (provider) => {
         const api_key = process.env.XOWFTWARE_API_KEY || '';
         const merchant_id = process.env.XOWFTWARE_MERCHANT_ID || '';
         const webhook_secret = process.env.XOWFTWARE_WEBHOOK_SECRET || '';
+        const registered_notify_url = process.env.XOWFTWARE_NOTIFY_URL || '';
         const fee_direction = process.env.XOWFTWARE_FEE_DIRECTION === 'user' ? 'user' : 'merchant';
-        if (api_key || merchant_id || webhook_secret) return { api_key, merchant_id, webhook_secret, fee_direction };
+        if (api_key || merchant_id || webhook_secret || registered_notify_url) return { api_key, merchant_id, webhook_secret, registered_notify_url, fee_direction };
     }
     return null;
+};
+
+const effectiveCredentials = (provider, creds = {}) => {
+    if (provider !== 'xoftware') return creds;
+    return {
+        ...creds,
+        registered_notify_url: creds.registered_notify_url || process.env.XOWFTWARE_NOTIFY_URL || ''
+    };
 };
 
 /**
@@ -75,8 +84,9 @@ const listActiveGateways = () => {
     for (const gw of dbGateways) {
         providersWithDbRow.add(gw.provider);
         if (!gw.enabled) continue;
-        if (!hasCompleteCreds(gw.provider, gw.credentials)) continue;
-        out.push({ id: gw.id, provider: gw.provider, label: gw.label || providerLabel(gw.provider), credentials: gw.credentials });
+        const credentials = effectiveCredentials(gw.provider, gw.credentials);
+        if (!hasCompleteCreds(gw.provider, credentials)) continue;
+        out.push({ id: gw.id, provider: gw.provider, label: gw.label || providerLabel(gw.provider), credentials });
     }
 
     // Fallback .env: hanya untuk provider yang BELUM punya baris DB sama sekali,
@@ -100,7 +110,10 @@ const providerLabel = (provider) => ({ pakasir: 'PaKasir', wijayapay: 'WijayaPay
 const hasCompleteCreds = (provider, creds) => {
     if (!creds) return false;
     const fields = PROVIDER_FIELDS[provider] || [];
-    return fields.every((f) => creds[f] && String(creds[f]).trim() !== '');
+    const complete = fields.every((f) => creds[f] && String(creds[f]).trim() !== '');
+    if (!complete) return false;
+    if (provider === 'xoftware' && !/^https?:\/\/[^\s]+$/i.test(String(creds.registered_notify_url))) return false;
+    return true;
 };
 
 /**
@@ -113,8 +126,9 @@ const resolveGateway = (gatewayId) => {
     if (gatewayId) {
         let gw = null;
         try { gw = db.getPaymentGatewayById(gatewayId); } catch (e) { gw = null; }
-        if (gw && hasCompleteCreds(gw.provider, gw.credentials)) {
-            return { id: gw.id, provider: gw.provider, credentials: gw.credentials };
+        const credentials = gw ? effectiveCredentials(gw.provider, gw.credentials) : null;
+        if (gw && hasCompleteCreds(gw.provider, credentials)) {
+            return { id: gw.id, provider: gw.provider, credentials };
         }
         // gateway_id sudah tidak valid (dihapus/creds kosong) → fall through ke default.
         log.warn(`[GATEWAY] gateway_id ${gatewayId} tidak valid, fallback ke gateway aktif`);

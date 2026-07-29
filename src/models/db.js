@@ -255,6 +255,7 @@ try {
         api_key: process.env.XOWFTWARE_API_KEY || '',
         merchant_id: process.env.XOWFTWARE_MERCHANT_ID || '',
         webhook_secret: process.env.XOWFTWARE_WEBHOOK_SECRET || '',
+        registered_notify_url: process.env.XOWFTWARE_NOTIFY_URL || '',
         fee_direction: process.env.XOWFTWARE_FEE_DIRECTION === 'user' ? 'user' : 'merchant'
       }), 2, now, now);
     console.log('[DB] Seeded default Xoftware gateway from .env');

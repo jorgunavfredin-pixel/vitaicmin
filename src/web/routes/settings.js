@@ -24,7 +24,7 @@ const maskCred = (creds = {}) => {
     const out = {};
     for (const [k, v] of Object.entries(creds)) {
         // Identifier/setting non-secret ditampilkan apa adanya.
-        if (k === 'slug' || k === 'code_merchant' || k === 'merchant_id' || k === 'fee_direction') out[k] = v || null;
+        if (k === 'slug' || k === 'code_merchant' || k === 'merchant_id' || k === 'fee_direction' || k === 'registered_notify_url') out[k] = v || null;
         else out[k] = v ? mask(v) : null;
     }
     return out;
@@ -210,6 +210,9 @@ const createGateway = (req, res) => {
             cleanCredentials[field] = value;
         }
         if (provider === 'xoftware') {
+            if (!/^https?:\/\/[^\s]+$/i.test(cleanCredentials.registered_notify_url)) {
+                return res.status(400).json({ error: 'Notify URL Xoftware harus URL http/https yang valid' });
+            }
             cleanCredentials.fee_direction = credentials?.fee_direction === 'user' ? 'user' : 'merchant';
         }
         const gw = db.createPaymentGateway({
@@ -249,6 +252,10 @@ const updateGateway = (req, res) => {
                 if (credentials[f] !== undefined && String(credentials[f]).trim() !== '') {
                     credUpdate[f] = String(credentials[f]).trim();
                 }
+            }
+            if (existing.provider === 'xoftware' && credUpdate.registered_notify_url !== undefined &&
+                !/^https?:\/\/[^\s]+$/i.test(credUpdate.registered_notify_url)) {
+                return res.status(400).json({ error: 'Notify URL Xoftware harus URL http/https yang valid' });
             }
             if (Object.keys(credUpdate).length) updates.credentials = credUpdate;
             if (existing.provider === 'xoftware' && credentials.fee_direction !== undefined) {

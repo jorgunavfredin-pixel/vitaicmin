@@ -23,7 +23,8 @@ const PROVIDER_META = {
     fields: [
       { key: 'api_key', label: 'API Key', secret: true, placeholder: 'Masukkan API Key' },
       { key: 'merchant_id', label: 'Merchant ID', secret: false, placeholder: 'cth: 12345' },
-      { key: 'webhook_secret', label: 'Webhook Secret', secret: true, placeholder: 'Masukkan Webhook Secret' }
+      { key: 'webhook_secret', label: 'Webhook Secret', secret: true, placeholder: 'Masukkan Webhook Secret' },
+      { key: 'registered_notify_url', label: 'Notify URL yang Di-approve', secret: false, placeholder: 'https://t.me/nama_bot' }
     ]
   }
 };
@@ -194,7 +195,10 @@ function GatewayCard({ gw, showToast, onChanged }) {
             />
           </div>
         ))}
-        {gw.provider === 'xoftware' && (
+        {gw.provider === 'xoftware' && (<>
+          <div className="settings-note hint-icon" style={{ gridColumn: '1 / -1', margin: 0 }}>
+            <Icon name="info" size={14} /> Notify URL harus persis sama dengan URL yang di-approve Xoftware. Jika bukan endpoint backend, polling otomatis tetap mendeteksi pembayaran.
+          </div>
           <div className="gw-field">
             <label className="field-label">Biaya QRIS ditanggung</label>
             <select className="select-field" value={feeDirection} onChange={(e) => setFeeDirection(e.target.value)}>
@@ -202,7 +206,7 @@ function GatewayCard({ gw, showToast, onChanged }) {
               <option value="user">Buyer — ditambahkan ke tagihan</option>
             </select>
           </div>
-        )}
+        </>)}
 
       </div>
 

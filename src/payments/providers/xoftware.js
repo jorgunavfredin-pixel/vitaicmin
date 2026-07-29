@@ -50,6 +50,10 @@ const createQRIS = async (orderId, amount, creds = {}, options = {}) => {
     }
     const timeout = Math.max(1, Math.min(1440, parseInt(options.timeout_minutes) || 15));
     const feeDirection = creds.fee_direction === 'user' ? 'user' : 'merchant';
+    const notifyUrl = String(creds.registered_notify_url || process.env.XOWFTWARE_NOTIFY_URL || '').trim();
+    if (!/^https?:\/\/[^\s]+$/i.test(notifyUrl)) {
+        return { success: false, error: 'Notify URL Xoftware belum dikonfigurasi atau tidak valid' };
+    }
     const metadata = options.metadata && typeof options.metadata === 'object'
         ? options.metadata
         : { customer: { id: String(options.user_id || merchantId), name: options.customer_name || 'Telegram Buyer' } };
@@ -60,7 +64,8 @@ const createQRIS = async (orderId, amount, creds = {}, options = {}) => {
             amount: Math.round(amount),
             ref_id: String(orderId),
             fee_direction: feeDirection,
-            notify_url: `${String(process.env.WEBHOOK_URL || '').replace(/\/$/, '')}/webhook/xoftware`,
+            // Harus exact-match dengan URL yang di-approve Xoftware; jangan tambah path.
+            notify_url: notifyUrl,
             expires_in_minutes: timeout,
             note: `Payment ${orderId}`,
             metadata
