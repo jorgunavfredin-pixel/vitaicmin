@@ -103,7 +103,7 @@ const generateCategoryButtons = (categories, page, lang) => {
     // Pagination buttons
     const navRow = [];
     if (page > 0) {
-        navRow.push({ ...Markup.button.callback('⬅️ Prev', `catpage_${page - 1}`), style: 'primary' });
+        navRow.push({ ...Markup.button.callback('⬅️ Prev', `catpage_${page - 1}`), style: 'success' });
     }
     if (page < totalPages - 1) {
         navRow.push({ ...Markup.button.callback('Next ➡️', `catpage_${page + 1}`), style: 'success' });
@@ -273,19 +273,19 @@ const registerKeyboardHandler = (bot) => {
             if (isOutOfStock) {
                 buttons.push([Markup.button.callback(`${labels.remind_btn} ${name}`, `remind_${prod.id}`)]);
             } else {
-                buttons.push([Markup.button.callback(`${labels.buy_btn} ${name}`, `prod_${prod.id}`)]);
+                buttons.push([{ ...Markup.button.callback(`${labels.buy_btn} ${name}`, `prod_${prod.id}`), style: 'primary' }]);
             }
         }
 
         // Pagination buttons
         if (totalPages > 1) {
             const navBtns = [];
-            if (page > 0) navBtns.push(Markup.button.callback('[ ◄◄ PREV ]', `catpage_${catId}_${page - 1}`));
-            if (page < totalPages - 1) navBtns.push(Markup.button.callback('[ NEXT ►► ]', `catpage_${catId}_${page + 1}`));
+            if (page > 0) navBtns.push({ ...Markup.button.callback('[ ◄◄ PREV ]', `catpage_${catId}_${page - 1}`), style: 'primary' });
+            if (page < totalPages - 1) navBtns.push({ ...Markup.button.callback('[ NEXT ►► ]', `catpage_${catId}_${page + 1}`), style: 'success' });
             buttons.push(navBtns);
         }
 
-        buttons.push([Markup.button.callback(labels.back, 'back_to_categories')]);
+        buttons.push([{ ...Markup.button.callback(labels.back, 'back_to_categories'), style: 'success' }]);
 
         return { msg, buttons };
     };

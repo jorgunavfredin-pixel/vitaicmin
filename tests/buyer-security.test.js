@@ -104,6 +104,8 @@ test('daftar kategori A-Z sinkron dengan tombol dan label multibahasa', () => {
   assert.ok(markup.reply_markup.inline_keyboard[0].every(b => b.style === 'primary'));
   const paged = generateCategoryButtons(Array.from({ length: 11 }, (_, i) => ({ id: String(i), name_id: `P${i}`, name_en: `P${i}` })), 0, 'id');
   assert.equal(paged.reply_markup.inline_keyboard.at(-1)[0].style, 'success');
+  const middlePage = generateCategoryButtons(Array.from({ length: 21 }, (_, i) => ({ id: String(i), name_id: `P${i}`, name_en: `P${i}` })), 1, 'id');
+  assert.ok(middlePage.reply_markup.inline_keyboard.at(-1).every(b => b.style === 'success'));
 
   const { mainMenuKeyboard } = require('../src/utils/keyboard');
   const menuRows = mainMenuKeyboard('id').reply_markup.keyboard;
@@ -117,4 +119,24 @@ test('daftar kategori A-Z sinkron dengan tombol dan label multibahasa', () => {
   assert.match(keyboardSource, /<b>Fee:<\/b>/);
   assert.doesNotMatch(keyboardSource, /Minbel\.|Biaya Gateway|Gateway Fee/);
   assert.doesNotMatch(orderSource, /Biaya Gateway|Gateway Fee/);
+});
+
+test('checkout dan payment method memakai warna sesuai aksi', () => {
+  const { quantityKeyboard, paymentMethodKeyboard } = require('../src/utils/keyboard');
+  const qtyRows = quantityKeyboard(20, 'P1', 2, 'C1', 'id').reply_markup.inline_keyboard;
+  assert.ok(qtyRows[0].every(b => b.style === 'primary'));
+  assert.ok(qtyRows[1].every(b => b.style === 'primary'));
+  assert.equal(qtyRows[2][0].style, 'success');
+  assert.equal(qtyRows[3][0].style, 'danger');
+
+  const paymentRows = paymentMethodKeyboard('ORDER-STYLE', 'id').reply_markup.inline_keyboard;
+  const buttons = paymentRows.flat();
+  assert.ok(buttons.filter(b => b.text.includes('QRIS')).every(b => b.style === 'primary'));
+  assert.equal(buttons.find(b => b.text.startsWith('💰 Saldo'))?.style, 'success');
+  assert.equal(buttons.find(b => b.text.includes('Voucher'))?.style, 'danger');
+  assert.equal(buttons.find(b => b.text.includes('Batalkan'))?.style, 'danger');
+
+  const keyboardSource = fs.readFileSync(path.join(__dirname, '../src/handlers/keyboard.js'), 'utf8');
+  assert.match(keyboardSource, /buy_btn[^\n]*[\s\S]{0,250}style: 'primary'/);
+  assert.match(keyboardSource, /back_to_categories'\), style: 'success'/);
 });

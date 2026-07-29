@@ -453,52 +453,53 @@ const productsKeyboard = (products, lang = 'id') => {
 
 const quantityKeyboard = (maxQty, productId, currentQty = 1, categoryId, lang = 'id') => {
     const buttons = [];
+    const styledCallback = (text, callback, style) => ({ ...Markup.button.callback(text, callback), style });
 
     // Row 1: [-1] [Nx] [+1]
     const qtyRow = [];
     if (currentQty > 1) {
-        qtyRow.push(Markup.button.callback('-1', `qty_dec_${productId}_${currentQty}`));
+        qtyRow.push(styledCallback('-1', `qty_dec_${productId}_${currentQty}`, 'primary'));
     } else {
-        qtyRow.push(Markup.button.callback('-1', 'noop'));
+        qtyRow.push(styledCallback('-1', 'noop', 'primary'));
     }
-    qtyRow.push(Markup.button.callback(`${currentQty}x`, 'noop'));
+    qtyRow.push(styledCallback(`${currentQty}x`, 'noop', 'primary'));
     if (currentQty < maxQty) {
-        qtyRow.push(Markup.button.callback('+1', `qty_inc_${productId}_${currentQty}`));
+        qtyRow.push(styledCallback('+1', `qty_inc_${productId}_${currentQty}`, 'primary'));
     } else {
-        qtyRow.push(Markup.button.callback('+1', 'noop'));
+        qtyRow.push(styledCallback('+1', 'noop', 'primary'));
     }
     buttons.push(qtyRow);
 
     // Row 2: [-5] [📦 Max: X] [+5]
     const fastRow = [];
     if (currentQty > 5) {
-        fastRow.push(Markup.button.callback('-5', `qty_dec5_${productId}_${currentQty}`));
+        fastRow.push(styledCallback('-5', `qty_dec5_${productId}_${currentQty}`, 'primary'));
     } else {
-        fastRow.push(Markup.button.callback('-5', 'noop'));
+        fastRow.push(styledCallback('-5', 'noop', 'primary'));
     }
     const maxLabel = maxQty >= 999 ? '♾' : maxQty;
     // Clickable: prompts the user to type a quantity (1..maxQty) instead of tapping +/-
     const typeLabel = lang === 'en' ? `✍️ Type (max ${maxLabel})` : `✍️ Ketik (max ${maxLabel})`;
-    fastRow.push(Markup.button.callback(typeLabel, `qtytype_${productId}_${currentQty}`));
+    fastRow.push(styledCallback(typeLabel, `qtytype_${productId}_${currentQty}`, 'primary'));
     if (currentQty + 5 <= maxQty) {
-        fastRow.push(Markup.button.callback('+5', `qty_inc5_${productId}_${currentQty}`));
+        fastRow.push(styledCallback('+5', `qty_inc5_${productId}_${currentQty}`, 'primary'));
     } else {
-        fastRow.push(Markup.button.callback('+5', 'noop'));
+        fastRow.push(styledCallback('+5', 'noop', 'primary'));
     }
     buttons.push(fastRow);
 
     // Direct Payment Buttons
     if (lang === 'en') {
-        buttons.push([Markup.button.callback('✅ Continue Payment', `pay_confirm_${productId}_${currentQty}`)]);
+        buttons.push([styledCallback('✅ Continue Payment', `pay_confirm_${productId}_${currentQty}`, 'success')]);
     } else {
-        buttons.push([Markup.button.callback('✅ Lanjutkan Pembayaran', `pay_confirm_${productId}_${currentQty}`)]);
+        buttons.push([styledCallback('✅ Lanjutkan Pembayaran', `pay_confirm_${productId}_${currentQty}`, 'success')]);
     }
 
     const backText = lang === 'en' ? '⬅️ Back' : '⬅️ Kembali';
     // Back to specific category instead of main menu
     // Use catnum_ to trigger the vertical list handler in handlers/keyboard.js
     const backAction = categoryId ? `catnum_${categoryId}` : 'menu_categories';
-    buttons.push([Markup.button.callback(backText, backAction)]);
+    buttons.push([styledCallback(backText, backAction, 'danger')]);
 
     return Markup.inlineKeyboard(buttons);
 };
@@ -542,8 +543,8 @@ const paymentMethodKeyboard = (orderId, lang = 'id') => {
     // Toggle voucher button: "Pakai" if none applied, "Hapus" if one is already applied
     const order = db.getOrderById(orderId);
     const voucherBtn = order && order.voucher_code
-        ? Markup.button.callback(t.removeVoucher, `voucher_remove_${orderId}`)
-        : Markup.button.callback(t.voucher, `voucher_apply_${orderId}`);
+        ? { ...Markup.button.callback(t.removeVoucher, `voucher_remove_${orderId}`), style: 'danger' }
+        : { ...Markup.button.callback(t.voucher, `voucher_apply_${orderId}`), style: 'danger' };
 
     const saldoBtn = settings.saldo_enabled !== false
         ? Markup.button.callback(t.saldo, `pay_saldo_${orderId}`)
@@ -556,12 +557,15 @@ const paymentMethodKeyboard = (orderId, lang = 'id') => {
         t.qris,
         saldoBtn.text,
         saldoBtn.callback_data
-    ).map(row => row.map(btn => Markup.button.callback(btn.text, btn.callback)));
+    ).map(row => row.map(btn => ({
+        ...Markup.button.callback(btn.text, btn.callback),
+        style: btn.text === saldoBtn.text ? 'success' : 'primary'
+    })));
 
     return Markup.inlineKeyboard([
         ...paymentRows,
         [voucherBtn],
-        [Markup.button.callback(t.cancel, `pay_cancel_${orderId}`)]
+        [{ ...Markup.button.callback(t.cancel, `pay_cancel_${orderId}`), style: 'danger' }]
     ]);
 };
 
