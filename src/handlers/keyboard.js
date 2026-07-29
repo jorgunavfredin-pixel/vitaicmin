@@ -92,7 +92,7 @@ const generateCategoryButtons = (categories, page, lang) => {
     let row = [];
     items.forEach((cat, idx) => {
         const num = start + idx + 1;
-        row.push(Markup.button.callback(`${num}`, `catnum_${cat.id}`));
+        row.push({ ...Markup.button.callback(`${num}`, `catnum_${cat.id}`), style: 'primary' });
         if (row.length === 5) {
             buttons.push(row);
             row = [];
@@ -103,10 +103,10 @@ const generateCategoryButtons = (categories, page, lang) => {
     // Pagination buttons
     const navRow = [];
     if (page > 0) {
-        navRow.push(Markup.button.callback('⬅️ Prev', `catpage_${page - 1}`));
+        navRow.push({ ...Markup.button.callback('⬅️ Prev', `catpage_${page - 1}`), style: 'primary' });
     }
     if (page < totalPages - 1) {
-        navRow.push(Markup.button.callback('Next ➡️', `catpage_${page + 1}`));
+        navRow.push({ ...Markup.button.callback('Next ➡️', `catpage_${page + 1}`), style: 'success' });
     }
     if (navRow.length > 0) buttons.push(navRow);
 

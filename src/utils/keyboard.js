@@ -409,16 +409,17 @@ const mainMenuKeyboard = (lang = 'id', userId = null) => {
     // Row 2: Saldo (full width)
     // Row 3: History | Language
     // Row 4: Sewa Bot + CS (ID only) | CS only (EN)
+    const styled = (text, style) => ({ text, style });
     const rows = [
-        [t.products, t.stock],
-        [t.saldo],
-        [t.history, t.language]
+        [styled(t.products, 'primary'), styled(t.stock, 'primary')],
+        [styled(t.saldo, 'success')],
+        [styled(t.history, 'primary'), styled(t.language, 'primary')]
     ];
 
     if (lang === 'id') {
-        rows.push([t.sewaBot, t.support]);
+        rows.push([styled(t.sewaBot, 'danger'), styled(t.support, 'danger')]);
     } else {
-        rows.push([t.support]);
+        rows.push([styled(t.support, 'danger')]);
     }
 
     return Markup.keyboard(rows).resize();

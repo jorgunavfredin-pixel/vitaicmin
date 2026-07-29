@@ -101,6 +101,15 @@ test('daftar kategori A-Z sinkron dengan tombol dan label multibahasa', () => {
   assert.match(idMsg, /1\. <b>ALFA<\/b>[\s\S]*2\. <b>ÉCLAIR<\/b>[\s\S]*3\. <b>ZULU<\/b>/);
   const markup = generateCategoryButtons(categories, 0, 'id');
   assert.deepEqual(markup.reply_markup.inline_keyboard[0].map(b => b.callback_data), ['catnum_a', 'catnum_e', 'catnum_z']);
+  assert.ok(markup.reply_markup.inline_keyboard[0].every(b => b.style === 'primary'));
+  const paged = generateCategoryButtons(Array.from({ length: 11 }, (_, i) => ({ id: String(i), name_id: `P${i}`, name_en: `P${i}` })), 0, 'id');
+  assert.equal(paged.reply_markup.inline_keyboard.at(-1)[0].style, 'success');
+
+  const { mainMenuKeyboard } = require('../src/utils/keyboard');
+  const menuRows = mainMenuKeyboard('id').reply_markup.keyboard;
+  assert.deepEqual(menuRows.map(row => row.map(b => b.style)), [
+    ['primary', 'primary'], ['success'], ['primary', 'primary'], ['danger', 'danger']
+  ]);
 
   const keyboardSource = fs.readFileSync(path.join(__dirname, '../src/handlers/keyboard.js'), 'utf8');
   const orderSource = fs.readFileSync(path.join(__dirname, '../src/handlers/order.js'), 'utf8');
