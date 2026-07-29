@@ -120,8 +120,8 @@ button { font-family: inherit; cursor: pointer; }
 .qcustom-row label { color:var(--muted); font-size:13px; }
 .qcustom-row input[type=range] { width:100%; accent-color:var(--brand); }
 .qcustom-row input[type=number] { width:100%; padding:8px; border:1px solid var(--border); background:var(--bg-2); color:var(--text); border-radius:9px; }
-.qcustom-preview { min-height:390px; position:relative; display:grid; place-items:center; border:1px solid var(--border); border-radius:14px; background:var(--bg-2); overflow:hidden; }
-.qcustom-preview img { display:block; max-width:100%; max-height:64vh; object-fit:contain; }
+.qcustom-preview { height:320px; min-height:0; position:relative; display:grid; place-items:center; border:1px solid var(--border); border-radius:14px; background:var(--bg-2); overflow:hidden; padding:12px; }
+.qcustom-preview img { display:block; max-width:100%; max-height:296px; object-fit:contain; }
 .qcustom-preview .pill { position:absolute; left:10px; bottom:10px; }
 @media(max-width:800px){.qcustom-source,.qcustom-editor{grid-template-columns:1fr}.qcustom-preview{min-height:300px}}
 

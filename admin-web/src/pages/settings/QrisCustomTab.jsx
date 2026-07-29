@@ -25,12 +25,12 @@ export default function QrisCustomTab({ showToast }) {
   const refreshPreview = useCallback((s = source, p = presetId, l = layout) => {
     clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
-      if (s === 'preset' && !p) return setPreview('');
+      if (s === 'preset' && (!p || !data?.presets.some(item => item.id === p))) return setPreview('');
       if (s === 'custom' && !data?.config.custom_exists) return setPreview('');
       try {
         const url = await previewQrisCustom({ source: s, preset_id: p, layout: l });
         setPreview(old => { if (old) URL.revokeObjectURL(old); return url; });
-      } catch (e) { showToast(e.message, 'err'); }
+      } catch (e) { setPreview(''); }
     }, 250);
   }, [source, presetId, layout, data, showToast]);
   useEffect(() => { if (data) refreshPreview(); return () => clearTimeout(timer.current); }, [data, source, presetId, layout, refreshPreview]);
@@ -64,7 +64,7 @@ export default function QrisCustomTab({ showToast }) {
       setBusy('upload');
       try {
         const r = await uploadQrisCustom(reader.result); showToast(r.message);
-        const d = await fetchQrisCustom(); setData(d); setSource('custom'); setLayout(d.defaults || DEF);
+        const d = await fetchQrisCustom(); setData(d); setSource('custom'); setPresetId(''); setLayout(d.defaults || DEF);
       } catch (e) { showToast(e.message, 'err'); } finally { setBusy(''); }
     };
     reader.readAsDataURL(file);
@@ -77,10 +77,14 @@ export default function QrisCustomTab({ showToast }) {
 
     <div className="qcustom-source">
       <div>
-        <label className="field-label">Tema bawaan</label>
-        <select className="select-field" value={source === 'preset' ? presetId : ''} onChange={e => { setSource('preset'); setPresetId(e.target.value); const p=data.presets.find(x=>x.id===e.target.value); setLayout(p?.layout || data.defaults || DEF); }}>
-          <option value="" disabled>{data.presets.length ? 'Pilih tema' : 'Belum ada tema di folder presets'}</option>
+        <label className="field-label">Pilih twibbon</label>
+        <select className="select-field" value={source === 'custom' ? '__custom' : presetId} onChange={e => {
+          if (e.target.value === '__custom') { setSource('custom'); setPresetId(''); setLayout(data.defaults || DEF); return; }
+          setSource('preset'); setPresetId(e.target.value); const p=data.presets.find(x=>x.id===e.target.value); setLayout(p?.layout || data.defaults || DEF);
+        }}>
+          <option value="" disabled>{data.presets.length || data.config.custom_exists ? 'Pilih twibbon' : 'Belum ada twibbon'}</option>
           {data.presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {data.config.custom_exists && <option value="__custom">Twibbon Custom</option>}
         </select>
       </div>
       <label className="qcustom-upload">
@@ -88,6 +92,7 @@ export default function QrisCustomTab({ showToast }) {
         <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>upload(e.target.files?.[0])}/>
       </label>
     </div>
+    {!data.presets.length && <div className="settings-note hint-icon" style={{marginTop:12}}><Icon name="info" size={14}/> Tema bawaan dibaca dari <code>{data.preset_dir}</code>. Tambahkan PNG/JPG/WebP lalu buka ulang submenu ini.</div>}
 
     <div className="qcustom-editor">
       <div className="qcustom-controls">

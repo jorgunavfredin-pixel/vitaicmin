@@ -30,9 +30,11 @@ const listPresets = () => {
   return fs.readdirSync(PRESET_DIR, { withFileTypes: true })
     .filter(e => e.isFile() && IMAGE_EXT.has(path.extname(e.name).toLowerCase()))
     .map(e => {
-      const id = path.basename(e.name, path.extname(e.name));
+      const rawId = path.basename(e.name, path.extname(e.name));
+      const id = safeId(rawId);
+      if (!id) return null;
       let meta = {};
-      const jsonPath = path.join(PRESET_DIR, `${id}.json`);
+      const jsonPath = path.join(PRESET_DIR, `${rawId}.json`);
       try { if (fs.existsSync(jsonPath)) meta = JSON.parse(fs.readFileSync(jsonPath, 'utf8')); } catch (_) { }
       return {
         id,
@@ -40,7 +42,7 @@ const listPresets = () => {
         file: e.name,
         layout: normalizeLayout(meta.layout || meta)
       };
-    }).sort((a, b) => a.name.localeCompare(b.name));
+    }).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
 };
 
 const getConfig = () => {
@@ -49,12 +51,18 @@ const getConfig = () => {
     try { saved = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch (_) { saved = null; }
   }
   saved = saved || {};
+  const presets = listPresets();
+  const customExists = fs.existsSync(CUSTOM_FILE);
+  let source = saved.source || (presets[0] ? 'preset' : 'custom');
+  let presetId = saved.preset_id || presets[0]?.id || null;
+  if (source === 'preset' && !presets.some(p => p.id === presetId)) presetId = presets[0]?.id || null;
+  if (source === 'custom' && !customExists && presets[0]) { source = 'preset'; presetId = presets[0].id; }
   return {
     enabled: saved.enabled !== false,
-    source: saved.source || (listPresets()[0] ? 'preset' : 'custom'),
-    preset_id: saved.preset_id || listPresets()[0]?.id || null,
+    source,
+    preset_id: presetId,
     layout: normalizeLayout(saved.layout),
-    custom_exists: fs.existsSync(CUSTOM_FILE),
+    custom_exists: customExists,
     updated_at: saved.updated_at || null
   };
 };
@@ -141,7 +149,7 @@ const getPlainQR = async (paymentData = {}) => {
   if (paymentData.qris_string) {
     const QRCode = require('qrcode');
     return QRCode.toBuffer(String(paymentData.qris_string), {
-      type: 'png', width: 600, margin: 2, errorCorrectionLevel: 'M',
+      type: 'png', width: 600, margin: 0, errorCorrectionLevel: 'M',
       color: { dark: '#000000', light: '#ffffff' }
     });
   }

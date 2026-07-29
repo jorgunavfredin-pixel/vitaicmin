@@ -206,7 +206,7 @@ const generateQRImageBuffer = async (qrString, size = 600) => {
     if (!qrString) throw new Error('QRIS string kosong');
     const QRCode = require('qrcode');
     return QRCode.toBuffer(String(qrString), {
-        type: 'png', width: size, margin: 2, errorCorrectionLevel: 'M',
+        type: 'png', width: size, margin: 0, errorCorrectionLevel: 'M',
         color: { dark: '#000000', light: '#ffffff' }
     });
 };

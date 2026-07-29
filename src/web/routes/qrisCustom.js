@@ -9,7 +9,7 @@ const registerQrisCustomRoutes = (router) => {
   r.get('/', (req, res) => {
     try {
       const presets = qrisCustom.listPresets().map(p => ({ ...p, image_url: `/api/admin/qris-custom/preset/${encodeURIComponent(p.id)}` }));
-      res.json({ config: qrisCustom.getConfig(), presets, defaults: qrisCustom.DEFAULT_LAYOUT });
+      res.json({ config: qrisCustom.getConfig(), presets, defaults: qrisCustom.DEFAULT_LAYOUT, preset_dir: qrisCustom.PRESET_DIR });
     } catch (error) { res.status(500).json({ error: error.message }); }
   });
 
