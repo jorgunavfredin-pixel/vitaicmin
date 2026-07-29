@@ -240,9 +240,7 @@ const registerOrderHandler = (bot) => {
             return;
         }
 
-        // Prefer provider-supplied QR image; else render from qris_string.
-        const { generateQRISTwibbon } = require('../utils/qris_twibbon');
-        const qrImageUrl = qrisResult.data.qr_image || gateway.generateQRImageUrl(qrisResult.data.qris_string);
+        const { renderPaymentImage, getPlainQR } = require('../services/qrisCustom');
 
         const product = db.getProductById(order.product_id);
         const prodName = lang === 'en' ? product.name_en : product.name_id;
@@ -274,13 +272,14 @@ const registerOrderHandler = (bot) => {
 
         let sentMsg;
         try {
-            const twibbonBuffer = await generateQRISTwibbon(qrImageUrl);
-            sentMsg = await ctx.replyWithPhoto({ source: twibbonBuffer }, {
+            const image = await renderPaymentImage(qrisResult.data);
+            sentMsg = await ctx.replyWithPhoto({ source: image.buffer }, {
                 caption: message, parse_mode: 'Markdown', ...paymentPendingKeyboard(orderId, lang)
             });
         } catch (e) {
-            console.error('[QRIS] Twibbon failed, using plain QR:', e.message);
-            sentMsg = await ctx.replyWithPhoto(qrImageUrl, {
+            console.error('[QRIS] Custom render failed, using plain QR:', e.message);
+            const plainQR = await getPlainQR(qrisResult.data);
+            sentMsg = await ctx.replyWithPhoto({ source: plainQR }, {
                 caption: message, parse_mode: 'Markdown', ...paymentPendingKeyboard(orderId, lang)
             });
         }

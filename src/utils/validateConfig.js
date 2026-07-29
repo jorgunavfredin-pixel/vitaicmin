@@ -52,13 +52,6 @@ const validateConfig = () => {
         }
     });
 
-    // Validate THEME_PRESET if provided
-    const validPresets = ['gold', 'purple', 'blue', 'green', 'red', 'cyan', 'orange', 'white', 'pink', 'lime'];
-    const preset = (process.env.THEME_PRESET || '').toLowerCase().trim();
-    if (preset && !validPresets.includes(preset)) {
-        warnings.push(`  ⚠️  THEME_PRESET "${process.env.THEME_PRESET}" tidak dikenali. Pilihan: ${validPresets.join(', ')}`);
-    }
-
     // Show results
     if (errors.length > 0) {
         console.error('\n╔══════════════════════════════════════╗');

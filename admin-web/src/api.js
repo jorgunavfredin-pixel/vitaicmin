@@ -156,6 +156,20 @@ export const fetchBroadcastStatus = (jobId) => apiFetch(`/broadcast/status/${enc
 
 // ---- Settings ----
 export const fetchSettings = () => apiFetch('/settings');
+
+// ---- QRIS Custom ----
+export const fetchQrisCustom = () => apiFetch('/qris-custom');
+export const saveQrisCustom = (payload) => apiFetch('/qris-custom', { method: 'PUT', body: JSON.stringify(payload) });
+export const uploadQrisCustom = (image) => apiFetch('/qris-custom/upload', { method: 'POST', body: JSON.stringify({ image }) });
+export async function fetchAdminImage(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(BASE + path, { ...options, headers });
+  if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Gagal memuat gambar'); }
+  return URL.createObjectURL(await res.blob());
+}
+export const previewQrisCustom = (payload) => fetchAdminImage('/qris-custom/preview', { method: 'POST', body: JSON.stringify(payload) });
 export const toggleSetting = (key, value) =>
   apiFetch('/settings/toggle', { method: 'PATCH', body: JSON.stringify({ key, value }) });
 export const changeAdminPassword = (currentPassword, newPassword) =>

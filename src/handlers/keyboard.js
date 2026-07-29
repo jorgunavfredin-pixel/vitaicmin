@@ -1005,11 +1005,10 @@ const registerKeyboardHandler = (bot) => {
         try { await ctx.deleteMessage(); } catch (e) { }
 
         let sentMsg;
+        const { renderPaymentImage, getPlainQR } = require('../services/qrisCustom');
         try {
-            const { generateQRISTwibbon } = require('../utils/qris_twibbon');
-            const qrImageUrl = qrisResult.data.qr_image || gateway.generateQRImageUrl(qrisResult.data.qris_string);
-            const twibbonBuffer = await generateQRISTwibbon(qrImageUrl);
-            sentMsg = await ctx.replyWithPhoto({ source: twibbonBuffer }, {
+            const image = await renderPaymentImage(qrisResult.data);
+            sentMsg = await ctx.replyWithPhoto({ source: image.buffer }, {
                 caption: message,
                 parse_mode: 'Markdown',
                 reply_markup: {
@@ -1020,8 +1019,9 @@ const registerKeyboardHandler = (bot) => {
                 }
             });
         } catch (e) {
-            const qrImageUrl = qrisResult.data.qr_image || gateway.generateQRImageUrl(qrisResult.data.qris_string);
-            sentMsg = await ctx.replyWithPhoto(qrImageUrl, {
+            console.error('[QRIS] Custom render failed, using plain QR:', e.message);
+            const plainQR = await getPlainQR(qrisResult.data);
+            sentMsg = await ctx.replyWithPhoto({ source: plainQR }, {
                 caption: message,
                 parse_mode: 'Markdown',
                 reply_markup: {

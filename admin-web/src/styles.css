@@ -109,6 +109,23 @@ button { font-family: inherit; cursor: pointer; }
 .page-head .btn-primary { width: auto; margin-top: 0; padding: 10px 16px; font-size: 13.5px; flex-shrink: 0; }
 
 /* ============ APP SHELL ============ */
+.qcustom-source { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:18px; }
+.qcustom-upload { position:relative; display:flex; gap:10px; align-items:center; padding:12px; border:1px dashed var(--border); border-radius:12px; cursor:pointer; background:var(--panel-2); }
+.qcustom-upload input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.qcustom-upload span { display:flex; flex-direction:column; min-width:0; }
+.qcustom-upload small { color:var(--muted); margin-top:3px; }
+.qcustom-editor { display:grid; grid-template-columns:minmax(300px,390px) minmax(0,1fr); gap:18px; margin-top:18px; }
+.qcustom-controls { display:flex; flex-direction:column; gap:14px; }
+.qcustom-row { display:grid; grid-template-columns:56px 1fr 76px; align-items:center; gap:9px; }
+.qcustom-row label { color:var(--muted); font-size:13px; }
+.qcustom-row input[type=range] { width:100%; accent-color:var(--brand); }
+.qcustom-row input[type=number] { width:100%; padding:8px; border:1px solid var(--border); background:var(--bg-2); color:var(--text); border-radius:9px; }
+.qcustom-preview { min-height:390px; position:relative; display:grid; place-items:center; border:1px solid var(--border); border-radius:14px; background:var(--bg-2); overflow:hidden; }
+.qcustom-preview img { display:block; max-width:100%; max-height:64vh; object-fit:contain; }
+.qcustom-preview .pill { position:absolute; left:10px; bottom:10px; }
+@media(max-width:800px){.qcustom-source,.qcustom-editor{grid-template-columns:1fr}.qcustom-preview{min-height:300px}}
+
+/* ============ APP SHELL ============ */
 .app { display: flex; min-height: 100%; }
 .sidebar {
   width: 248px; flex-shrink: 0;

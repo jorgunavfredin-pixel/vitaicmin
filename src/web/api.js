@@ -14,6 +14,7 @@ const { registerUserRoutes } = require('./routes/users');
 const { registerVoucherRoutes } = require('./routes/vouchers');
 const { registerBroadcastRoutes } = require('./routes/broadcast');
 const { registerSettingsRoutes } = require('./routes/settings');
+const { registerQrisCustomRoutes } = require('./routes/qrisCustom');
 const { dbEvents } = require('../models/db');
 
 let sseClients = [];
@@ -107,6 +108,7 @@ const registerAdminApi = (app, bot) => {
     registerVoucherRoutes(adminRouter);
     registerBroadcastRoutes(adminRouter, bot);
     registerSettingsRoutes(adminRouter);
+    registerQrisCustomRoutes(adminRouter);
 
     api.use(adminRouter);
 
