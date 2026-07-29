@@ -17,10 +17,17 @@ const {
 // Items per page for pagination
 const ITEMS_PER_PAGE = 10;
 
+const sortCategoriesAZ = (categories, lang) => [...categories].sort((a, b) => {
+    const aName = String(lang === 'en' ? (a.name_en || a.name_id || '') : (a.name_id || a.name_en || ''));
+    const bName = String(lang === 'en' ? (b.name_en || b.name_id || '') : (b.name_id || b.name_en || ''));
+    return aName.localeCompare(bName, lang === 'en' ? 'en' : 'id', { sensitivity: 'base', numeric: true });
+});
+
 /**
  * Generate category list message with pagination
  */
 const generateCategoryListMsg = (categories, page, lang) => {
+    categories = sortCategoriesAZ(categories, lang);
     const total = categories.length;
     const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
     const start = page * ITEMS_PER_PAGE;
@@ -55,8 +62,8 @@ const generateCategoryListMsg = (categories, page, lang) => {
 
     items.forEach((cat, idx) => {
         const num = start + idx + 1;
-        const name = escapeHtml(String(lang === 'en' ? cat.name_en : cat.name_id).toUpperCase());
-        msg += `┊ [ ${num} ] <b>${name}</b>\n`;
+        const name = escapeHtml(String(lang === 'en' ? (cat.name_en || cat.name_id || '') : (cat.name_id || cat.name_en || '')).toUpperCase());
+        msg += `┊ ${num}. <b>${name}</b>\n`;
     });
 
     msg += '╰─────────────────\n\n';
@@ -71,6 +78,7 @@ const generateCategoryListMsg = (categories, page, lang) => {
  * Generate category number buttons with pagination
  */
 const generateCategoryButtons = (categories, page, lang) => {
+    categories = sortCategoriesAZ(categories, lang);
     const total = categories.length;
     const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
     const start = page * ITEMS_PER_PAGE;
@@ -247,8 +255,8 @@ const registerKeyboardHandler = (bot) => {
                     const tiers = JSON.parse(prod.qty_discounts);
                     if (Array.isArray(tiers) && tiers.length > 0) {
                         const first = tiers.sort((a, b) => a.min_qty - b.min_qty)[0];
-                        const minLabel = lang === 'en' ? 'Min.' : 'Minbel.';
-                        msg += `┊💰 <b>Disc.:</b> ${first.percent}% (${minLabel} ${first.min_qty})\n`;
+                        const bulkLabel = lang === 'en' ? 'Bulk' : 'Grosir';
+                        msg += `┊💰 <b>${bulkLabel}:</b> ${first.percent}% (Min. ${first.min_qty})\n`;
                     }
                 } catch (e) { }
             }
@@ -1032,7 +1040,7 @@ const registerKeyboardHandler = (bot) => {
         const totalDisplay = await displayMoney(totalPayment);
 
         const title = lang === 'en' ? '📥 <b>TOP UP BALANCE</b>' : '📥 <b>TOPUP SALDO</b>';
-        const message = `${title}\n\n💰 <b>${lang === 'en' ? 'Balance received' : 'Saldo masuk'}:</b> ${amountDisplay}\n• <b>${lang === 'en' ? 'Gateway Fee' : 'Biaya Gateway'}:</b> ${feeDisplay}\n• <b>${lang === 'en' ? 'Total Payment' : 'Total Bayar'}:</b> ${totalDisplay}\n🆔 <b>ID:</b> <code>${escapeHtml(topupOrder.id)}</code>\n⏰ <b>${lang === 'en' ? 'Valid for' : 'Berlaku'}:</b> ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n⏳ ${lang === 'en' ? 'Waiting for QRIS payment...' : 'Menunggu pembayaran QRIS...'}`;
+        const message = `${title}\n\n💰 <b>${lang === 'en' ? 'Balance received' : 'Saldo masuk'}:</b> ${amountDisplay}\n• <b>Fee:</b> ${feeDisplay}\n• <b>${lang === 'en' ? 'Total Payment' : 'Total Bayar'}:</b> ${totalDisplay}\n🆔 <b>ID:</b> <code>${escapeHtml(topupOrder.id)}</code>\n⏰ <b>${lang === 'en' ? 'Valid for' : 'Berlaku'}:</b> ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n⏳ ${lang === 'en' ? 'Waiting for QRIS payment...' : 'Menunggu pembayaran QRIS...'}`;
 
         try { await ctx.deleteMessage(); } catch (e) { }
 
@@ -1072,4 +1080,4 @@ const registerKeyboardHandler = (bot) => {
     }
 };
 
-module.exports = { registerKeyboardHandler, generateCategoryListMsg };
+module.exports = { registerKeyboardHandler, generateCategoryListMsg, generateCategoryButtons, sortCategoriesAZ };

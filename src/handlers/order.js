@@ -261,10 +261,10 @@ const registerOrderHandler = (bot) => {
         const title = lang === 'en' ? '🧾 <b>ORDER INVOICE</b>' : '🧾 <b>INVOICE PESANAN</b>';
         const l = lang === 'en' ? {
             orderId: 'Order ID', prod: 'Product', qty: 'Quantity', total: 'TOTAL PAYMENT',
-            status: 'Status: Waiting for QRIS payment', valid: 'Valid for', fee: 'Gateway Fee'
+            status: 'Status: Waiting for QRIS payment', valid: 'Valid for', fee: 'Fee'
         } : {
             orderId: 'Order ID', prod: 'Produk', qty: 'Jumlah', total: 'TOTAL BAYAR',
-            status: 'Status: Menunggu pembayaran QRIS', valid: 'Berlaku', fee: 'Biaya Gateway'
+            status: 'Status: Menunggu pembayaran QRIS', valid: 'Berlaku', fee: 'Fee'
         };
         const totalAmount = qrisResult.data.total_payment || order.total_idr;
         const buyerFee = Math.max(0, totalAmount - order.total_idr);

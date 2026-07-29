@@ -87,3 +87,25 @@ test('runtime category renderer mengimpor escapeHtml dan aman untuk karakter HTM
   assert.match(msg, /A&amp;B &lt;PROMO&gt;/i);
   assert.doesNotMatch(msg, /A&B <Promo>/i);
 });
+
+test('daftar kategori A-Z sinkron dengan tombol dan label multibahasa', () => {
+  const { generateCategoryListMsg, generateCategoryButtons, sortCategoriesAZ } = require('../src/handlers/keyboard');
+  const categories = [
+    { id: 'z', name_id: 'Zulu', name_en: 'Alpha' },
+    { id: 'a', name_id: 'Alfa', name_en: 'Zulu' },
+    { id: 'e', name_id: 'Éclair', name_en: 'Echo' }
+  ];
+  assert.deepEqual(sortCategoriesAZ(categories, 'id').map(c => c.id), ['a', 'e', 'z']);
+  assert.deepEqual(sortCategoriesAZ(categories, 'en').map(c => c.id), ['z', 'e', 'a']);
+  const idMsg = generateCategoryListMsg(categories, 0, 'id');
+  assert.match(idMsg, /1\. <b>ALFA<\/b>[\s\S]*2\. <b>ÉCLAIR<\/b>[\s\S]*3\. <b>ZULU<\/b>/);
+  const markup = generateCategoryButtons(categories, 0, 'id');
+  assert.deepEqual(markup.reply_markup.inline_keyboard[0].map(b => b.callback_data), ['catnum_a', 'catnum_e', 'catnum_z']);
+
+  const keyboardSource = fs.readFileSync(path.join(__dirname, '../src/handlers/keyboard.js'), 'utf8');
+  const orderSource = fs.readFileSync(path.join(__dirname, '../src/handlers/order.js'), 'utf8');
+  assert.match(keyboardSource, /bulkLabel = lang === 'en' \? 'Bulk' : 'Grosir'/);
+  assert.match(keyboardSource, /<b>Fee:<\/b>/);
+  assert.doesNotMatch(keyboardSource, /Minbel\.|Biaya Gateway|Gateway Fee/);
+  assert.doesNotMatch(orderSource, /Biaya Gateway|Gateway Fee/);
+});

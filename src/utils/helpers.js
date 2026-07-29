@@ -256,7 +256,7 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
                         const usdSaved = await convertFn(discountAmount);
                         msg += `• <b>Discount:</b> -${match.percent}% (buy ${match.min_qty}+) = -$${formatUSD(usdSaved)}\n`;
                     } else {
-                        msg += `• <b>Diskon:</b> -${match.percent}% (Minbel. ${match.min_qty}) = -Rp ${formatIDR(discountAmount)}\n`;
+                        msg += `• <b>Diskon:</b> -${match.percent}% (Min. ${match.min_qty}) = -Rp ${formatIDR(discountAmount)}\n`;
                     }
                 }
             }

@@ -54,7 +54,7 @@ async function generateCheckoutMessage(product, quantity, lang) {
         priceText = `Rp ${formatIDR(effectivePrice)}`;
         totalText = `Rp ${formatIDR(totalIDR)}`;
         if (discountPercent > 0) {
-            discountText = `\n• <b>Diskon:</b>  -${discountPercent}% (Minbel. ${discountMinQty}) = -Rp ${formatIDR(discountAmount)}`;
+            discountText = `\n• <b>Diskon:</b>  -${discountPercent}% (Min. ${discountMinQty}) = -Rp ${formatIDR(discountAmount)}`;
         }
     }
 
