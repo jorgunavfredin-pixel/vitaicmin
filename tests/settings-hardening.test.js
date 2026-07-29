@@ -92,3 +92,45 @@ test('forgot-password dibatasi 5 percobaan per IP per 15 menit', () => {
   `);
   assert.deepEqual(out.codes, [400,400,400,400,400,429]);
 });
+
+test('delivery claim atomik: hanya satu dari callback/polling/manual yang menang', () => {
+  const out = runScenario(`
+    const o=db.createOrder({user_id:'1',product_id:'TOPUP',quantity:1,total_idr:1000,payment_method:'qris',status:'pending',gateway_id:'gw'});
+    console.log(JSON.stringify({first:db.claimOrderForDelivery(o.id),second:db.claimOrderForDelivery(o.id),status:db.getOrderById(o.id).status}));
+  `);
+  assert.deepEqual(out, { first: true, second: false, status: 'processing_delivery' });
+});
+
+test('expiry dan delivery memakai claim terminal yang saling eksklusif', () => {
+  const out = runScenario(`
+    const a=db.createOrder({user_id:'1',product_id:'P',quantity:1,total_idr:1000,payment_method:'qris',status:'pending',gateway_id:'gw'});
+    const delivery=db.claimOrderForDelivery(a.id); const expiryAfter=db.claimOrderForExpiry(a.id);
+    const b=db.createOrder({user_id:'1',product_id:'P',quantity:1,total_idr:1000,payment_method:'qris',status:'pending',gateway_id:'gw'});
+    const expiry=db.claimOrderForExpiry(b.id); const deliveryAfter=db.claimOrderForDelivery(b.id);
+    console.log(JSON.stringify({delivery,expiryAfter,expiry,deliveryAfter}));
+  `);
+  assert.deepEqual(out, { delivery: true, expiryAfter: false, expiry: true, deliveryAfter: false });
+});
+
+test('TOPUP settlement exactly-once meski dipanggil ulang', () => {
+  const out = runScenario(`
+    const o=db.createOrder({user_id:'7',product_id:'TOPUP',quantity:1,total_idr:2500,payment_method:'qris',status:'pending',gateway_id:'gw'});
+    db.claimOrderForDelivery(o.id); const first=db.completeTopupOrder(o.id); const second=db.completeTopupOrder(o.id);
+    const bal=db._db.prepare('SELECT balance FROM balances WHERE user_id=?').get('7').balance;
+    const hist=db._db.prepare('SELECT COUNT(*) n FROM balance_history WHERE order_id=?').get(o.id).n;
+    console.log(JSON.stringify({first,second,bal,hist,status:db.getOrderById(o.id).status}));
+  `);
+  assert.deepEqual(out, { first: true, second: false, bal: 2500, hist: 1, status: 'delivered' });
+});
+
+test('polling queue hanya QRIS pending valid dan terikat gateway', () => {
+  const out = runScenario(`
+    const future=new Date(Date.now()+60000).toISOString(), past=new Date(Date.now()-60000).toISOString();
+    const good=db.createOrder({user_id:'1',product_id:'P',quantity:1,total_idr:1000,payment_method:'qris',status:'pending',gateway_id:'gw',expires_at:future});
+    db.createOrder({user_id:'1',product_id:'P',quantity:1,total_idr:1000,payment_method:'saldo',status:'pending',gateway_id:'gw',expires_at:future});
+    db.createOrder({user_id:'1',product_id:'P',quantity:1,total_idr:1000,payment_method:'qris',status:'pending',expires_at:future});
+    db.createOrder({user_id:'1',product_id:'P',quantity:1,total_idr:1000,payment_method:'qris',status:'pending',gateway_id:'gw',expires_at:past});
+    console.log(JSON.stringify({ids:db.getPendingQRISOrders().map(x=>x.id),good:good.id}));
+  `);
+  assert.deepEqual(out.ids, [out.good]);
+});

@@ -148,12 +148,12 @@ const createQRIS = async (orderId, amount, gatewayId = null, options = {}) => {
  * Cek status via gateway yang membuat transaksi.
  * @returns {Promise<{success, status?, error?}>} status: completed|expired|pending
  */
-const checkStatus = async (orderId, amount, gatewayId = null) => {
+const checkStatus = async (orderId, amount, gatewayId = null, options = {}) => {
     const gw = resolveGateway(gatewayId);
     if (!gw) return { success: false, error: 'Tidak ada payment gateway aktif' };
     const adapter = getAdapter(gw.provider);
     if (!adapter) return { success: false, error: `Provider ${gw.provider} tidak didukung` };
-    return adapter.checkStatus(orderId, amount, gw.credentials);
+    return adapter.checkStatus(orderId, amount, gw.credentials, options);
 };
 
 /**

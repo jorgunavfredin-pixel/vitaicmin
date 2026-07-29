@@ -191,21 +191,25 @@ Segera tambahkan stok untuk menyelesaikan order ini.`;
  * @param {Object} paymentData - Payment data (optional, for logging)
  */
 const handlePaymentSuccess = async (bot, orderId, paymentData = {}) => {
+    let claimed = false;
     try {
+        // Webhook, polling, dan manual check bisa datang bersamaan. Hanya satu menang.
+        claimed = db.claimOrderForDelivery(orderId);
+        if (!claimed) return false;
         const order = db.getOrderById(orderId);
-        if (!order || order.status !== 'pending') {
+        if (!order) {
+            db.releaseOrderDeliveryClaim(orderId);
             return false;
         }
 
         // ==================== TOPUP SALDO ====================
         if (order.product_id === 'TOPUP') {
-            const { addBalance, getBalance } = require('../payments/balance');
+            const { getBalance } = require('../payments/balance');
             const userId = order.user_id;
             const lang = db.getUserLanguage(userId);
 
-            // Credit saldo
-            addBalance(userId, order.total_idr, 'qris', 'Topup via QRIS', orderId);
-            db.updateOrder(orderId, { status: 'delivered', paid_at: new Date().toISOString() });
+            // Credit saldo + history + delivered atomically; safe across races/restarts.
+            if (!db.completeTopupOrder(orderId)) return false;
 
             // Delete QRIS invoice message
             if (order.message_id && order.chat_id) {
@@ -244,6 +248,7 @@ const handlePaymentSuccess = async (bot, orderId, paymentData = {}) => {
         const product = db.getProductById(order.product_id);
         if (!product) {
             log.error(`Product ${order.product_id} not found`);
+            db.releaseOrderDeliveryClaim(orderId);
             return false;
         }
 
@@ -259,6 +264,7 @@ const handlePaymentSuccess = async (bot, orderId, paymentData = {}) => {
             if (availableStock.length < order.quantity && product.stock_mode !== 'unlimited') {
                 log.error(`Not enough stock for order ${orderId}`);
                 await notifyAdminStockIssue(bot, orderId, product, order.quantity, availableStock.length);
+                db.releaseOrderDeliveryClaim(orderId);
                 return false;
             }
             stockToDeliver = availableStock.slice(0, order.quantity);
@@ -409,6 +415,8 @@ ${warrantyHtml}
         log.info(`[PAYMENT] event=delivered order=${orderId} product=${order.product_id} quantity=${order.quantity}`);
         return true;
     } catch (error) {
+        // Jika side effect belum committed sebagai delivered, izinkan retry berikutnya.
+        if (claimed) db.releaseOrderDeliveryClaim(orderId);
         log.error(`Payment success handling error for ${orderId}:`, error);
         return false;
     }

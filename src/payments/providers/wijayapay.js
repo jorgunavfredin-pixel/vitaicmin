@@ -105,7 +105,7 @@ const createQRIS = async (orderId, amount, creds = {}) => {
  * Cek status transaksi via WijayaPay.
  * @returns {Promise<{success:boolean, status?:string, error?:string}>} status: completed|expired|pending
  */
-const checkStatus = async (orderId, amount, creds = {}) => {
+const checkStatus = async (orderId, amount, creds = {}, options = {}) => {
     const codeMerchant = creds.code_merchant || '';
     const apiKey = creds.api_key || '';
     try {
@@ -115,7 +115,7 @@ const checkStatus = async (orderId, amount, creds = {}) => {
         });
         const body = response.data || {};
         const raw = body.status_pembayaran || body.status || body.data?.status_pembayaran || body.data?.status;
-        log.info(`[PAYMENT] provider=wijayapay event=status order=${orderId} status=${normalizeStatus(raw)} ` +
+        if (!options.silent) log.info(`[PAYMENT] provider=wijayapay event=status order=${orderId} status=${normalizeStatus(raw)} ` +
             `reference=${body.data?.trx_reference || '-'}`);
         if (raw) return { success: true, status: normalizeStatus(raw) };
         return { success: false, error: 'Status tidak ditemukan' };

@@ -221,6 +221,9 @@ db.exec(`
     order_id TEXT,
     received_at TEXT NOT NULL
   );
+
+  CREATE INDEX IF NOT EXISTS idx_orders_pending_qris
+    ON orders(status, payment_method, expires_at);
 `);
 
 // Migration: seed gateway dari .env kalau BELUM ada baris untuk provider itu (backward compatible).
@@ -549,6 +552,20 @@ const getPendingOrders = () => {
   }));
 };
 
+// Bounded polling queue: hanya QRIS pending, belum expired, dan gateway pembuatnya jelas.
+const getPendingQRISOrders = (limit = 50) => {
+  return db.prepare(`SELECT * FROM orders
+    WHERE status = 'pending' AND payment_method = 'qris'
+      AND gateway_id IS NOT NULL AND gateway_id != ''
+      AND (expires_at IS NULL OR expires_at > ?)
+    ORDER BY created_at ASC LIMIT ?`).all(new Date().toISOString(), limit).map(o => ({
+      ...o,
+      stock_ids: JSON.parse(o.stock_ids || '[]'),
+      delivered_data: JSON.parse(o.delivered_data || '[]'),
+      reminder_sent: o.reminder_sent === 1
+    }));
+};
+
 const generateOrderId = () => {
   const now = new Date();
   const prefix = getConfig('order_prefix', 'ORDER_PREFIX', 'ORD');
@@ -609,6 +626,48 @@ const claimOrderForPayment = (orderId) => {
   const result = db.prepare("UPDATE orders SET status = 'processing' WHERE id = ? AND status IN ('init', 'pending')").run(orderId);
   return result.changes === 1;
 };
+
+// Atomic delivery claim shared by webhook, polling, and manual status check.
+// Only one caller can transition pending → processing_delivery.
+const claimOrderForDelivery = (orderId) => {
+  const result = db.prepare("UPDATE orders SET status = 'processing_delivery' WHERE id = ? AND status = 'pending'").run(orderId);
+  return result.changes === 1;
+};
+
+const releaseOrderDeliveryClaim = (orderId) => {
+  const result = db.prepare("UPDATE orders SET status = 'pending' WHERE id = ? AND status = 'processing_delivery'").run(orderId);
+  return result.changes === 1;
+};
+
+const claimOrderForExpiry = (orderId) => {
+  const result = db.prepare("UPDATE orders SET status = 'processing_expiry' WHERE id = ? AND status = 'pending'").run(orderId);
+  return result.changes === 1;
+};
+
+const releaseOrderExpiryClaim = (orderId) => {
+  const result = db.prepare("UPDATE orders SET status = 'pending' WHERE id = ? AND status = 'processing_expiry'").run(orderId);
+  return result.changes === 1;
+};
+
+const recoverPaymentClaims = () => {
+  const result = db.prepare("UPDATE orders SET status = 'pending' WHERE status IN ('processing_delivery', 'processing_expiry')").run();
+  return result.changes;
+};
+
+// Exactly-once TOPUP settlement: balance, history, and terminal order status
+// commit in one SQLite transaction after the shared delivery claim is won.
+const completeTopupOrder = (orderId) => db.transaction(() => {
+  const order = db.prepare("SELECT * FROM orders WHERE id = ? AND product_id = 'TOPUP' AND status = 'processing_delivery'").get(orderId);
+  if (!order) return false;
+  const now = new Date().toISOString();
+  db.prepare('INSERT OR IGNORE INTO balances (user_id, balance) VALUES (?, 0)').run(order.user_id);
+  db.prepare('UPDATE balances SET balance = balance + ? WHERE user_id = ?').run(order.total_idr, order.user_id);
+  const balance = db.prepare('SELECT balance FROM balances WHERE user_id = ?').get(order.user_id).balance;
+  db.prepare(`INSERT INTO balance_history (id, user_id, type, amount, method, order_id, note, balance_after, created_at)
+    VALUES (?, ?, 'topup', ?, 'qris', ?, 'Topup via QRIS', ?, ?)`).run(`bal_${Date.now()}_${order.id}`, order.user_id, order.total_idr, order.id, balance, now);
+  db.prepare("UPDATE orders SET status = 'delivered', paid_at = ?, delivered_at = ? WHERE id = ? AND status = 'processing_delivery'").run(now, now, order.id);
+  return true;
+})();
 
 // ==================== USERS ====================
 const getUsers = () => {
@@ -1074,7 +1133,7 @@ module.exports = {
   // Stock
   getStock, getStockByProduct, getAvailableStockCount, getUnsoldUnreservedStock, addStock, addBulkStock, markStockAsSold, restoreStock, deleteStock, clearProductStock, removeLastStock, reserveStock, releaseReservedStock, getReservedStock,
   // Orders
-  getOrders, getOrderById, getOrdersByUser, getPendingOrders, generateOrderId, createOrder, updateOrder, deleteOrder, claimOrderForPayment,
+  getOrders, getOrderById, getOrdersByUser, getPendingOrders, getPendingQRISOrders, generateOrderId, createOrder, updateOrder, deleteOrder, claimOrderForPayment, claimOrderForDelivery, releaseOrderDeliveryClaim, claimOrderForExpiry, releaseOrderExpiryClaim, recoverPaymentClaims, completeTopupOrder,
   // Users
   getUsers, getUser, createOrUpdateUser, setUserLanguage, getUserLanguage,
   // Stats

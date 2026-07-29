@@ -17,6 +17,7 @@ const { registerAdminHandler } = require('./admin/panel');
 
 // Import services
 const { initReminderService } = require('./services/reminder');
+const { initPaymentPolling, stopPaymentPolling } = require('./services/paymentPolling');
 const { handleQRISWebhook } = require('./payments/qris');
 const { handlePaymentSuccess } = require('./services/delivery');
 
@@ -378,6 +379,7 @@ const startBot = async () => {
     try {
         // Initialize services
         initReminderService(bot);
+        initPaymentPolling(bot);
 
         // Start Express server
         server = app.listen(PORT, '0.0.0.0', () => {
@@ -408,6 +410,7 @@ const startBot = async () => {
 // Graceful shutdown — properly release port
 const shutdown = (signal) => {
     console.log(`\n⏹ ${signal} received, shutting down...`);
+    stopPaymentPolling();
     bot.stop(signal);
     if (server) {
         server.close(() => {

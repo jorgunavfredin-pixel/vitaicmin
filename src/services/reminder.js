@@ -124,6 +124,8 @@ const safeDelete = async (chatId, messageId) => {
  */
 const handleOrderExpired = async (order) => {
     try {
+        // Race-safe against webhook/polling delivery: only one terminal path wins.
+        if (!db.claimOrderForExpiry(order.id)) return false;
         const lang = db.getUserLanguage(order.user_id);
         const locale = require(`../locales/${lang}`);
 
@@ -152,6 +154,7 @@ const handleOrderExpired = async (order) => {
 
         log.info(`Order ${order.id} expired — invoice & reminder deleted`);
     } catch (error) {
+        db.releaseOrderExpiryClaim(order.id);
         log.error(`Error handling expired order ${order.id}:`, error);
     }
 };

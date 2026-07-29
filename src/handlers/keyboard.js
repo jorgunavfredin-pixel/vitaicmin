@@ -4,8 +4,8 @@ const { Markup } = require('telegraf');
 const { replyWithBanner, editBannerCaption } = require('../utils/banner');
 const { getBalance, getBalanceHistory } = require('../payments/balance');
 const gateway = require('../payments/gateway');
-const { addBalance } = require('../payments/balance');
 const { cancelOrder } = require('../services/reminder');
+const { handlePaymentSuccess } = require('../services/delivery');
 const {
     mainMenuKeyboard,
     languageKeyboard,
@@ -919,34 +919,7 @@ const registerKeyboardHandler = (bot) => {
         const result = await gateway.checkStatus(topupId, topupOrder.total_idr, topupOrder.gateway_id);
 
         if (result.success && result.status === 'completed') {
-            // Add balance
-            addBalance(userId, topupOrder.total_idr, 'qris', `Topup via QRIS`, topupId);
-            db.updateOrder(topupId, { status: 'delivered', paid_at: new Date().toISOString() });
-
-            try { await ctx.deleteMessage(); } catch (e) { }
-
-            const balance = getBalance(userId);
-            let balanceDisplay = lang === 'en'
-                ? `$${formatUSD(await convertIDRtoUSD(balance))}`
-                : `Rp ${formatIDR(balance)}`;
-
-            const topupAmtDisplay = lang === 'en'
-                ? `$${formatUSD(await convertIDRtoUSD(topupOrder.total_idr))}`
-                : `Rp ${formatIDR(topupOrder.total_idr)}`;
-
-            const successMsg = lang === 'en'
-                ? `✅ *Top Up Successful!*\n\n💰 +${topupAmtDisplay}\n💵 New balance: ${balanceDisplay}`
-                : `✅ *Topup Berhasil!*\n\n💰 +${topupAmtDisplay}\n💵 Saldo baru: ${balanceDisplay}`;
-
-            await ctx.reply(successMsg, { parse_mode: 'Markdown', ...mainMenuKeyboard(lang, userId) });
-
-            // Notify admin
-            try {
-                await notifyAdmins(ctx.telegram,
-                    `💰 *TOPUP SALDO*\n\n👤 User: \`${userId}\`\n💵 Amount: Rp ${formatIDR(topupOrder.total_idr)}\n📦 ID: \`${topupId}\``,
-                    { parse_mode: 'Markdown' }
-                );
-            } catch (e) { }
+            await handlePaymentSuccess(ctx.telegram ? { telegram: ctx.telegram } : ctx.bot, topupId, { method: 'manual_check' });
         } else if (result.success && result.status === 'expired') {
             try { await ctx.deleteMessage(); } catch (e) { }
             db.updateOrder(topupId, { status: 'expired' });

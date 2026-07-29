@@ -62,7 +62,7 @@ const createQRIS = async (orderId, amount, creds = {}) => {
     }
 };
 
-const checkStatus = async (orderId, amount, creds = {}) => {
+const checkStatus = async (orderId, amount, creds = {}, options = {}) => {
     const apiKey = creds.api_key || '';
     const slug = creds.slug || '';
     try {
@@ -71,7 +71,7 @@ const checkStatus = async (orderId, amount, creds = {}) => {
             timeout: 10000
         });
         const txData = response.data.transaction || response.data;
-        log.info(`[PAYMENT] provider=pakasir event=status order=${orderId} ` +
+        if (!options.silent) log.info(`[PAYMENT] provider=pakasir event=status order=${orderId} ` +
             `status=${normalizeStatus(txData?.status)} reference=${txData?.order_id || orderId}`);
         if (txData && txData.status) return { success: true, status: normalizeStatus(txData.status) };
         return { success: false, error: 'Status tidak ditemukan' };

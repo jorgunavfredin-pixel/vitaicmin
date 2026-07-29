@@ -167,7 +167,7 @@ function GatewayCard({ gw, showToast, onChanged }) {
                 ? `${gw.buyer_label} menggunakan ${meta.label} · ${gw.label}`
                 : `${meta.label} · ${gw.label}`}
             </span>
-            <span className="gw-mapping-detail">Callback: <code>{gw.callback_url || 'WEBHOOK_URL belum diset'}</code></span>
+            <span className="gw-mapping-detail">Callback (opsional): <code>{gw.callback_url || 'WEBHOOK_URL belum diset'}</code> · polling otomatis 20 detik tetap aktif</span>
           </div>
         </div>
         <div className="gw-card-actions">

@@ -92,12 +92,12 @@ const createQRIS = async (orderId, amount, creds = {}, options = {}) => {
     }
 };
 
-const checkStatus = async (orderId, amount, creds = {}) => {
+const checkStatus = async (orderId, amount, creds = {}, options = {}) => {
     try {
         const response = await signedRequest('POST', '/v1/api/transactions/status', { ref_id: String(orderId) }, creds);
         const data = unwrap(response);
         const status = normalizeStatus(data.status, data.payment_status);
-        log.info(`[PAYMENT] provider=xoftware event=status order=${orderId} status=${status} ` +
+        if (!options.silent) log.info(`[PAYMENT] provider=xoftware event=status order=${orderId} status=${status} ` +
             `reference=${data.provider_ref || data.transaction_id || '-'}`);
         return { success: true, status, completed_at: data.paid_at || null };
     } catch (error) {
