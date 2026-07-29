@@ -554,7 +554,7 @@ const registerKeyboardHandler = (bot) => {
         const buttons = [];
         if (totalPages > 1) {
             buttons.push([
-                { text: '▶ Next', callback_data: 'history_page_1' }
+                { text: '▶ Next', callback_data: 'history_page_1', style: 'primary' }
             ]);
         }
 
@@ -574,8 +574,8 @@ const registerKeyboardHandler = (bot) => {
         const { msg, totalPages } = buildHistoryMsg(orders, page, lang);
         const buttons = [];
         const row = [];
-        if (page > 0) row.push({ text: '◀ Prev', callback_data: `history_page_${page - 1}` });
-        if (page < totalPages - 1) row.push({ text: '▶ Next', callback_data: `history_page_${page + 1}` });
+        if (page > 0) row.push({ text: '◀ Prev', callback_data: `history_page_${page - 1}`, style: 'primary' });
+        if (page < totalPages - 1) row.push({ text: '▶ Next', callback_data: `history_page_${page + 1}`, style: 'primary' });
         if (row.length) buttons.push(row);
 
         await ctx.editMessageText(msg, {
@@ -641,7 +641,7 @@ const registerKeyboardHandler = (bot) => {
 
         const keyboard = qrisEnabled
             ? topupNominalKeyboard(lang)
-            : { reply_markup: { inline_keyboard: [[{ text: lang === 'en' ? '📜 Deposit History' : '📜 Riwayat Deposit', callback_data: 'saldo_history' }]] } };
+            : { reply_markup: { inline_keyboard: [[{ text: lang === 'en' ? '📜 Deposit History' : '📜 Riwayat Deposit', callback_data: 'saldo_history', style: 'success' }]] } };
         await ctx.reply(msg, { parse_mode: 'HTML', ...keyboard });
     });
 
@@ -772,8 +772,8 @@ const registerKeyboardHandler = (bot) => {
             parse_mode: 'Markdown',
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: lang === 'en' ? '✅ Pay Now' : '✅ Bayar Sekarang', callback_data: `topup_confirm_${amount}` }],
-                    [{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back_new' }]
+                    [{ text: lang === 'en' ? '✅ Pay Now' : '✅ Bayar Sekarang', callback_data: `topup_confirm_${amount}`, style: 'success' }],
+                    [{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back_new', style: 'primary' }]
                 ]
             }
         });
@@ -797,10 +797,11 @@ const registerKeyboardHandler = (bot) => {
         for (let i = 0; i < gateways.length; i += 2) {
             buttons.push(gateways.slice(i, i + 2).map((gw, j) => ({
                 text: `📱 QRIS ${i + j + 1}`,
-                callback_data: `topup_qgw_${gw.id || `env-${gw.provider}`}_${amount}`
+                callback_data: `topup_qgw_${gw.id || `env-${gw.provider}`}_${amount}`,
+                style: 'success'
             })));
         }
-        buttons.push([{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back_new' }]);
+        buttons.push([{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back_new', style: 'primary' }]);
         await ctx.answerCbQuery();
         await ctx.editMessageReplyMarkup({ inline_keyboard: buttons });
     });
@@ -861,7 +862,7 @@ const registerKeyboardHandler = (bot) => {
             await ctx.editMessageText(emptyMsg, {
                 parse_mode: 'HTML',
                 reply_markup: {
-                    inline_keyboard: [[{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back' }]]
+                    inline_keyboard: [[{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back', style: 'primary' }]]
                 }
             });
             return;
@@ -883,7 +884,7 @@ const registerKeyboardHandler = (bot) => {
         await ctx.editMessageText(msg, {
             parse_mode: 'HTML',
             reply_markup: {
-                inline_keyboard: [[{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back' }]]
+                inline_keyboard: [[{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back', style: 'primary' }]]
             }
         });
     });
@@ -1054,8 +1055,8 @@ const registerKeyboardHandler = (bot) => {
                 parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [
-                        [{ text: lang === 'en' ? '🔄 Check Status' : '🔄 Cek Status', callback_data: `topup_check_${topupOrder.id}` }],
-                        [{ text: lang === 'en' ? '❌ Cancel' : '❌ Batal', callback_data: `topup_cancel_order_${topupOrder.id}` }]
+                        [{ text: lang === 'en' ? '🔄 Check Status' : '🔄 Cek Status', callback_data: `topup_check_${topupOrder.id}`, style: 'success' }],
+                        [{ text: lang === 'en' ? '❌ Cancel' : '❌ Batal', callback_data: `topup_cancel_order_${topupOrder.id}`, style: 'success' }]
                     ]
                 }
             });
@@ -1067,8 +1068,8 @@ const registerKeyboardHandler = (bot) => {
                 parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [
-                        [{ text: lang === 'en' ? '🔄 Check Status' : '🔄 Cek Status', callback_data: `topup_check_${topupOrder.id}` }],
-                        [{ text: lang === 'en' ? '❌ Cancel' : '❌ Batal', callback_data: `topup_cancel_order_${topupOrder.id}` }]
+                        [{ text: lang === 'en' ? '🔄 Check Status' : '🔄 Cek Status', callback_data: `topup_check_${topupOrder.id}`, style: 'success' }],
+                        [{ text: lang === 'en' ? '❌ Cancel' : '❌ Batal', callback_data: `topup_cancel_order_${topupOrder.id}`, style: 'success' }]
                     ]
                 }
             });

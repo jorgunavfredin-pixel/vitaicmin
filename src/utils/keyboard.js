@@ -571,31 +571,32 @@ const paymentMethodKeyboard = (orderId, lang = 'id') => {
 
 const topupNominalKeyboard = (lang = 'id') => {
     const historyText = lang === 'en' ? '📜 Deposit History' : '📜 Riwayat Deposit';
+    const green = (text, callback) => ({ ...Markup.button.callback(text, callback), style: 'success' });
 
     if (lang === 'en') {
         return Markup.inlineKeyboard([
             [
-                Markup.button.callback('$0.5', 'topup_usd_0.5'),
-                Markup.button.callback('$1', 'topup_usd_1')
+                green('$0.5', 'topup_usd_0.5'),
+                green('$1', 'topup_usd_1')
             ],
             [
-                Markup.button.callback('$2', 'topup_usd_2'),
-                Markup.button.callback('$5', 'topup_usd_5')
+                green('$2', 'topup_usd_2'),
+                green('$5', 'topup_usd_5')
             ],
-            [Markup.button.callback(historyText, 'saldo_history')]
+            [green(historyText, 'saldo_history')]
         ]);
     }
 
     return Markup.inlineKeyboard([
         [
-            Markup.button.callback('Rp 5.000', 'topup_5000'),
-            Markup.button.callback('Rp 10.000', 'topup_10000')
+            green('Rp 5.000', 'topup_5000'),
+            green('Rp 10.000', 'topup_10000')
         ],
         [
-            Markup.button.callback('Rp 25.000', 'topup_25000'),
-            Markup.button.callback('Rp 50.000', 'topup_50000')
+            green('Rp 25.000', 'topup_25000'),
+            green('Rp 50.000', 'topup_50000')
         ],
-        [Markup.button.callback(historyText, 'saldo_history')]
+        [green(historyText, 'saldo_history')]
     ]);
 };
 
@@ -604,8 +605,8 @@ const paymentPendingKeyboard = (orderId, lang = 'id') => {
     const checkText = lang === 'en' ? '⟲ Check Status' : '⟲ Cek Status';
 
     return Markup.inlineKeyboard([
-        [Markup.button.callback(checkText, `pay_check_${orderId}`)],
-        [Markup.button.callback(cancelText, `pay_cancel_${orderId}`)]
+        [{ ...Markup.button.callback(checkText, `pay_check_${orderId}`), style: 'primary' }],
+        [{ ...Markup.button.callback(cancelText, `pay_cancel_${orderId}`), style: 'danger' }]
     ]);
 };
 
@@ -621,9 +622,9 @@ const historyKeyboard = (page, totalPages, lang = 'id') => {
     const buttons = [];
     const navRow = [];
 
-    if (page > 1) navRow.push(Markup.button.callback('⬅️', `history_${page - 1}`));
+    if (page > 1) navRow.push({ ...Markup.button.callback('⬅️', `history_${page - 1}`), style: 'primary' });
     navRow.push(Markup.button.callback(`${page}/${totalPages}`, 'noop'));
-    if (page < totalPages) navRow.push(Markup.button.callback('➡️', `history_${page + 1}`));
+    if (page < totalPages) navRow.push({ ...Markup.button.callback('➡️', `history_${page + 1}`), style: 'primary' });
 
     if (navRow.length > 1) buttons.push(navRow);
 
