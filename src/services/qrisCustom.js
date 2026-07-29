@@ -102,12 +102,13 @@ const saveCustomTemplate = async (dataUrl) => {
 };
 
 const saveConfig = (input = {}) => {
+  const enabled = input.enabled !== false;
   const source = input.source === 'custom' ? 'custom' : 'preset';
   const presetId = source === 'preset' ? safeId(input.preset_id) : null;
   const templatePath = getTemplatePath(source, presetId);
-  if (!templatePath) throw new Error(source === 'custom' ? 'Twibbon custom belum diupload' : 'Tema bawaan tidak ditemukan');
+  if (enabled && !templatePath) throw new Error(source === 'custom' ? 'Twibbon custom belum diupload' : 'Tema bawaan tidak ditemukan');
   const config = {
-    enabled: input.enabled !== false,
+    enabled,
     source,
     preset_id: presetId,
     layout: normalizeLayout(input.layout),

@@ -9,6 +9,7 @@ export default function QrisCustomTab({ showToast }) {
   const [source, setSource] = useState('preset');
   const [presetId, setPresetId] = useState('');
   const [layout, setLayout] = useState(DEF);
+  const [enabled, setEnabled] = useState(true);
   const [preview, setPreview] = useState('');
   const [busy, setBusy] = useState('');
   const timer = useRef(null);
@@ -17,7 +18,7 @@ export default function QrisCustomTab({ showToast }) {
     try {
       const d = await fetchQrisCustom();
       setData(d); setSource(d.config.source); setPresetId(d.config.preset_id || d.presets[0]?.id || '');
-      setLayout(d.config.layout || d.defaults || DEF);
+      setLayout(d.config.layout || d.defaults || DEF); setEnabled(d.config.enabled !== false);
     } catch (e) { showToast(e.message, 'err'); }
   }, [showToast]);
   useEffect(() => { load(); }, [load]);
@@ -37,7 +38,15 @@ export default function QrisCustomTab({ showToast }) {
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
   const update = (key, value) => {
-    const next = { ...layout, [key]: Number(value) };
+    const numeric = Number(value);
+    const next = { ...layout };
+    if (key === 'size') {
+      const centerX = layout.x + layout.size / 2;
+      const centerY = layout.y + layout.size / 2;
+      next.size = numeric;
+      next.x = centerX - numeric / 2;
+      next.y = centerY - numeric / 2;
+    } else next[key] = numeric;
     const max = 100 - next.size;
     next.x = Math.max(0, Math.min(max, next.x)); next.y = Math.max(0, Math.min(max, next.y));
     setLayout(next);
@@ -51,7 +60,7 @@ export default function QrisCustomTab({ showToast }) {
   const save = async () => {
     setBusy('save');
     try {
-      const r = await saveQrisCustom({ enabled: true, source, preset_id: presetId, layout });
+      const r = await saveQrisCustom({ enabled, source, preset_id: presetId, layout });
       showToast(r.message); await load();
     } catch (e) { showToast(e.message, 'err'); } finally { setBusy(''); }
   };
@@ -75,6 +84,11 @@ export default function QrisCustomTab({ showToast }) {
     <h3 className="settings-section-title">QRIS Custom</h3>
     <div className="settings-note hint-icon"><Icon name="info" size={14}/> Pilih tema bawaan atau upload twibbon sendiri, sesuaikan posisi QR, lalu simpan.</div>
 
+    <div className="qcustom-toggle-row">
+      <div><b>Gunakan QRIS Custom</b><small>{enabled ? 'Twibbon aktif untuk checkout dan topup' : 'Buyer hanya menerima QR polos'}</small></div>
+      <button className={`gw-toggle ${enabled ? 'on' : ''}`} role="switch" aria-checked={enabled} onClick={() => setEnabled(v => !v)}><span className="gw-toggle-knob" /></button>
+    </div>
+
     <div className="qcustom-source">
       <div>
         <label className="field-label">Pilih twibbon</label>
@@ -88,7 +102,7 @@ export default function QrisCustomTab({ showToast }) {
         </select>
       </div>
       <label className="qcustom-upload">
-        <Icon name="upload" size={18}/><span><b>Punya twibbon sendiri?</b><small>Upload PNG, JPG, atau WebP — maks. 5 MB</small></span>
+        <Icon name="upload" size={18}/><span><b>Twibbon Custom</b><small>Upload PNG, JPG, atau WebP — maks. 5 MB</small></span>
         <input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>upload(e.target.files?.[0])}/>
       </label>
     </div>
@@ -101,8 +115,8 @@ export default function QrisCustomTab({ showToast }) {
           <input type="range" min={key==='size'?10:0} max={key==='size'?90:100-layout.size} step="0.05" value={layout[key]} onChange={e=>update(key,e.target.value)}/>
           <input type="number" min={key==='size'?10:0} max={key==='size'?90:100-layout.size} step="0.05" value={Number(layout[key]).toFixed(2)} onChange={e=>update(key,e.target.value)}/>
         </div>)}
-        <div className="button-row"><button className="a-btn" onClick={reset}>Reset Default</button><button className="a-btn" onClick={center}>Tepatkan ke Tengah</button></div>
-        <button className="btn-primary" onClick={save} disabled={!!busy || (source==='preset'&&!presetId) || (source==='custom'&&!data.config.custom_exists)}>{busy==='save'?'Menyimpan…':'Simpan'}</button>
+        <div className="qcustom-button-row"><button className="a-btn" onClick={reset}>Reset Default</button><button className="a-btn" onClick={center}>Tepatkan ke Tengah</button></div>
+        <button className="btn-primary" onClick={save} disabled={!!busy || (enabled && source==='preset'&&!presetId) || (enabled && source==='custom'&&!data.config.custom_exists)}>{busy==='save'?'Menyimpan…':'Simpan'}</button>
       </div>
       <div className="qcustom-preview">{preview ? <img src={preview} alt="Preview QRIS Custom"/> : <div className="empty">Pilih tema atau upload twibbon</div>}<span className="pill">{source==='custom'?'Twibbon sendiri':data.presets.find(p=>p.id===presetId)?.name||'Tema bawaan'}</span></div>
     </div>
