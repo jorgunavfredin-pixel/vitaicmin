@@ -46,8 +46,11 @@ test('admin dan buyer memakai schema percent/fixed price yang sama', () => {
   assert.match(admin, /bulk-active/);
   assert.doesNotMatch(admin, /maxHeight: 280/);
   const css = fs.readFileSync(path.join(root, 'admin-web/src/styles.css'), 'utf8');
-  assert.match(css, /\.bulk-discount-modal[^}]*max-width: 760px/);
+  assert.match(css, /\.bulk-discount-modal[^}]*max-width: 620px/);
   assert.match(css, /\.a-btn\.bulk-active/);
+  const users = fs.readFileSync(path.join(root, 'admin-web/src/pages/Users.jsx'), 'utf8');
+  assert.match(users, /table users-table/);
+  assert.match(css, /\.users-table \.th-action/);
   assert.match(menu, /calculateBulkPrice/);
   assert.match(menu, /Harga Grosir/);
 });

@@ -139,7 +139,7 @@ export default function Users() {
           <div className="empty">Tidak ada user pada filter ini.</div>
         ) : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="table users-table">
               <thead>
                 <tr>
                   <th>User</th><th>ID</th><th>Saldo</th><th>Order</th>
