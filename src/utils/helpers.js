@@ -214,70 +214,32 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
         codeVoucher: 'Kode Voucher'
     };
 
-    // Price in user's currency
-    let priceText, totalText;
-    if (lang === 'en') {
-        const usdPrice = await convertFn(effectivePrice);
-        totalText = `$${formatUSD(order.total_usd)}`;
-        if (isFlash) {
-            const origUsd = await convertFn(product.price_idr);
-            const disc = Math.round((1 - effectivePrice / product.price_idr) * 100);
-            priceText = `<s>$${formatUSD(origUsd)}</s> → <b>$${formatUSD(usdPrice)}</b> (-${disc}%) 🔥`;
-        } else {
-            priceText = `$${formatUSD(usdPrice)}`;
-        }
-    } else {
-        totalText = `Rp ${formatIDR(order.total_idr)}`;
-        if (isFlash) {
-            const disc = Math.round((1 - effectivePrice / product.price_idr) * 100);
-            priceText = `<s>Rp ${formatIDR(product.price_idr)}</s> → <b>Rp ${formatIDR(effectivePrice)}</b> (-${disc}%) 🔥`;
-        } else {
-            priceText = `Rp ${formatIDR(effectivePrice)}`;
-        }
-    }
-
-    let msg = `${l.title}\n\n`;
-    msg += `<b>${l.status}</b>\n`;
-    msg += `<b>${l.orderId}:</b> <code>${order.id}</code>\n`;
-    msg += `• <b>${l.prod}:</b> ${productName}\n`;
-    msg += `• <b>${l.price}:</b> ${priceText} / pcs\n`;
-    msg += `• <b>${l.qty}:</b> ${order.quantity} pcs\n`;
-
-    // Show the active bulk tier using the same engine as checkout/order totals.
+    const money = async (value) => lang === 'en'
+        ? `$${formatUSD(await convertFn(value))}`
+        : `Rp${formatIDR(value)}`;
     const bulkPricing = calculateBulkPrice(effectivePrice, order.quantity, product.qty_discounts, isFlash);
-    if (bulkPricing.tier) {
-        if (bulkPricing.tier.type === 'fixed_price') {
-            const unitText = lang === 'en'
-                ? `$${formatUSD(await convertFn(bulkPricing.unit_price))}`
-                : `Rp ${formatIDR(bulkPricing.unit_price)}`;
-            msg += `• <b>${lang === 'en' ? 'Active Price' : 'Harga aktif'}:</b> ${unitText} / pcs (Min. ${bulkPricing.tier.min_qty})\n`;
-        } else if (lang === 'en') {
-            msg += `• <b>Bulk:</b> -${bulkPricing.tier.percent}% (Min. ${bulkPricing.tier.min_qty}) = -$${formatUSD(await convertFn(bulkPricing.discount_amount))}\n`;
-        } else {
-            msg += `• <b>Grosir:</b> -${bulkPricing.tier.percent}% (Min. ${bulkPricing.tier.min_qty}) = -Rp ${formatIDR(bulkPricing.discount_amount)}\n`;
-        }
+    const normalSubtotal = product.price_idr * order.quantity;
+    const flashSubtotal = effectivePrice * order.quantity;
+    const bulkDiscount = Math.max(0, flashSubtotal - bulkPricing.total);
+    const flashDiscount = Math.max(0, normalSubtotal - flashSubtotal);
+    const voucherDiscount = order.discount_amount || 0;
+
+    const summaryRows = [
+        `${l.orderId.padEnd(14)}${escapeHtml(order.id)}`,
+        `${l.prod.padEnd(14)}${productName}`,
+        `${l.qty.padEnd(14)}${order.quantity} pcs`
+    ];
+    const paymentRows = [`${l.subtotal.padEnd(14)}${await money(normalSubtotal)}`];
+    if (flashDiscount > 0) paymentRows.push(`${'Flash Sale'.padEnd(14)}−${await money(flashDiscount)}`);
+    if (bulkDiscount > 0) paymentRows.push(`${(lang === 'en' ? 'Bulk' : 'Grosir').padEnd(14)}−${await money(bulkDiscount)}`);
+    if (voucherDiscount > 0) {
+        const code = order.voucher_code ? ` ${escapeHtml(order.voucher_code)}` : '';
+        paymentRows.push(`${(`${lang === 'en' ? 'Voucher' : 'Voucher'}${code}`).padEnd(14)}−${await money(voucherDiscount)}`);
     }
+    paymentRows.push('────────────────');
+    paymentRows.push(`${l.total.padEnd(14)}${await money(order.total_idr)}`);
 
-
-    if (voucherData) {
-        // With voucher: show Subtotal (original price), Voucher info, then new Total
-        let subtotalText;
-        if (lang === 'en') {
-            const originalUSD = order.original_total_usd || await convertFn(order.original_total_idr || order.total_idr);
-            subtotalText = `<s>$${formatUSD(originalUSD)}</s>`;
-        } else {
-            const originalIDR = order.original_total_idr || order.total_idr;
-            subtotalText = `<s>Rp ${formatIDR(originalIDR)}</s>`;
-        }
-        msg += `<b>${l.subtotal}:</b> ${subtotalText}\n`;
-        msg += `${l.voucherApplied}\n`;
-        msg += `• <b>${l.codeVoucher}:</b> ${escapeHtml(voucherData.code)} (${escapeHtml(voucherData.discountDesc)})\n\n`;
-        msg += `<b>${l.total}:</b> ${totalText}\n`;
-    } else {
-        // Without voucher: just Total
-        msg += `<b>${l.total}:</b> ${totalText}\n`;
-    }
-
+    let msg = `${l.title}\n\n<pre>${summaryRows.join('\n')}</pre>\n<pre>${paymentRows.join('\n')}</pre>`;
     msg += `\n<b>${l.method}</b>\n${l.select}`;
     return msg;
 };

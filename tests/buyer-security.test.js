@@ -231,6 +231,24 @@ test('compact product card dan checkout tier aktif memakai hierarchy ringkas', a
   assert.match(rendered, /<i>Akun private &amp; garansi<\/i>/);
   assert.match(rendered, /Harga grosir\s+Rp750\/pcs/);
   assert.match(rendered, /Hemat\s+Rp500/);
-  assert.match(rendered, /Total\s+<b>Rp1\.500<\/b>/);
+  assert.match(rendered, /<pre>[\s\S]*Total\s+Rp1\.500[\s\S]*<\/pre>/);
   assert.doesNotMatch(rendered, /Harga satuan/);
+});
+
+test('judul kategori pagination produk konfirmasi dan invoice memakai layout monospace', () => {
+  const root = path.join(__dirname, '..');
+  const keyboard = fs.readFileSync(path.join(root, 'src/handlers/keyboard.js'), 'utf8');
+  const menu = fs.readFileSync(path.join(root, 'src/handlers/menu.js'), 'utf8');
+  const helpers = fs.readFileSync(path.join(root, 'src/utils/helpers.js'), 'utf8');
+  const order = fs.readFileSync(path.join(root, 'src/handlers/order.js'), 'utf8');
+
+  assert.match(keyboard, /categoryName\.toUpperCase\(\)/);
+  assert.match(keyboard, /Pilih produk yang ingin dibeli/);
+  assert.match(keyboard, /« Produk Sebelumnya/);
+  assert.match(keyboard, /Produk Berikutnya »/);
+  assert.match(menu, /<pre>\$\{rows\.join/);
+  assert.match(helpers, /<pre>\$\{summaryRows\.join/);
+  assert.match(helpers, /<pre>\$\{paymentRows\.join/);
+  assert.match(order, /<pre>\$\{invoiceRows\.join/);
+  assert.match(order, /Scan QRIS di atas untuk menyelesaikan pembayaran/);
 });

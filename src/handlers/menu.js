@@ -46,7 +46,7 @@ async function generateCheckoutMessage(product, quantity, lang) {
     rows.push(`${l.qty.padEnd(16)}${quantity} pcs`);
     if (pricing.tier) rows.push(`${l.savings.padEnd(16)}${savingsDisplay}`);
     rows.push('────────────────');
-    rows.push(`${l.total.padEnd(16)}<b>${totalDisplay}</b>`);
+    rows.push(`${l.total.padEnd(16)}${totalDisplay}`);
 
     let tierDetails = '';
     if (!isFlash && pricing.tiers.length) {
@@ -55,10 +55,10 @@ async function generateCheckoutMessage(product, quantity, lang) {
             const value = tier.type === 'fixed_price' ? `${await money(tier.price)}/pcs` : `${tier.percent}%`;
             tierRows.push(`Min. ${tier.min_qty} pcs      ${value}`);
         }
-        tierDetails = `\n\n<b>${l.tiers}</b>\n${tierRows.join('\n')}`;
+        tierDetails = `\n\n<b>${l.tiers}</b>\n<pre>${tierRows.join('\n')}</pre>`;
     }
 
-    return `<b>${l.title}</b>\n\n<b>${name}</b>${desc ? `\n<i>${desc}</i>` : ''}\n\n${rows.join('\n')}${tierDetails}\n\n<i>${l.prompt}</i>`;
+    return `<b>${l.title}</b>\n\n<b>${name}</b>${desc ? `\n<i>${desc}</i>` : ''}\n\n<pre>${rows.join('\n')}</pre>${tierDetails}\n\n<i>${l.prompt}</i>`;
 }
 /**
  * Register menu handlers

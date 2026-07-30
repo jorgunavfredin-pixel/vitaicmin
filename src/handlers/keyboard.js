@@ -204,7 +204,12 @@ const registerKeyboardHandler = (bot) => {
             if (p.stock_mode === 'unlimited') return false;
             return db.getAvailableStockCount(p.id) === 0;
         });
-        let msg = hasOutOfStock ? `${labels.warning}\n\n` : '';
+        const category = db.getCategories().find(c => String(c.id) === String(catId));
+        const categoryName = escapeHtml(lang === 'en'
+            ? (category?.name_en || category?.name_id || 'Products')
+            : (category?.name_id || category?.name_en || 'Produk'));
+        let msg = `<b>${categoryName.toUpperCase()}</b>\n${lang === 'en' ? 'Select a product to purchase.' : 'Pilih produk yang ingin dibeli.'}\n\n`;
+        if (hasOutOfStock) msg += `${labels.warning}\n\n`;
 
         if (totalPages > 1) {
             msg += `📄 ${page + 1}/${totalPages}\n\n`;
@@ -271,8 +276,8 @@ const registerKeyboardHandler = (bot) => {
         // Pagination buttons
         if (totalPages > 1) {
             const navBtns = [];
-            if (page > 0) navBtns.push({ ...Markup.button.callback('[ ◄◄ PREV ]', `catpage_${catId}_${page - 1}`), style: 'primary' });
-            if (page < totalPages - 1) navBtns.push({ ...Markup.button.callback('[ NEXT ►► ]', `catpage_${catId}_${page + 1}`), style: 'success' });
+            if (page > 0) navBtns.push({ ...Markup.button.callback(lang === 'en' ? '« Prev Products' : '« Produk Sebelumnya', `catpage_${catId}_${page - 1}`), style: 'primary' });
+            if (page < totalPages - 1) navBtns.push({ ...Markup.button.callback(lang === 'en' ? 'Next Products »' : 'Produk Berikutnya »', `catpage_${catId}_${page + 1}`), style: 'success' });
             buttons.push(navBtns);
         }
 

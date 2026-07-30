@@ -311,16 +311,19 @@ const registerOrderHandler = (bot) => {
             ? `$${formatUSD(await convertIDRtoUSD(buyerFee))}`
             : `Rp ${formatIDR(buyerFee)}`;
 
-        const message = `${title}
-
-🆔 <b>${l.orderId}:</b> <code>${escapeHtml(orderId)}</code>
-• <b>${l.prod}:</b> ${prodName}
-• <b>${l.qty}:</b> ${order.quantity} pcs
-• <b>${l.fee}:</b> ${feeDisplay}
-• <b>${l.total}:</b> ${totalDisplay}
-
-⏱ <b>${l.status}</b>
-⏰ <b>${l.valid}:</b> ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}`;
+        const invoiceRows = [
+            `${l.orderId.padEnd(14)}${escapeHtml(orderId)}`,
+            `${l.prod.padEnd(14)}${prodName}`,
+            `${l.qty.padEnd(14)}${order.quantity} pcs`
+        ];
+        const paymentRows = [
+            `${(lang === 'en' ? 'Subtotal' : 'Subtotal').padEnd(14)}${lang === 'en' ? `$${formatUSD(await convertIDRtoUSD(order.total_idr))}` : `Rp${formatIDR(order.total_idr)}`}`,
+            `${l.fee.padEnd(14)}${feeDisplay}`,
+            '────────────────',
+            `${l.total.padEnd(14)}${totalDisplay}`
+        ];
+        const instruction = lang === 'en' ? 'Scan the QRIS above to complete payment.' : 'Scan QRIS di atas untuk menyelesaikan pembayaran.';
+        const message = `${title}\n\n<pre>${invoiceRows.join('\n')}</pre>\n<pre>${paymentRows.join('\n')}</pre>\n\n${l.status}\n${l.valid}: ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n<i>${instruction}</i>`;
 
         try { await ctx.deleteMessage(); } catch (e) { }
 
