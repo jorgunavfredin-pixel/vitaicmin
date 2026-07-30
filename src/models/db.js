@@ -101,6 +101,14 @@ try {
   console.log('[DB] Added flash sale columns to products table');
 }
 
+// Migration: optional transaction limit for flash sales (NULL = unlimited).
+try {
+  db.prepare('SELECT flash_max_transactions FROM products LIMIT 1').get();
+} catch (e) {
+  db.exec('ALTER TABLE products ADD COLUMN flash_max_transactions INTEGER');
+  console.log('[DB] Added flash sale transaction limit column');
+}
+
 // Migration: add qty_discounts column to products
 try {
   db.prepare('SELECT qty_discounts FROM products LIMIT 1').get();
@@ -115,6 +123,14 @@ try {
 } catch (e) {
   db.exec("ALTER TABLE products ADD COLUMN terms_format TEXT DEFAULT ''");
   console.log('[DB] Added terms_format column to products table');
+}
+
+// Migration: persist whether an order locked a flash-sale price.
+try {
+  db.prepare('SELECT flash_sale_applied FROM orders LIMIT 1').get();
+} catch (e) {
+  db.exec('ALTER TABLE orders ADD COLUMN flash_sale_applied INTEGER DEFAULT 0');
+  console.log('[DB] Added flash sale marker to orders');
 }
 
 // Migration: add stock reservation columns
@@ -636,7 +652,7 @@ const createOrder = (orderData) => {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const id = generateOrderId();
     try {
-      db.prepare(`INSERT INTO orders (id, user_id, product_id, quantity, total_idr, total_usd, payment_method, unique_code, status, stock_ids, delivered_data, reminder_sent, message_id, chat_id, created_at, expires_at, gateway_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', 0, ?, ?, ?, ?, ?)`).run(id, orderData.user_id, orderData.product_id, orderData.quantity, orderData.total_idr, orderData.total_usd || 0, orderData.payment_method, orderData.unique_code || null, orderData.status || 'pending', orderData.message_id || null, orderData.chat_id || null, created_at, orderData.expires_at || null, orderData.gateway_id || null);
+      db.prepare(`INSERT INTO orders (id, user_id, product_id, quantity, total_idr, total_usd, payment_method, unique_code, status, stock_ids, delivered_data, reminder_sent, message_id, chat_id, created_at, expires_at, gateway_id, flash_sale_applied) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', 0, ?, ?, ?, ?, ?, ?)`).run(id, orderData.user_id, orderData.product_id, orderData.quantity, orderData.total_idr, orderData.total_usd || 0, orderData.payment_method, orderData.unique_code || null, orderData.status || 'pending', orderData.message_id || null, orderData.chat_id || null, created_at, orderData.expires_at || null, orderData.gateway_id || null, orderData.flash_sale_applied ? 1 : 0);
       const newOrder = getOrderById(id);
       dbEvents.emit('order_change', newOrder);
       return newOrder;
@@ -654,7 +670,7 @@ const updateOrder = (orderId, updates, reason) => {
   const order = getOrderById(orderId);
   if (!order) return null;
   const merged = { ...order, ...updates };
-  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=?, gateway_id=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, merged.gateway_id || null, orderId);
+  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=?, gateway_id=?, flash_sale_applied=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, merged.gateway_id || null, merged.flash_sale_applied ? 1 : 0, orderId);
   const updatedOrder = getOrderById(orderId);
   dbEvents.emit('order_change', updatedOrder, reason || 'update');
   return updatedOrder;
@@ -1168,10 +1184,25 @@ const getRoutedGateway = (provider = 'pakasir') => {
 };
 
 // ==================== FLASH SALE ====================
+const getFlashSaleSlotStats = (product) => {
+  const max = Number.parseInt(product?.flash_max_transactions, 10);
+  if (!Number.isInteger(max) || max <= 0) {
+    return { limited: false, max: null, used: 0, remaining: null, percent: null, filled: 0 };
+  }
+  const used = db.prepare(`SELECT COUNT(*) AS total FROM orders
+    WHERE product_id = ? AND status IN ('delivered','paid') AND flash_sale_applied = 1
+      AND created_at >= ? AND created_at <= ?`).get(product.id, product.flash_start, product.flash_end).total;
+  const remaining = Math.max(0, max - used);
+  const percent = Math.min(100, Math.round((used / max) * 100));
+  return { limited: true, max, used, remaining, percent, filled: Math.min(10, Math.round((used / max) * 10)) };
+};
+
 const isFlashSaleActive = (product) => {
   if (!product || !product.flash_price || !product.flash_start || !product.flash_end) return false;
   const now = new Date().toISOString();
-  return now >= product.flash_start && now <= product.flash_end;
+  if (now < product.flash_start || now > product.flash_end) return false;
+  const stats = getFlashSaleSlotStats(product);
+  return !stats.limited || stats.remaining > 0;
 };
 
 const getEffectivePrice = (product) => {
@@ -1179,14 +1210,15 @@ const getEffectivePrice = (product) => {
   return product.price_idr;
 };
 
-const setFlashSale = (productId, flashPrice, flashStart, flashEnd) => {
-  db.prepare('UPDATE products SET flash_price = ?, flash_start = ?, flash_end = ? WHERE id = ?')
-    .run(flashPrice, flashStart, flashEnd, productId);
+const setFlashSale = (productId, flashPrice, flashStart, flashEnd, maxTransactions = null) => {
+  const max = Number.isInteger(Number(maxTransactions)) && Number(maxTransactions) > 0 ? Number(maxTransactions) : null;
+  db.prepare('UPDATE products SET flash_price = ?, flash_start = ?, flash_end = ?, flash_max_transactions = ? WHERE id = ?')
+    .run(flashPrice, flashStart, flashEnd, max, productId);
   return getProductById(productId);
 };
 
 const clearFlashSale = (productId) => {
-  db.prepare('UPDATE products SET flash_price = NULL, flash_start = NULL, flash_end = NULL WHERE id = ?')
+  db.prepare('UPDATE products SET flash_price = NULL, flash_start = NULL, flash_end = NULL, flash_max_transactions = NULL WHERE id = ?')
     .run(productId);
   return getProductById(productId);
 };
@@ -1195,7 +1227,7 @@ const getActiveFlashSales = () => {
   const now = new Date().toISOString();
   return db.prepare('SELECT * FROM products WHERE flash_price IS NOT NULL AND flash_start <= ? AND flash_end >= ?')
     .all(now, now)
-    .map(p => ({ ...p, active: p.active === 1 }));
+    .map(p => ({ ...p, active: p.active === 1, flash_slots: getFlashSaleSlotStats(p) }));
 };
 
 const getExpiredFlashSales = () => {
@@ -1245,7 +1277,7 @@ module.exports = {
   updatePaymentGateway, deletePaymentGateway, getActiveOrderCountByGateway, getGatewayCredential,
   getGatewayCredentialById, getRoutedGateway, getGatewayStrategy, claimWebhookEvent, releaseWebhookEvent,
   // Flash Sale
-  isFlashSaleActive, getEffectivePrice, setFlashSale, clearFlashSale, getActiveFlashSales, getExpiredFlashSales,
+  isFlashSaleActive, getFlashSaleSlotStats, getEffectivePrice, setFlashSale, clearFlashSale, getActiveFlashSales, getExpiredFlashSales,
   // Maintenance
   purgeOldOrders, purgeOldSoldStock,
   // Event Emitter

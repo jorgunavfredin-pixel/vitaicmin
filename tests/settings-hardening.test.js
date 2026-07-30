@@ -219,3 +219,23 @@ test('expired voucher holds dipurge ringan', () => {
   `);
   assert.deepEqual(out, { purged: 1, left: 0 });
 });
+
+test('flash sale slot opsional menghitung transaksi sukses dan menonaktifkan harga saat habis', () => {
+  const out = runScenario(`
+    const now=Date.now(), start=new Date(now-60000).toISOString(), end=new Date(now+60000).toISOString();
+    db._db.prepare("INSERT INTO products (id,name_id,price_idr,stock_mode,active,created_at) VALUES ('FS','Flash',1000,'unlimited',1,?)").run(new Date().toISOString());
+    db.setFlashSale('FS',500,start,end,2);
+    for(let i=0;i<2;i++) db.createOrder({user_id:String(i),product_id:'FS',quantity:1,total_idr:500,status:'delivered',flash_sale_applied:true});
+    const p=db.getProductById('FS'), stats=db.getFlashSaleSlotStats(p);
+    db._db.prepare("INSERT INTO products (id,name_id,price_idr,stock_mode,active,created_at) VALUES ('UNL','Unlimited',1000,'unlimited',1,?)").run(new Date().toISOString());
+    db.setFlashSale('UNL',700,start,end,null); const unlimited=db.getFlashSaleSlotStats(db.getProductById('UNL'));
+    console.log(JSON.stringify({stats,active:db.isFlashSaleActive(p),price:db.getEffectivePrice(p),unlimited}));
+  `);
+  assert.equal(out.stats.used, 2);
+  assert.equal(out.stats.remaining, 0);
+  assert.equal(out.stats.percent, 100);
+  assert.equal(out.stats.filled, 10);
+  assert.equal(out.active, false);
+  assert.equal(out.price, 1000);
+  assert.equal(out.unlimited.limited, false);
+});

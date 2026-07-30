@@ -75,7 +75,8 @@ const registerOrderHandler = (bot) => {
             total_usd: parseFloat(totalUSD.toFixed(2)),
             payment_method: null, // Will be set when user selects
             chat_id: ctx.chat.id,
-            expires_at: getExpirationTime('qris').toISOString() // Default, will update based on method
+            expires_at: getExpirationTime('qris').toISOString(), // Default, will update based on method
+            flash_sale_applied: db.isFlashSaleActive(product)
         });
 
         const message = replacePlaceholders(locale.confirm_order, {

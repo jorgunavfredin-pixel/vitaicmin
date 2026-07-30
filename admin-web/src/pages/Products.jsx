@@ -604,12 +604,14 @@ function FlashSaleModal({ prod, onClose, onSaved }) {
   const [price, setPrice] = useState(prod.flash_price || Math.round(prod.price_idr * 0.8));
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
+  const [limitEnabled, setLimitEnabled] = useState(!!prod.flash_max_transactions);
+  const [maxTransactions, setMaxTransactions] = useState(prod.flash_max_transactions || 10);
 
   const discountPct = prod.price_idr > 0 ? Math.round((1 - price / prod.price_idr) * 100) : 0;
 
   const handleSet = async () => {
     setBusy(true); setErr('');
-    try { const r = await setFlashSale(prod.id, { flash_price: price, flash_start: startDate, flash_end: endDate }); onSaved(r.message); }
+    try { const r = await setFlashSale(prod.id, { flash_price: price, flash_start: startDate, flash_end: endDate, flash_limit_enabled: limitEnabled, flash_max_transactions: limitEnabled ? maxTransactions : null }); onSaved(r.message); }
     catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   const handleClear = async () => {
@@ -645,6 +647,17 @@ function FlashSaleModal({ prod, onClose, onSaved }) {
               <input type="datetime-local" className="qty-field" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </div>
           </div>
+          <label className="toggle-line" style={{ marginTop: 4 }}>
+            <input type="checkbox" checked={limitEnabled} onChange={(e) => setLimitEnabled(e.target.checked)} />
+            <span>Batasi jumlah transaksi flash sale</span>
+          </label>
+          {limitEnabled && (
+            <div>
+              <label className="field-label">Maksimal Transaksi / Slot *</label>
+              <input type="number" min="1" className="qty-field" value={maxTransactions} onChange={(e) => setMaxTransactions(parseInt(e.target.value) || 0)} />
+              <div className="muted small" style={{ marginTop: 6 }}>Satu order sukses dihitung sebagai satu slot.</div>
+            </div>
+          )}
         </div>
         <div className="modal-actions" style={{ marginTop: 20 }}>
           {prod.is_flash_active && (

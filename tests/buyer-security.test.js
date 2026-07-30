@@ -161,3 +161,17 @@ test('invoice saldo dan pagination history memakai warna yang diminta', () => {
   assert.match(keyboardSource, /saldo_back_new', style: 'primary'/);
   assert.match(keyboardSource, /topup_check_[^\n]+style: 'success'/);
 });
+
+test('flash sale banner memakai quote dan progress opsional multibahasa', () => {
+  const root = path.join(__dirname, '..');
+  const keyboard = fs.readFileSync(path.join(root, 'src/handlers/keyboard.js'), 'utf8');
+  const admin = fs.readFileSync(path.join(root, 'admin-web/src/pages/Products.jsx'), 'utf8');
+  const api = fs.readFileSync(path.join(root, 'src/web/routes/products.js'), 'utf8');
+  assert.match(keyboard, /<blockquote>/);
+  assert.match(keyboard, /'■'\.repeat/);
+  assert.match(keyboard, /Sisa.*slot/);
+  assert.match(keyboard, /slots left/);
+  assert.match(admin, /Batasi jumlah transaksi flash sale/);
+  assert.match(admin, /flash_limit_enabled/);
+  assert.match(api, /flash_max_transactions/);
+});

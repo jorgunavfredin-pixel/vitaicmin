@@ -7,6 +7,7 @@ function formatProductForAdmin(p) {
     // "Terjual" = jumlah ITEM terjual (SUM quantity order sukses), bukan jumlah baris stock sold.
     const soldStock = db.getSoldQtyByProduct(p.id);
     const isFlash = db.isFlashSaleActive(p);
+    const flashSlots = db.getFlashSaleSlotStats(p);
     const effectivePrice = db.getEffectivePrice(p);
 
     let parsedDiscounts = [];
@@ -22,6 +23,7 @@ function formatProductForAdmin(p) {
         available_stock: availableStock,
         sold_stock: soldStock,
         is_flash_active: isFlash,
+        flash_slots: flashSlots,
         effective_price: effectivePrice,
         parsed_qty_discounts: parsedDiscounts
     };
@@ -189,7 +191,7 @@ const toggleActiveProduct = (req, res) => {
 
 const setFlashSale = (req, res) => {
     const { id } = req.params;
-    const { flash_price, flash_start, flash_end } = req.body;
+    const { flash_price, flash_start, flash_end, flash_limit_enabled, flash_max_transactions } = req.body;
 
     const prod = db.getProductById(id);
     if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
@@ -201,7 +203,15 @@ const setFlashSale = (req, res) => {
         return res.status(400).json({ error: 'Waktu mulai dan selesai flash sale wajib diisi' });
     }
 
-    const updated = db.setFlashSale(id, parseInt(flash_price), new Date(flash_start).toISOString(), new Date(flash_end).toISOString());
+    let maxTransactions = null;
+    if (flash_limit_enabled) {
+        maxTransactions = parseInt(flash_max_transactions);
+        if (!Number.isInteger(maxTransactions) || maxTransactions < 1) {
+            return res.status(400).json({ error: 'Maksimal transaksi harus minimal 1' });
+        }
+    }
+
+    const updated = db.setFlashSale(id, parseInt(flash_price), new Date(flash_start).toISOString(), new Date(flash_end).toISOString(), maxTransactions);
     db.dbEvents?.emit('product_change', { type: 'flash_sale_updated', product: updated });
     res.json({ ok: true, message: 'Flash sale berhasil dipasang', product: formatProductForAdmin(updated) });
 };

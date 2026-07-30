@@ -422,8 +422,9 @@ const registerMenuHandler = (bot) => {
 
         await ctx.answerCbQuery();
 
+        const isFlash = db.isFlashSaleActive(product);
         const effectivePrice = db.getEffectivePrice(product);
-        const pricing = calculateBulkPrice(effectivePrice, quantity, product.qty_discounts, db.isFlashSaleActive(product));
+        const pricing = calculateBulkPrice(effectivePrice, quantity, product.qty_discounts, isFlash);
         const totalIDR = pricing.total;
         const totalUSD = await convertIDRtoUSD(totalIDR);
 
@@ -437,7 +438,8 @@ const registerMenuHandler = (bot) => {
             total_usd: parseFloat(totalUSD.toFixed(2)),
             payment_method: null, // Not selected yet
             chat_id: ctx.chat.id,
-            status: 'init' // Not pending yet - user can cancel freely
+            status: 'init', // Not pending yet - user can cancel freely
+            flash_sale_applied: isFlash
         });
 
         const msg = await buildPaymentConfirmation(order, lang, db, convertIDRtoUSD);

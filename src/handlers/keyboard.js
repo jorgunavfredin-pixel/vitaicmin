@@ -40,19 +40,30 @@ const generateCategoryListMsg = (categories, page, lang) => {
     const storeName = db.getConfig('store_name', 'STORE_NAME', 'Store');
     let msg = `👋 Hiiii.....\nWelcome to <b>${escapeHtml(storeName)}</b>\n\n`;
 
-    // Show active flash sales
-    const activeFS = db.getActiveFlashSales();
+    // One Telegram quote for all active flash-sale products.
+    const activeFS = db.getActiveFlashSales().filter(fs => fs.active !== false && (!fs.flash_slots?.limited || fs.flash_slots.remaining > 0));
     if (activeFS.length > 0) {
+        const flashLines = ['━━⚡️ 𝗙 𝗟 𝗔 𝗦 𝗛  𝗦 𝗔 𝗟 𝗘 ⚡️━━'];
         for (const fs of activeFS) {
-            const name = lang === 'en' ? fs.name_en : fs.name_id;
-            const disc = Math.round((1 - fs.flash_price / fs.price_idr) * 100);
-            const endStr = new Date(fs.flash_end).toLocaleString(lang === 'en' ? 'en-US' : 'id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            msg += `╭─⚡ <b>FLASH SALE</b> ⚡─╮\n`;
-            msg += `│ 🏷 <b>${name}</b>\n`;
-            msg += `│ 💵 <s>Rp ${formatIDR(fs.price_idr)}</s> → <b>Rp ${formatIDR(fs.flash_price)}</b> (-${disc}%) 🔥\n`;
-            msg += `│ ⏰ ${lang === 'en' ? 'Ends' : 'Berakhir'}: ${endStr} WIB\n`;
-            msg += `╰─────────────────╯\n\n`;
+            const name = escapeHtml(lang === 'en' ? (fs.name_en || fs.name_id) : (fs.name_id || fs.name_en));
+            const endStr = new Date(fs.flash_end).toLocaleString('en-GB', {
+                timeZone: 'Asia/Jakarta', day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', hour12: false
+            }).replace(',', ',').replace(':', '.');
+            flashLines.push(`🔥 <b>${name}</b>`);
+            flashLines.push(` ├💸 <s>Rp${formatIDR(fs.price_idr)}</s> → <b>Rp${formatIDR(fs.flash_price)}</b>`);
+            flashLines.push(` ├⏰ ${lang === 'en' ? 'End' : 'Berakhir'}: ${endStr} WIB`);
+            if (fs.flash_slots?.limited) {
+                const bar = '■'.repeat(fs.flash_slots.filled) + '□'.repeat(10 - fs.flash_slots.filled);
+                const remain = lang === 'en' ? `${fs.flash_slots.remaining} slots left` : `Sisa ${fs.flash_slots.remaining} slot`;
+                flashLines.push(` └${bar} ${fs.flash_slots.percent}% [ ${remain} ]`);
+            } else {
+                // Keep the tree visually closed when no transaction limit is configured.
+                flashLines[flashLines.length - 1] = flashLines.at(-1).replace(' ├', ' └');
+            }
+            flashLines.push('');
         }
+        msg += `<blockquote>${flashLines.join('\n').trim()}</blockquote>\n\n`;
     }
 
     msg += '╭─────────────────\n';
