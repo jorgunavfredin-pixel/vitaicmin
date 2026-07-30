@@ -552,7 +552,7 @@ const registerKeyboardHandler = (bot) => {
         const buttons = [];
         if (totalPages > 1) {
             buttons.push([
-                { text: '▶ Next', callback_data: 'history_page_1', style: 'primary' }
+                { text: '→ Next', callback_data: 'history_page_1', style: 'primary' }
             ]);
         }
 
@@ -572,8 +572,8 @@ const registerKeyboardHandler = (bot) => {
         const { msg, totalPages } = buildHistoryMsg(orders, page, lang);
         const buttons = [];
         const row = [];
-        if (page > 0) row.push({ text: '◀ Prev', callback_data: `history_page_${page - 1}`, style: 'primary' });
-        if (page < totalPages - 1) row.push({ text: '▶ Next', callback_data: `history_page_${page + 1}`, style: 'primary' });
+        if (page > 0) row.push({ text: '← Prev', callback_data: `history_page_${page - 1}`, style: 'primary' });
+        if (page < totalPages - 1) row.push({ text: '→ Next', callback_data: `history_page_${page + 1}`, style: 'primary' });
         if (row.length) buttons.push(row);
 
         await ctx.editMessageText(msg, {
@@ -770,8 +770,8 @@ const registerKeyboardHandler = (bot) => {
             parse_mode: 'Markdown',
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: lang === 'en' ? '✅ Pay Now' : '✅ Bayar Sekarang', callback_data: `topup_confirm_${amount}`, style: 'success' }],
-                    [{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back_new', style: 'primary' }]
+                    [{ text: lang === 'en' ? '◆ Pay Now' : '◆ Bayar Sekarang', callback_data: `topup_confirm_${amount}`, style: 'success' }],
+                    [{ text: lang === 'en' ? '←️ Back' : '←️ Kembali', callback_data: 'saldo_back_new', style: 'primary' }]
                 ]
             }
         });
@@ -794,12 +794,12 @@ const registerKeyboardHandler = (bot) => {
         const buttons = [];
         for (let i = 0; i < gateways.length; i += 2) {
             buttons.push(gateways.slice(i, i + 2).map((gw, j) => ({
-                text: `📱 QRIS ${i + j + 1}`,
+                text: `▣ QRIS ${i + j + 1}`,
                 callback_data: `topup_qgw_${gw.id || `env-${gw.provider}`}_${amount}`,
                 style: 'success'
             })));
         }
-        buttons.push([{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back_new', style: 'primary' }]);
+        buttons.push([{ text: lang === 'en' ? '←️ Back' : '←️ Kembali', callback_data: 'saldo_back_new', style: 'primary' }]);
         await ctx.answerCbQuery();
         await ctx.editMessageReplyMarkup({ inline_keyboard: buttons });
     });
@@ -860,7 +860,7 @@ const registerKeyboardHandler = (bot) => {
             await ctx.editMessageText(emptyMsg, {
                 parse_mode: 'HTML',
                 reply_markup: {
-                    inline_keyboard: [[{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back', style: 'primary' }]]
+                    inline_keyboard: [[{ text: lang === 'en' ? '←️ Back' : '←️ Kembali', callback_data: 'saldo_back', style: 'primary' }]]
                 }
             });
             return;
@@ -882,7 +882,7 @@ const registerKeyboardHandler = (bot) => {
         await ctx.editMessageText(msg, {
             parse_mode: 'HTML',
             reply_markup: {
-                inline_keyboard: [[{ text: lang === 'en' ? '◀️ Back' : '◀️ Kembali', callback_data: 'saldo_back', style: 'primary' }]]
+                inline_keyboard: [[{ text: lang === 'en' ? '←️ Back' : '←️ Kembali', callback_data: 'saldo_back', style: 'primary' }]]
             }
         });
     });
