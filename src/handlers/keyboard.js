@@ -219,7 +219,9 @@ const registerKeyboardHandler = (bot) => {
 
         for (const prod of pageProducts) {
             const rawName = lang === 'en' ? (prod.name_en || prod.name_id) : (prod.name_id || prod.name_en);
-            const rawDesc = lang === 'en' ? (prod.description_en || prod.description_id || '-') : (prod.description_id || prod.description_en || '-');
+            const rawDesc = lang === 'en'
+                ? (prod.description_en || prod.description_id || 'No description.')
+                : (prod.description_id || prod.description_en || 'Tidak ada deskripsi.');
             const name = escapeHtml(rawName);
             const desc = escapeHtml(rawDesc);
             const stock = prod.stock_mode === 'unlimited' ? '♾ Unlimited' : db.getAvailableStockCount(prod.id);

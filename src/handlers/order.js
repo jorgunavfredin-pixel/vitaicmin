@@ -311,19 +311,12 @@ const registerOrderHandler = (bot) => {
             ? `$${formatUSD(await convertIDRtoUSD(buyerFee))}`
             : `Rp ${formatIDR(buyerFee)}`;
 
-        const invoiceRows = [
-            `${l.orderId.padEnd(14)}${escapeHtml(orderId)}`,
-            `${l.prod.padEnd(14)}${prodName}`,
-            `${l.qty.padEnd(14)}${order.quantity} pcs`
-        ];
-        const paymentRows = [
-            `${(lang === 'en' ? 'Subtotal' : 'Subtotal').padEnd(14)}${lang === 'en' ? `$${formatUSD(await convertIDRtoUSD(order.total_idr))}` : `Rp${formatIDR(order.total_idr)}`}`,
-            `${l.fee.padEnd(14)}${feeDisplay}`,
-            '────────────────',
-            `${l.total.padEnd(14)}${totalDisplay}`
-        ];
-        const instruction = lang === 'en' ? 'Scan the QRIS above to complete payment.' : 'Scan QRIS di atas untuk menyelesaikan pembayaran.';
-        const message = `${title}\n\n<pre>${invoiceRows.join('\n')}</pre>\n<pre>${paymentRows.join('\n')}</pre>\n\n${l.status}\n${l.valid}: ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n<i>${instruction}</i>`;
+        const subtotalDisplay = lang === 'en'
+            ? `$${formatUSD(await convertIDRtoUSD(order.total_idr))}`
+            : `Rp${formatIDR(order.total_idr)}`;
+        const waitingStatus = lang === 'en' ? 'Waiting for QRIS payment' : 'Menunggu pembayaran QRIS';
+        const instruction = lang === 'en' ? 'Scan the QRIS above to complete payment.' : 'Scan QRIS di atas untuk membayar.';
+        const message = `${title}\n\n<b>${l.orderId}:</b> <code>${escapeHtml(orderId)}</code>\n<b>${l.prod}:</b> <b>${prodName}</b>\n<b>${l.qty}:</b> ${order.quantity} pcs\n\n<b>Subtotal:</b> ${subtotalDisplay}\n<b>${l.fee}:</b> ${feeDisplay}\n────────────────\n<b>${l.total}:</b>     <b>${totalDisplay}</b>\n\n<b>Status:</b> ${waitingStatus}\n<b>${l.valid}:</b> ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n${instruction}`;
 
         try { await ctx.deleteMessage(); } catch (e) { }
 
@@ -523,6 +516,22 @@ const registerOrderHandler = (bot) => {
     // Store voucher input states (userId -> orderId)
     const voucherStates = new Map();
 
+    const cleanupVoucherInput = async (ctx, state) => {
+        try { await ctx.telegram.deleteMessage(state.chatId, state.promptMessageId); } catch (_) { }
+        try { await ctx.deleteMessage(); } catch (_) { }
+    };
+
+    const editVoucherConfirmation = async (ctx, state, order, lang) => {
+        const confirmMsg = await buildPaymentConfirmation(order, lang, db, convertIDRtoUSD);
+        try {
+            await ctx.telegram.editMessageText(state.chatId, state.confirmationMessageId, undefined, confirmMsg, {
+                parse_mode: 'HTML', ...paymentMethodKeyboard(order.id, lang)
+            });
+        } catch (_) {
+            await ctx.reply(confirmMsg, { parse_mode: 'HTML', ...paymentMethodKeyboard(order.id, lang) });
+        }
+    };
+
     // Helper: delay function
     const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -550,19 +559,16 @@ const registerOrderHandler = (bot) => {
         await ctx.answerCbQuery();
 
         const prompt = lang === 'en'
-            ? '🎟️ *Apply Voucher*\n\nType your voucher code below:'
-            : '🎟️ *Pakai Voucher*\n\nKetik kode voucher kamu di bawah:';
+            ? 'Type your voucher code:'
+            : 'Ketik kode voucher:';
 
-        try { await ctx.deleteMessage(); } catch (e) { }
         const promptMsg = await ctx.reply(prompt, {
-            parse_mode: 'Markdown',
-            reply_markup: {
-                inline_keyboard: [[{ text: lang === 'en' ? '✘ Cancel' : '✘ Batal', callback_data: `voucher_cancel_${orderId}` }]]
-            }
+            reply_markup: { force_reply: true, selective: true }
         });
         voucherStates.set(userId, {
             orderId,
             chatId: ctx.chat.id,
+            confirmationMessageId: ctx.callbackQuery?.message?.message_id,
             promptMessageId: promptMsg.message_id,
             expiresAt: Date.now() + 10 * 60 * 1000
         });
@@ -618,9 +624,7 @@ const registerOrderHandler = (bot) => {
 
         const updatedOrder = db.getOrderById(orderId);
         const confirmMsg = await buildPaymentConfirmation(updatedOrder, lang, db, convertIDRtoUSD);
-
-        try { await ctx.deleteMessage(); } catch (e) { }
-        await ctx.reply(confirmMsg, {
+        await ctx.editMessageText(confirmMsg, {
             parse_mode: 'HTML',
             ...paymentMethodKeyboard(orderId, lang)
         });
@@ -637,6 +641,7 @@ const registerOrderHandler = (bot) => {
             return next();
         }
         if (String(ctx.chat.id) !== String(state.chatId)) return next();
+        if (ctx.message.reply_to_message?.message_id !== state.promptMessageId) return next();
         const orderId = state.orderId;
 
         const lang = db.getUserLanguage(userId);
@@ -644,6 +649,7 @@ const registerOrderHandler = (bot) => {
 
         // Clear state
         voucherStates.delete(userId);
+        await cleanupVoucherInput(ctx, state);
 
         // Validate voucher
         const voucher = db.getVoucherByCode(code);
@@ -663,11 +669,6 @@ const registerOrderHandler = (bot) => {
 
             const order = getOwnedOrder(ctx, orderId, { statuses: ['init'] });
             if (!order) return rejectOrderAccess(ctx, lang);
-            const confirmMsg = await buildPaymentConfirmation(order, lang, db, convertIDRtoUSD);
-            await ctx.reply(confirmMsg, {
-                parse_mode: 'HTML',
-                ...paymentMethodKeyboard(orderId, lang)
-            });
             return;
         }
 
@@ -700,39 +701,9 @@ const registerOrderHandler = (bot) => {
             original_total_usd: order.total_usd
         });
 
-        // Show success message
-        const successText = lang === 'en' ? '✅ Voucher Applied!' : '✅ Voucher Berhasil!';
-        const sentMsg = await ctx.reply(successText);
-
-        // Wait 3 seconds
-        await delay(2000);
-
-        // Delete success message
-        try { await ctx.telegram.deleteMessage(ctx.chat.id, sentMsg.message_id); } catch (e) { }
-
-        // Build discount description for the voucher display
-        let discountDesc;
-        if (voucher.type === 'percent') {
-            discountDesc = lang === 'en' ? `${voucher.value}% OFF` : `Diskon ${voucher.value}%`;
-        } else {
-            if (lang === 'en') {
-                const discountUSD = await convertIDRtoUSD(discountAmount);
-                discountDesc = `-$${formatUSD(discountUSD)}`;
-            } else {
-                discountDesc = `-Rp ${formatIDR(discountAmount)}`;
-            }
-        }
-
-        // Replace with full payment form including voucher details
+        // Edit the original confirmation message; no duplicate payment page.
         const updatedOrder = db.getOrderById(orderId);
-        const confirmMsg = await buildPaymentConfirmation(updatedOrder, lang, db, convertIDRtoUSD, {
-            code: code,
-            discountDesc: discountDesc
-        });
-        await ctx.reply(confirmMsg, {
-            parse_mode: 'HTML',
-            ...paymentMethodKeyboard(orderId, lang)
-        });
+        await editVoucherConfirmation(ctx, state, updatedOrder, lang);
     });
 
 };

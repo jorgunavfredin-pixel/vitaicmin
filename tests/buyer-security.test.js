@@ -249,6 +249,25 @@ test('judul kategori pagination produk konfirmasi dan invoice memakai layout mon
   assert.match(menu, /<pre>\$\{rows\.join/);
   assert.match(helpers, /<pre>\$\{summaryRows\.join/);
   assert.match(helpers, /<pre>\$\{paymentRows\.join/);
-  assert.match(order, /<pre>\$\{invoiceRows\.join/);
-  assert.match(order, /Scan QRIS di atas untuk menyelesaikan pembayaran/);
+  assert.doesNotMatch(order, /<pre>\$\{invoiceRows\.join/);
+  assert.match(order, /<b>\$\{l\.orderId}:<\/b> <code>/);
+  assert.match(order, /<b>\$\{l\.prod}:<\/b> <b>\$\{prodName}<\/b>/);
+  assert.match(order, /<b>\$\{l\.total}:<\/b>     <b>\$\{totalDisplay}<\/b>/);
+  assert.match(order, /Scan QRIS di atas untuk membayar/);
+});
+
+test('deskripsi fallback dan voucher tetap mengedit halaman konfirmasi yang sama', () => {
+  const root = path.join(__dirname, '..');
+  const keyboard = fs.readFileSync(path.join(root, 'src/handlers/keyboard.js'), 'utf8');
+  const menu = fs.readFileSync(path.join(root, 'src/handlers/menu.js'), 'utf8');
+  const order = fs.readFileSync(path.join(root, 'src/handlers/order.js'), 'utf8');
+  assert.match(keyboard, /No description\./);
+  assert.match(keyboard, /Tidak ada deskripsi\./);
+  assert.match(menu, /No description\./);
+  assert.match(menu, /Tidak ada deskripsi\./);
+  assert.match(order, /confirmationMessageId/);
+  assert.match(order, /force_reply: true/);
+  assert.match(order, /reply_to_message\?\.message_id !== state\.promptMessageId/);
+  assert.match(order, /editVoucherConfirmation\(ctx, state, updatedOrder, lang\)/);
+  assert.match(order, /await ctx\.editMessageText\(confirmMsg/);
 });

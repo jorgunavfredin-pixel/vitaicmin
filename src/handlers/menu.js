@@ -17,7 +17,9 @@ async function generateCheckoutMessage(product, quantity, lang) {
     const isFlash = db.isFlashSaleActive(product);
     const pricing = calculateBulkPrice(effectivePrice, quantity, product.qty_discounts, isFlash);
     const rawName = lang === 'en' ? (product.name_en || product.name_id || '-') : (product.name_id || product.name_en || '-');
-    const rawDesc = lang === 'en' ? (product.description_en || product.description_id || '') : (product.description_id || product.description_en || '');
+    const rawDesc = lang === 'en'
+        ? (product.description_en || product.description_id || 'No description.')
+        : (product.description_id || product.description_en || 'Tidak ada deskripsi.');
     const name = escapeHtml(rawName);
     const desc = escapeHtml(rawDesc);
     const stock = product.stock_mode === 'unlimited' ? '♾ Unlimited' : db.getAvailableStockCount(product.id);
