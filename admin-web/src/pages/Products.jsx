@@ -542,11 +542,17 @@ function ProductFormModal({ prod, categories, onClose, onSaved, toast }) {
                 <label className="field-label">Deskripsi Produk (Indonesia)</label>
                 <textarea rows={3} className="qty-field" style={{ resize: 'vertical' }} placeholder="Penjelasan fitur & detail produk..."
                   value={formData.description_id} onChange={(e) => handleChange('description_id', e.target.value)} />
+                <div className="muted small" style={{ marginTop: 6 }}>
+                  Disarankan maksimal 100 karakter agar tampilan buyer tetap ringkas. Teks lebih panjang tetap diperbolehkan. ({formData.description_id.length} karakter)
+                </div>
               </div>
               <div>
                 <label className="field-label">Deskripsi Produk (Inggris)</label>
                 <textarea rows={3} className="qty-field" style={{ resize: 'vertical' }} placeholder="Product features & details..."
                   value={formData.description_en} onChange={(e) => handleChange('description_en', e.target.value)} />
+                <div className="muted small" style={{ marginTop: 6 }}>
+                  Recommended maximum 100 characters for a compact buyer view. Longer text is still allowed. ({formData.description_en.length} characters)
+                </div>
               </div>
               <div>
                 <label className="field-label">Garansi (Indonesia)</label>

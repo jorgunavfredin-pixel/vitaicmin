@@ -1,5 +1,5 @@
 const db = require('../models/db');
-const { formatIDR, formatUSD, replacePlaceholders, buildPaymentConfirmation } = require('../utils/helpers');
+const { formatIDR, formatUSD, replacePlaceholders, buildPaymentConfirmation, escapeHtml } = require('../utils/helpers');
 const { convertIDRtoUSD } = require('../payments/exchange');
 const { calculateBulkPrice } = require('../utils/bulkPricing');
 const { createQRISPayment, generateQRImageUrl } = require('../payments/qris');
@@ -16,85 +16,49 @@ async function generateCheckoutMessage(product, quantity, lang) {
     const effectivePrice = db.getEffectivePrice(product);
     const isFlash = db.isFlashSaleActive(product);
     const pricing = calculateBulkPrice(effectivePrice, quantity, product.qty_discounts, isFlash);
-    const totalIDR = pricing.total;
-    const discountAmount = pricing.discount_amount;
-
-    const name = lang === 'en' ? product.name_en : product.name_id;
-    const desc = lang === 'en' ? (product.description_en || '-') : (product.description_id || '-');
+    const rawName = lang === 'en' ? (product.name_en || product.name_id || '-') : (product.name_id || product.name_en || '-');
+    const rawDesc = lang === 'en' ? (product.description_en || product.description_id || '') : (product.description_id || product.description_en || '');
+    const name = escapeHtml(rawName);
+    const desc = escapeHtml(rawDesc);
     const stock = product.stock_mode === 'unlimited' ? '♾ Unlimited' : db.getAvailableStockCount(product.id);
 
-    // Show price in USD for English, IDR for Indonesian
-    let priceText, totalText, discountText = '', bulkDetails = '';
-    if (lang === 'en') {
-        const usdPrice = await convertIDRtoUSD(effectivePrice);
-        const usdTotal = await convertIDRtoUSD(totalIDR);
-        priceText = `$${formatUSD(usdPrice)}`;
-        totalText = `$${formatUSD(usdTotal)}`;
-        if (pricing.tier) {
-            const usdSaved = await convertIDRtoUSD(discountAmount);
-            const activeUnit = `$${formatUSD(await convertIDRtoUSD(pricing.unit_price))}`;
-            discountText = pricing.tier.type === 'fixed_price'
-                ? `\n• <b>Active Price:</b> ${activeUnit} / pcs (Min. ${pricing.tier.min_qty})`
-                : `\n• <b>Bulk:</b> -${pricing.tier.percent}% (Min. ${pricing.tier.min_qty}) = -$${formatUSD(usdSaved)}`;
-        }
-    } else {
-        priceText = `Rp ${formatIDR(effectivePrice)}`;
-        totalText = `Rp ${formatIDR(totalIDR)}`;
-        if (pricing.tier) {
-            discountText = pricing.tier.type === 'fixed_price'
-                ? `\n• <b>Harga aktif:</b> Rp ${formatIDR(pricing.unit_price)} / pcs (Min. ${pricing.tier.min_qty})`
-                : `\n• <b>Grosir:</b> -${pricing.tier.percent}% (Min. ${pricing.tier.min_qty}) = -Rp ${formatIDR(discountAmount)}`;
-        }
-    }
+    const money = async (value) => lang === 'en'
+        ? `$${formatUSD(await convertIDRtoUSD(value))}`
+        : `Rp${formatIDR(value)}`;
+    const unitDisplay = await money(pricing.unit_price);
+    const totalDisplay = await money(pricing.total);
+    const savingsDisplay = await money(pricing.discount_amount);
 
-    const savingsText = pricing.tier
-        ? (lang === 'en' ? ` (saved $${formatUSD(await convertIDRtoUSD(discountAmount))})` : ` (hemat Rp ${formatIDR(discountAmount)})`)
-        : '';
-
-    if (!isFlash && pricing.tiers.length) {
-        const rows = [];
-        for (const tier of pricing.tiers) {
-            const value = tier.type === 'fixed_price'
-                ? (lang === 'en' ? `$${formatUSD(await convertIDRtoUSD(tier.price))}/pcs` : `Rp ${formatIDR(tier.price)}/pcs`)
-                : `${tier.percent}%`;
-            rows.push(`• Min. ${tier.min_qty} pcs → ${value}`);
-        }
-        bulkDetails = `\n💰 <b>${lang === 'en' ? 'Bulk Prices' : 'Harga Grosir'}:</b>\n${rows.join('\n')}\n`;
-    }
-
-    const title = lang === 'en' ? '🧾 CHECKOUT PRODUCT' : '🧾 CHECKOUT PRODUK';
     const l = lang === 'en' ? {
-        prod: 'Product',
-        price: 'Price',
-        stock: 'Stock',
-        qty: 'Quantity',
-        total: 'Total',
-        desc: 'Description',
+        title: 'CHECKOUT PRODUCT', stock: 'Stock', unit: 'Unit price', bulk: 'Bulk price',
+        qty: 'Quantity', savings: 'Savings', total: 'Total', tiers: 'Bulk Prices',
         prompt: 'Adjust quantity then proceed to payment:'
     } : {
-        prod: 'Produk',
-        price: 'Harga',
-        stock: 'Stock',
-        qty: 'Jumlah',
-        total: 'Total',
-        desc: 'Deskripsi',
+        title: 'CHECKOUT PRODUK', stock: 'Stok', unit: 'Harga satuan', bulk: 'Harga grosir',
+        qty: 'Jumlah', savings: 'Hemat', total: 'Total', tiers: 'Harga Grosir',
         prompt: 'Atur jumlah lalu lanjut ke pembayaran:'
     };
 
-    return `<b>${title}</b>
+    const rows = [];
+    if (pricing.tier) rows.push(`${l.bulk.padEnd(16)}${unitDisplay}/pcs`);
+    else rows.push(`${l.unit.padEnd(16)}${unitDisplay}/pcs`);
+    rows.push(`${l.stock.padEnd(16)}${stock}`);
+    rows.push(`${l.qty.padEnd(16)}${quantity} pcs`);
+    if (pricing.tier) rows.push(`${l.savings.padEnd(16)}${savingsDisplay}`);
+    rows.push('────────────────');
+    rows.push(`${l.total.padEnd(16)}<b>${totalDisplay}</b>`);
 
-• <b>${l.prod}:</b>  ${name}
-• <b>${l.price}:</b>   ${priceText} / pcs
-• <b>${l.stock}:</b>  ${stock}
+    let tierDetails = '';
+    if (!isFlash && pricing.tiers.length) {
+        const tierRows = [];
+        for (const tier of pricing.tiers) {
+            const value = tier.type === 'fixed_price' ? `${await money(tier.price)}/pcs` : `${tier.percent}%`;
+            tierRows.push(`Min. ${tier.min_qty} pcs      ${value}`);
+        }
+        tierDetails = `\n\n<b>${l.tiers}</b>\n${tierRows.join('\n')}`;
+    }
 
-━━━━━━━━━━━━━━
-• <b>${l.qty}:</b>  ${quantity} pcs${discountText}
-• <b>${l.total}:</b>   <b>${totalText}</b>${savingsText}
-• <b>${l.desc}:</b> ${desc}
-━━━━━━━━━━━━━━
-${bulkDetails}
-
-<i>${l.prompt}</i>`;
+    return `<b>${l.title}</b>\n\n<b>${name}</b>${desc ? `\n<i>${desc}</i>` : ''}\n\n${rows.join('\n')}${tierDetails}\n\n<i>${l.prompt}</i>`;
 }
 /**
  * Register menu handlers
@@ -552,4 +516,4 @@ const registerMenuHandler = (bot) => {
     });
 };
 
-module.exports = { registerMenuHandler };
+module.exports = { registerMenuHandler, generateCheckoutMessage };

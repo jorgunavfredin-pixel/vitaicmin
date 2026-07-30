@@ -115,7 +115,7 @@ test('daftar kategori A-Z sinkron dengan tombol dan label multibahasa', () => {
 
   const keyboardSource = fs.readFileSync(path.join(__dirname, '../src/handlers/keyboard.js'), 'utf8');
   const orderSource = fs.readFileSync(path.join(__dirname, '../src/handlers/order.js'), 'utf8');
-  assert.match(keyboardSource, /bulkLabel = lang === 'en' \? 'Bulk' : 'Grosir'/);
+  assert.match(keyboardSource, /bulk: 'Bulk'.*bulk: 'Grosir'/s);
   assert.match(keyboardSource, /<b>Fee:<\/b>/);
   assert.doesNotMatch(keyboardSource, /Minbel\.|Biaya Gateway|Gateway Fee/);
   assert.doesNotMatch(orderSource, /Biaya Gateway|Gateway Fee/);
@@ -196,4 +196,41 @@ test('simbol buyer unicode konsisten dan keyboard lama tetap kompatibel', () => 
   const source = fs.readFileSync(path.join(__dirname, '../src/handlers/keyboard.js'), 'utf8');
   assert.match(source, /'▦ List Produk'.*'🛒 List Produk'/);
   assert.match(source, /\[●💰\]/);
+});
+
+test('compact product card dan checkout tier aktif memakai hierarchy ringkas', async () => {
+  const root = path.join(__dirname, '..');
+  const keyboard = fs.readFileSync(path.join(root, 'src/handlers/keyboard.js'), 'utf8');
+  const menu = fs.readFileSync(path.join(root, 'src/handlers/menu.js'), 'utf8');
+  const admin = fs.readFileSync(path.join(root, 'admin-web/src/pages/Products.jsx'), 'utf8');
+
+  assert.match(keyboard, /╭─ <b>\$\{displayName\}<\/b>/);
+  assert.match(keyboard, /labels\.stock.*•.*labels\.sold/);
+  assert.match(keyboard, /labels\.bulk} » <b>/);
+  assert.match(keyboard, /╰ <i>\$\{desc\}<\/i>/);
+  assert.doesNotMatch(keyboard, /╭─〔|labels\.restock/);
+
+  assert.match(menu, /Harga grosir/);
+  assert.match(menu, /Bulk price/);
+  assert.match(menu, /Hemat/);
+  assert.match(menu, /Savings/);
+  assert.match(menu, /<i>\$\{desc\}<\/i>/);
+
+  assert.match(admin, /Disarankan maksimal 100 karakter/);
+  assert.match(admin, /description_id\.length/);
+  assert.match(admin, /description_en\.length/);
+
+  const { generateCheckoutMessage } = require('../src/handlers/menu');
+  const rendered = await generateCheckoutMessage({
+    id: 'RUNTIME-COMPACT', name_id: 'Produk <A>', name_en: 'Product A',
+    description_id: 'Akun private & garansi', description_en: 'Private account',
+    price_idr: 1000, stock_mode: 'unlimited', active: true,
+    qty_discounts: JSON.stringify([{ min_qty: 2, type: 'fixed_price', price: 750 }])
+  }, 2, 'id');
+  assert.match(rendered, /<b>Produk &lt;A&gt;<\/b>/);
+  assert.match(rendered, /<i>Akun private &amp; garansi<\/i>/);
+  assert.match(rendered, /Harga grosir\s+Rp750\/pcs/);
+  assert.match(rendered, /Hemat\s+Rp500/);
+  assert.match(rendered, /Total\s+<b>Rp1\.500<\/b>/);
+  assert.doesNotMatch(rendered, /Harga satuan/);
 });

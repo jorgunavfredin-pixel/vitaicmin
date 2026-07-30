@@ -185,12 +185,12 @@ const registerKeyboardHandler = (bot) => {
 
     const buildProductPage = async (products, page, lang, catId) => {
         const labels = lang === 'en' ? {
-            restock: 'Restock', price: 'Price', stock: 'Stock', sold: 'Sold', desc: 'Description',
+            stock: 'Stock', sold: 'Sold', bulk: 'Bulk', flash: 'Flash Sale',
             buy_btn: '🛒 Buy', remind_btn: '🔔 Remind',
             warning: '⚠️ Out of stock? Click remind to get notified when restocked',
             back: '‹ Back to Categories'
         } : {
-            restock: 'Restok', price: 'Harga', stock: 'Stok', sold: 'Terjual', desc: 'Deskripsi',
+            stock: 'Stok', sold: 'Terjual', bulk: 'Grosir', flash: 'Flash Sale',
             buy_btn: '🛒 Beli', remind_btn: '🔔 Ingatkan',
             warning: '⚠️ Stok habis? Klik ingatkan untuk mendapatkan notif saat produk restok',
             back: '‹ Kembali ke Kategori'
@@ -213,8 +213,10 @@ const registerKeyboardHandler = (bot) => {
         const buttons = [];
 
         for (const prod of pageProducts) {
-            const name = lang === 'en' ? prod.name_en : prod.name_id;
-            const desc = lang === 'en' ? (prod.description_en || '-') : (prod.description_id || '-');
+            const rawName = lang === 'en' ? (prod.name_en || prod.name_id) : (prod.name_id || prod.name_en);
+            const rawDesc = lang === 'en' ? (prod.description_en || prod.description_id || '-') : (prod.description_id || prod.description_en || '-');
+            const name = escapeHtml(rawName);
+            const desc = escapeHtml(rawDesc);
             const stock = prod.stock_mode === 'unlimited' ? '♾ Unlimited' : db.getAvailableStockCount(prod.id);
 
             let priceText;
@@ -226,14 +228,12 @@ const registerKeyboardHandler = (bot) => {
                 priceText = `$${formatUSD(usdPrice)}`;
                 if (isFlash) {
                     const origUsd = await convertIDRtoUSD(prod.price_idr);
-                    const disc = Math.round((1 - effectivePrice / prod.price_idr) * 100);
-                    priceText = `<s>$${formatUSD(origUsd)}</s> → <b>$${formatUSD(usdPrice)}</b> (-${disc}%) 🔥`;
+                    priceText = `<s>$${formatUSD(origUsd)}</s> → <b>$${formatUSD(usdPrice)}</b>`;
                 }
             } else {
                 priceText = `Rp${formatIDR(effectivePrice)}`;
                 if (isFlash) {
-                    const disc = Math.round((1 - effectivePrice / prod.price_idr) * 100);
-                    priceText = `<s>Rp${formatIDR(prod.price_idr)}</s> → <b>Rp${formatIDR(effectivePrice)}</b> (-${disc}%) 🔥`;
+                    priceText = `<s>Rp${formatIDR(prod.price_idr)}</s> → <b>Rp${formatIDR(effectivePrice)}</b>`;
                 }
             }
 
@@ -242,49 +242,29 @@ const registerKeyboardHandler = (bot) => {
                 .filter(o => o.product_id === prod.id && (o.status === 'delivered' || o.status === 'paid'))
                 .reduce((sum, o) => sum + o.quantity, 0);
 
-            const stockItems = db.getStockByProduct(prod.id);
-            let restokTime = '-';
-            if (stockItems.length > 0) {
-                const lastAdded = stockItems.sort((a, b) => new Date(b.added_at) - new Date(a.added_at))[0];
-                if (lastAdded?.added_at) {
-                    const d = new Date(lastAdded.added_at);
-                    restokTime = lang === 'en'
-                        ? d.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })
-                        : d.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-                }
-            }
-
-            const displayName = isFlash ? `⚡ ${name.toUpperCase()}` : name.toUpperCase();
-            msg += `╭─〔 <b>${displayName}</b> 〕─\n`;
-            msg += `┊🔄 <b>${labels.restock}:</b> ${restokTime}\n`;
-            msg += `┊💵 <b>${labels.price}:</b> ${priceText}\n`;
-            msg += `┊📦 <b>${labels.stock}:</b> ${stock}\n`;
-            msg += `┊📉 <b>${labels.sold}:</b> ${soldCount}\n`;
+            const displayName = rawName ? escapeHtml(rawName) : '-';
+            msg += `╭─ <b>${displayName}</b>\n`;
+            if (isFlash) msg += `├ ${labels.flash} · ${priceText}\n`;
+            else msg += `├ <b>${priceText}</b>\n`;
+            msg += `├ ${labels.stock} ${stock} • ${labels.sold} ${soldCount}\n`;
 
             // Show discount info if set and not on flash sale
             if (!isFlash && prod.qty_discounts) {
                 const first = normalizeBulkTiers(prod.qty_discounts, prod.price_idr)[0];
                 if (first) {
-                    const bulkLabel = lang === 'en' ? 'Bulk' : 'Grosir';
                     const value = first.type === 'fixed_price'
                         ? `${lang === 'en' ? '$' + formatUSD(await convertIDRtoUSD(first.price)) : 'Rp ' + formatIDR(first.price)}/pcs`
                         : `${first.percent}%`;
-                    msg += `┊💰 <b>${bulkLabel}:</b> ${value} (Min. ${first.min_qty})\n`;
+                    msg += `├ ${labels.bulk} » <b>${value}</b> (Min. ${first.min_qty})\n`;
                 }
             }
-
-            msg += `┊🗒 <b>${labels.desc}:</b> ${desc}\n`;
-            if (isFlash) {
-                const endStr = new Date(prod.flash_end).toLocaleString(lang === 'en' ? 'en-US' : 'id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-                msg += `┊⏰ <b>Flash Sale ${lang === 'en' ? 'ends' : 'berakhir'}:</b> ${endStr} WIB\n`;
-            }
-            msg += '╰─────\n\n';
+            msg += `╰ <i>${desc}</i>\n\n`;
 
             const isOutOfStock = stock !== '♾ Unlimited' && stock === 0;
             if (isOutOfStock) {
-                buttons.push([Markup.button.callback(`${labels.remind_btn} ${name}`, `remind_${prod.id}`)]);
+                buttons.push([Markup.button.callback(`${labels.remind_btn} ${rawName}`, `remind_${prod.id}`)]);
             } else {
-                buttons.push([{ ...Markup.button.callback(`${labels.buy_btn} ${name}`, `prod_${prod.id}`), style: 'primary' }]);
+                buttons.push([{ ...Markup.button.callback(`${labels.buy_btn} ${rawName}`, `prod_${prod.id}`), style: 'primary' }]);
             }
         }
 
