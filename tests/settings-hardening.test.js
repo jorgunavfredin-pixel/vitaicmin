@@ -239,3 +239,29 @@ test('flash sale slot opsional menghitung transaksi sukses dan menonaktifkan har
   assert.equal(out.price, 1000);
   assert.equal(out.unlimited.limited, false);
 });
+
+test('slot flash atomik: hanya satu order menang, release dapat direbut ulang, settlement consume', () => {
+  const out = runScenario(`
+    const now=Date.now(), start=new Date(now-60000).toISOString(), end=new Date(now+3600000).toISOString(), exp=new Date(now+900000).toISOString();
+    db._db.prepare("INSERT INTO products (id,name_id,price_idr,stock_mode,active,created_at) VALUES ('RACE','Race',1000,'unlimited',1,?)").run(new Date().toISOString());
+    db.setFlashSale('RACE',500,start,end,1);
+    const a=db.createOrder({user_id:'A',product_id:'RACE',quantity:1,total_idr:500,status:'init',flash_sale_applied:true});
+    const b=db.createOrder({user_id:'B',product_id:'RACE',quantity:1,total_idr:500,status:'init',flash_sale_applied:true});
+    const aClaim=db.claimFlashSaleSlot(a.id,exp), bFirst=db.claimFlashSaleSlot(b.id,exp);
+    const heldStats=db.getFlashSaleSlotStats(db.getProductById('RACE'));
+    db.releaseFlashSaleSlot(a.id); const bClaim=db.claimFlashSaleSlot(b.id,exp);
+    db.updateOrder(b.id,{status:'processing_delivery'}); const settled=db.completeProductOrder(b.id,[],[],null);
+    const finalStats=db.getFlashSaleSlotStats(db.getProductById('RACE'));
+    const hold=db._db.prepare('SELECT status FROM flash_sale_holds WHERE order_id=?').get(b.id);
+    console.log(JSON.stringify({aClaim,bFirst,heldStats,bClaim,settled,finalStats,hold}));
+  `);
+  assert.equal(out.aClaim.ok, true);
+  assert.equal(out.bFirst.ok, false);
+  assert.equal(out.heldStats.held, 1);
+  assert.equal(out.heldStats.remaining, 0);
+  assert.equal(out.bClaim.ok, true);
+  assert.equal(out.settled, true);
+  assert.equal(out.finalStats.used, 1);
+  assert.equal(out.finalStats.held, 0);
+  assert.equal(out.hold.status, 'consumed');
+});

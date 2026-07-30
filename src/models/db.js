@@ -133,6 +133,20 @@ try {
   console.log('[DB] Added flash sale marker to orders');
 }
 
+// Migration: durable flash-sale holds for pending payments.
+db.exec(`CREATE TABLE IF NOT EXISTS flash_sale_holds (
+  order_id TEXT PRIMARY KEY,
+  product_id TEXT NOT NULL,
+  flash_start TEXT NOT NULL,
+  flash_end TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'held',
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  consumed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_flash_holds_product_period
+  ON flash_sale_holds(product_id, flash_start, flash_end, status, expires_at);`);
+
 // Migration: add stock reservation columns
 try {
   db.prepare('SELECT reserved_by FROM stock LIMIT 1').get();
@@ -603,11 +617,13 @@ const recoverStaleQrisProcessing = (nowIso = new Date().toISOString()) => db.tra
     AND expires_at IS NOT NULL AND expires_at <= ?`).all(nowIso);
   const release = db.prepare('UPDATE stock SET reserved_by = NULL, reserved_at = NULL WHERE reserved_by = ? AND sold = 0');
   const releaseVoucher = db.prepare('DELETE FROM voucher_holds WHERE order_id = ?');
+  const releaseFlash = db.prepare("DELETE FROM flash_sale_holds WHERE order_id = ? AND status = 'held'");
   const cancel = db.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ? AND status = 'processing'");
   let recovered = 0;
   for (const row of rows) {
     release.run(row.id);
     releaseVoucher.run(row.id);
+    releaseFlash.run(row.id);
     recovered += cancel.run(row.id).changes;
   }
   return recovered;
@@ -739,6 +755,12 @@ const completeProductOrder = (orderId, stockIds, deliveredData, paymentProof = n
   const sell = db.prepare('UPDATE stock SET sold = 1, sold_to = ?, sold_at = ?, order_id = ? WHERE id = ? AND sold = 0 AND reserved_by = ?');
   for (const id of ids) {
     if (sell.run(order.user_id, now, order.id, id, order.id).changes !== 1) throw new Error('STOCK_SETTLEMENT_MISMATCH');
+  }
+  if (order.flash_sale_applied) {
+    const product = db.prepare('SELECT flash_max_transactions FROM products WHERE id = ?').get(order.product_id);
+    if (Number.parseInt(product?.flash_max_transactions, 10) > 0) {
+      if (!consumeFlashSaleSlot(order.id, now)) throw new Error('FLASH_SLOT_HOLD_MISSING');
+    }
   }
   if (order.voucher_code) {
     const hold = db.prepare('SELECT 1 FROM voucher_holds WHERE voucher_code = UPPER(?) AND user_id = ? AND order_id = ?').get(order.voucher_code, order.user_id, order.id);
@@ -1186,16 +1208,36 @@ const getRoutedGateway = (provider = 'pakasir') => {
 // ==================== FLASH SALE ====================
 const getFlashSaleSlotStats = (product) => {
   const max = Number.parseInt(product?.flash_max_transactions, 10);
-  if (!Number.isInteger(max) || max <= 0) {
-    return { limited: false, max: null, used: 0, remaining: null, percent: null, filled: 0 };
-  }
-  const used = db.prepare(`SELECT COUNT(*) AS total FROM orders
-    WHERE product_id = ? AND status IN ('delivered','paid') AND flash_sale_applied = 1
-      AND created_at >= ? AND created_at <= ?`).get(product.id, product.flash_start, product.flash_end).total;
-  const remaining = Math.max(0, max - used);
-  const percent = Math.min(100, Math.round((used / max) * 100));
-  return { limited: true, max, used, remaining, percent, filled: Math.min(10, Math.round((used / max) * 10)) };
+  if (!Number.isInteger(max) || max <= 0) return { limited: false, max: null, used: 0, held: 0, occupied: 0, remaining: null, percent: null, filled: 0 };
+  const now = new Date().toISOString();
+  const used = db.prepare(`SELECT COUNT(*) AS total FROM orders WHERE product_id=? AND status IN ('delivered','paid') AND flash_sale_applied=1 AND created_at>=? AND created_at<=?`).get(product.id, product.flash_start, product.flash_end).total;
+  const held = db.prepare(`SELECT COUNT(*) AS total FROM flash_sale_holds WHERE product_id=? AND flash_start=? AND flash_end=? AND status='held' AND expires_at>?`).get(product.id, product.flash_start, product.flash_end, now).total;
+  const occupied = Math.min(max, used + held);
+  const remaining = Math.max(0, max - occupied);
+  const percent = Math.min(100, Math.round((occupied / max) * 100));
+  return { limited: true, max, used, held, occupied, remaining, percent, filled: Math.min(10, Math.round((occupied / max) * 10)) };
 };
+
+const claimFlashSaleSlotTxn = db.transaction((orderId, expiresAt) => {
+  const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+  if (!order || !order.flash_sale_applied) return { ok: true, limited: false };
+  const existing = db.prepare("SELECT * FROM flash_sale_holds WHERE order_id=? AND status='held'").get(orderId);
+  if (existing) return { ok: true, limited: true, existing: true };
+  const product = db.prepare('SELECT * FROM products WHERE id=?').get(order.product_id);
+  const max = Number.parseInt(product?.flash_max_transactions, 10);
+  if (!Number.isInteger(max) || max <= 0) return { ok: true, limited: false };
+  const now = new Date().toISOString();
+  if (!product.flash_start || !product.flash_end || now < product.flash_start || now > product.flash_end) return { ok: false, reason: 'ended' };
+  const stats = getFlashSaleSlotStats(product);
+  if (stats.remaining <= 0) return { ok: false, reason: 'sold_out' };
+  db.prepare(`INSERT INTO flash_sale_holds(order_id,product_id,flash_start,flash_end,status,expires_at,created_at) VALUES(?,?,?,?, 'held',?,?)`).run(orderId, product.id, product.flash_start, product.flash_end, expiresAt, now);
+  return { ok: true, limited: true };
+});
+const claimFlashSaleSlot = (orderId, expiresAt) => claimFlashSaleSlotTxn(orderId, expiresAt);
+const releaseFlashSaleSlot = (orderId) => db.prepare("DELETE FROM flash_sale_holds WHERE order_id=? AND status='held'").run(orderId).changes > 0;
+const consumeFlashSaleSlot = (orderId, now = new Date().toISOString()) => db.prepare("UPDATE flash_sale_holds SET status='consumed', consumed_at=? WHERE order_id=? AND status='held'").run(now, orderId).changes > 0;
+const purgeExpiredFlashSaleHolds = (now = new Date().toISOString()) => db.prepare(`DELETE FROM flash_sale_holds
+  WHERE (status='held' AND expires_at<=?) OR (status='consumed' AND flash_end<=?)`).run(now, now).changes;
 
 const isFlashSaleActive = (product) => {
   if (!product || !product.flash_price || !product.flash_start || !product.flash_end) return false;
@@ -1277,7 +1319,7 @@ module.exports = {
   updatePaymentGateway, deletePaymentGateway, getActiveOrderCountByGateway, getGatewayCredential,
   getGatewayCredentialById, getRoutedGateway, getGatewayStrategy, claimWebhookEvent, releaseWebhookEvent,
   // Flash Sale
-  isFlashSaleActive, getFlashSaleSlotStats, getEffectivePrice, setFlashSale, clearFlashSale, getActiveFlashSales, getExpiredFlashSales,
+  isFlashSaleActive, getFlashSaleSlotStats, claimFlashSaleSlot, releaseFlashSaleSlot, consumeFlashSaleSlot, purgeExpiredFlashSaleHolds, getEffectivePrice, setFlashSale, clearFlashSale, getActiveFlashSales, getExpiredFlashSales,
   // Maintenance
   purgeOldOrders, purgeOldSoldStock,
   // Event Emitter

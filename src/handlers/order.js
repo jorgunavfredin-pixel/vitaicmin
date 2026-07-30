@@ -7,6 +7,7 @@ const { getBalance, deductBalance } = require('../payments/balance');
 const { handlePaymentSuccess } = require('../services/delivery');
 const { cancelOrder } = require('../services/reminder');
 const { getOwnedOrder, rejectOrderAccess, assertCanStartTransaction } = require('../utils/buyerSecurity');
+const { calculateBulkPrice } = require('../utils/bulkPricing');
 const {
     paymentMethodKeyboard,
     paymentPendingKeyboard,
@@ -187,6 +188,33 @@ const registerOrderHandler = (bot) => {
      * Dipakai baik oleh flow single-gateway maupun setelah buyer memilih gateway.
      * @param {string|null} gatewayId - id gateway pilihan (null = default/tunggal/.env)
      */
+    async function repriceExpiredFlashOrder(ctx, order, lang) {
+        const product = db.getProductById(order.product_id);
+        const pricing = calculateBulkPrice(product.price_idr, order.quantity, product.qty_discounts, false);
+        let totalIDR = pricing.total;
+        let discount = 0;
+        if (order.voucher_code) {
+            const voucher = db.getVoucherByCode(order.voucher_code);
+            if (voucher) {
+                discount = db.calculateDiscount(totalIDR, voucher);
+                totalIDR -= discount;
+            }
+        }
+        const totalUSD = await convertIDRtoUSD(totalIDR);
+        const originalUSD = await convertIDRtoUSD(pricing.total);
+        const updated = db.updateOrder(order.id, {
+            status: 'init', flash_sale_applied: false,
+            total_idr: totalIDR, total_usd: parseFloat(totalUSD.toFixed(2)),
+            original_total_idr: pricing.total, original_total_usd: parseFloat(originalUSD.toFixed(2)), discount_amount: discount
+        });
+        const warning = lang === 'en'
+            ? '⚠️ The Flash Sale slot has just run out. The order was updated to the current normal/bulk price. Please review the new total.'
+            : '⚠️ Slot Flash Sale baru saja habis. Order diperbarui ke harga normal/grosir saat ini. Silakan periksa total baru.';
+        await ctx.reply(warning);
+        const message = await buildPaymentConfirmation(updated, lang, db, convertIDRtoUSD);
+        await ctx.editMessageText(message, { parse_mode: 'HTML', ...paymentMethodKeyboard(order.id, lang) });
+    }
+
     async function generateQrisForOrder(ctx, orderId, gatewayId, lang) {
         const userId = ctx.from.id.toString();
         const order = getOwnedOrder(ctx, orderId, { statuses: ['init', 'pending'] });
@@ -203,6 +231,11 @@ const registerOrderHandler = (bot) => {
 
         // Siapkan method + expiry; status tetap processing sampai QR berhasil dibuat.
         const expiresAt = getExpirationTime('qris');
+        const flashClaim = db.claimFlashSaleSlot(orderId, expiresAt.toISOString());
+        if (!flashClaim.ok) {
+            await repriceExpiredFlashOrder(ctx, order, lang);
+            return;
+        }
         db.refreshVoucherHold(orderId, expiresAt.toISOString());
         db.updateOrder(orderId, {
             status: 'processing',
@@ -215,6 +248,7 @@ const registerOrderHandler = (bot) => {
         if (prodForReserve && prodForReserve.stock_mode !== 'unlimited') {
             const reserved = db.reserveStock(order.product_id, order.quantity, orderId);
             if (!reserved) {
+                db.releaseFlashSaleSlot(orderId);
                 db.releaseVoucherHold(orderId);
                 db.updateOrder(orderId, { status: 'cancelled' });
                 try { await ctx.deleteMessage(); } catch (e) { }
@@ -245,6 +279,7 @@ const registerOrderHandler = (bot) => {
             console.error('[ORDER] QRIS creation failed:', qrisResult.error);
             db.releaseReservedStock(orderId);
             db.releaseVoucherHold(orderId);
+            db.releaseFlashSaleSlot(orderId);
             db.updateOrder(orderId, { status: 'cancelled' });
             try { await ctx.deleteMessage(); } catch (e) { }
             const errMsg = lang === 'en'
@@ -361,11 +396,13 @@ const registerOrderHandler = (bot) => {
 
         // If order is still in 'init' stage (at confirmation), delete it entirely
         if (order.status === 'init') {
+            db.releaseFlashSaleSlot(orderId);
             db.releaseVoucherHold(orderId);
             db.deleteOrder(orderId); // Completely remove from DB
         } else {
             // If already pending (payment method selected), release reserved stock + cancel
             db.releaseReservedStock(orderId);
+            db.releaseFlashSaleSlot(orderId);
             db.releaseVoucherHold(orderId);
             db.updateOrder(orderId, { status: 'cancelled' });
         }
@@ -422,6 +459,15 @@ const registerOrderHandler = (bot) => {
             return;
         }
 
+        const holdMinutes = parseInt(db.getConfig('payment_timeout_minutes', null, 15)) || 15;
+        const saldoHoldExpiry = new Date(Date.now() + holdMinutes * 60 * 1000).toISOString();
+        const flashClaim = db.claimFlashSaleSlot(orderId, saldoHoldExpiry);
+        if (!flashClaim.ok) {
+            await ctx.answerCbQuery(lang === 'en' ? 'Flash Sale slot sold out.' : 'Slot Flash Sale habis.', { show_alert: true });
+            await repriceExpiredFlashOrder(ctx, order, lang);
+            return;
+        }
+
         await ctx.answerCbQuery(lang === 'en' ? '💰 Processing...' : '💰 Memproses...');
 
         // Check stock availability one more time before instant payment
@@ -429,6 +475,7 @@ const registerOrderHandler = (bot) => {
         if (product && product.stock_mode !== 'unlimited') {
             const stockCount = db.getAvailableStockCount(order.product_id);
             if (stockCount < order.quantity) {
+                db.releaseFlashSaleSlot(orderId);
                 db.releaseVoucherHold(orderId);
                 db.updateOrder(orderId, { status: 'cancelled' });
                 try { await ctx.deleteMessage(); } catch (e) { }
@@ -445,6 +492,7 @@ const registerOrderHandler = (bot) => {
         const result = deductBalance(userId, order.total_idr, orderId, `Beli ${productName} x${order.quantity}`);
 
         if (!result) {
+            db.releaseFlashSaleSlot(orderId);
             db.updateOrder(orderId, { status: 'init' }); // revert claim so the user can retry
             const errMsg = lang === 'en' ? '❌ Failed to deduct balance.' : '❌ Gagal memotong saldo.';
             await ctx.answerCbQuery(errMsg, { show_alert: true });
