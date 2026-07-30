@@ -1135,6 +1135,13 @@ input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
   padding: 10px 12px; border-radius: 10px; margin-bottom: 18px;
 }
 .settings-form { max-width: 420px; }
+.banner-manager { max-width: 620px; margin: 16px 0 22px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2, rgba(255,255,255,.025)); }
+.banner-manager-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.banner-preview { width: min(280px, 100%); aspect-ratio: 2 / 1; display: grid; place-items: center; overflow: hidden; border: 1px dashed var(--border); border-radius: 10px; background: rgba(0,0,0,.18); color: var(--muted); font-size: 13px; }
+.banner-preview img { width: 100%; height: 100%; object-fit: cover; }
+.banner-actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.banner-actions label.btn-primary { display: inline-flex; align-items: center; cursor: pointer; }
+.banner-actions .danger { color: var(--danger, #ef4444); }
 
 /* toggle rows */
 .toggle-list { display: flex; flex-direction: column; gap: 12px; }

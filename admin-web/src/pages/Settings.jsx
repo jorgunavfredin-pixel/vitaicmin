@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fetchSettings, toggleSetting, changeAdminPassword, downloadBackup, updateStoreInfo, clearToken } from '../api.js';
+import { fetchSettings, toggleSetting, changeAdminPassword, downloadBackup, updateStoreInfo, clearToken, toggleBanner, uploadBanner, deleteBanner, fetchBannerBlob } from '../api.js';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../components/Icons.jsx';
 import PaymentTab from './settings/PaymentTab.jsx';
@@ -105,7 +105,7 @@ export default function Settings() {
             </div>
           )}
 
-          {tab === 'store' && <StoreTab store={data.store} showToast={showToast} onChanged={load} />}
+          {tab === 'store' && <StoreTab store={data.store} banner={data.banner} showToast={showToast} onChanged={load} />}
 
           {tab === 'payment' && <PaymentTab showToast={showToast} />}
           {tab === 'qris-custom' && <QrisCustomTab showToast={showToast} />}
@@ -124,7 +124,56 @@ export default function Settings() {
 }
 
 // ---- Store info tab ----
-function StoreTab({ store, showToast, onChanged }) {
+function BannerManager({ banner, showToast, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState('');
+
+  useEffect(() => {
+    let url = '';
+    if (banner?.exists) fetchBannerBlob().then((blob) => { url = URL.createObjectURL(blob); setPreview(url); }).catch(() => setPreview(''));
+    else setPreview('');
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [banner?.exists, banner?.filename]);
+
+  const onFile = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return showToast('Format harus PNG, JPG, atau WebP', 'err');
+    if (file.size > 5 * 1024 * 1024) return showToast('Ukuran maksimal 5 MB', 'err');
+    setBusy(true);
+    try {
+      const dataUrl = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(file); });
+      const result = await uploadBanner(dataUrl); showToast(result.message); onChanged();
+    } catch (err) { showToast(err.message, 'err'); } finally { setBusy(false); }
+  };
+
+  const setEnabled = async (enabled) => {
+    setBusy(true);
+    try { const r = await toggleBanner(enabled); showToast(r.message); onChanged(); }
+    catch (e) { showToast(e.message, 'err'); } finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try { const r = await deleteBanner(); showToast(r.message); onChanged(); }
+    catch (e) { showToast(e.message, 'err'); } finally { setBusy(false); }
+  };
+
+  return <div className="banner-manager">
+    <div className="banner-manager-head">
+      <div><div className="toggle-label">Banner Bot</div><div className="toggle-desc">Ditampilkan pada sambutan dan navigasi buyer.</div></div>
+      <Toggle on={!!banner?.enabled} disabled={busy} onChange={setEnabled} />
+    </div>
+    <div className="banner-preview">{preview ? <img src={preview} alt="Preview banner" /> : <span>Belum ada banner</span>}</div>
+    <div className="bc-hint">File aktif: <b>{banner?.filename || '—'}</b> · PNG/JPG/WebP · maks. 5 MB</div>
+    <div className="banner-actions">
+      <label className="btn-primary">{busy ? 'Memproses…' : banner?.exists ? 'Ganti Banner' : 'Upload Banner'}<input type="file" accept="image/png,image/jpeg,image/webp" hidden disabled={busy} onChange={onFile} /></label>
+      {banner?.exists && <button className="btn-ghost danger" disabled={busy} onClick={remove}>Hapus</button>}
+    </div>
+  </div>;
+}
+
+function StoreTab({ store, banner, showToast, onChanged }) {
   const [form, setForm] = useState({
     store_name: store.store_name || '',
     support_username: store.support_username || '',
@@ -157,6 +206,8 @@ function StoreTab({ store, showToast, onChanged }) {
       <div className="settings-note hint-icon">
         <Icon name="check" size={14} /> Perubahan langsung aktif di bot (tanpa restart). Kalau dikosongkan, sistem pakai nilai dari .env atau default.
       </div>
+
+      <BannerManager banner={banner} showToast={showToast} onChanged={onChanged} />
 
       <div className="settings-form">
         <label className="field-label">Nama Toko</label>

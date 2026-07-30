@@ -12,6 +12,12 @@ const db = require('../../models/db');
 const { getWIBToday } = require('../../utils/helpers');
 const { changePassword, isCustomPassword } = require('../auth');
 const gateway = require('../../payments/gateway');
+const sharp = require('sharp');
+const banner = require('../../utils/banner');
+
+const ASSETS_DIR = path.join(__dirname, '../../../assets');
+const BANNER_MAX_BYTES = 5 * 1024 * 1024;
+const BANNER_TYPES = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' };
 
 // Key toggle yang boleh diubah dari web (whitelist — jangan izinkan sembarang key).
 const TOGGLE_KEYS = ['maintenance', 'qris_enabled', 'saldo_enabled'];
@@ -55,6 +61,12 @@ const getSettings = (req, res) => {
                 support_hours: db.getConfig('support_hours', 'SUPPORT_HOURS', '09:00 - 22:00 WIB'),
                 order_prefix: db.getConfig('order_prefix', 'ORDER_PREFIX', 'ORD'),
                 payment_timeout_minutes: parseInt(db.getConfig('payment_timeout_minutes', null, 15)) || 15
+            },
+            banner: {
+                enabled: banner.isBannerEnabled(),
+                exists: banner.hasBanner(),
+                filename: banner.resolveBannerPath() ? path.basename(banner.resolveBannerPath()) : null,
+                preview_url: banner.hasBanner() ? `/api/admin/settings/banner/file?v=${Date.now()}` : null
             },
             // Hanya runtime/deployment read-only. Config live ada di submenu masing-masing.
             env: {
@@ -165,6 +177,59 @@ const updateStore = (req, res) => {
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
+};
+
+const setBannerEnabled = (req, res) => {
+    const enabled = !!req.body?.enabled;
+    db.updateSettings({ banner_enabled: enabled });
+    banner.resetBannerCache();
+    res.json({ ok: true, enabled, message: `Banner bot ${enabled ? 'diaktifkan' : 'dinonaktifkan'}` });
+};
+
+const getBannerFile = (req, res) => {
+    const file = banner.resolveBannerPath();
+    if (!file) return res.status(404).json({ error: 'Banner belum tersedia' });
+    res.set('Cache-Control', 'private, no-store');
+    res.sendFile(file);
+};
+
+const uploadBanner = async (req, res) => {
+    let tmp = null;
+    try {
+        const match = String(req.body?.data_url || '').match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/);
+        if (!match || !BANNER_TYPES[match[1]]) return res.status(400).json({ error: 'Format banner harus PNG, JPG, atau WebP' });
+        const bytes = Buffer.from(match[2], 'base64');
+        if (!bytes.length || bytes.length > BANNER_MAX_BYTES) return res.status(400).json({ error: 'Ukuran banner maksimal 5 MB' });
+        const meta = await sharp(bytes).metadata();
+        if (!meta.width || !meta.height || meta.width < 320 || meta.height < 120 || meta.width > 4096 || meta.height > 4096) {
+            return res.status(400).json({ error: 'Dimensi banner minimal 320×120 dan maksimal 4096×4096' });
+        }
+        fs.mkdirSync(ASSETS_DIR, { recursive: true });
+        const ext = BANNER_TYPES[match[1]];
+        tmp = path.join(ASSETS_DIR, `.banner-upload-${process.pid}-${Date.now()}${ext}`);
+        fs.writeFileSync(tmp, bytes, { flag: 'wx' });
+        const finalPath = path.join(ASSETS_DIR, `banner${ext}`);
+        // Same-extension rename is atomic on this filesystem; only remove other formats
+        // after the validated replacement is already active.
+        fs.renameSync(tmp, finalPath); tmp = null;
+        for (const oldExt of ['.png', '.jpg', '.jpeg', '.webp', '.gif']) {
+            const old = path.join(ASSETS_DIR, `banner${oldExt}`);
+            if (old !== finalPath && fs.existsSync(old)) fs.unlinkSync(old);
+        }
+        db.updateSettings({ banner_enabled: true });
+        banner.resetBannerCache();
+        res.json({ ok: true, filename: path.basename(finalPath), message: 'Banner berhasil diperbarui' });
+    } catch (e) {
+        if (tmp) try { fs.unlinkSync(tmp); } catch (_) { }
+        res.status(400).json({ error: 'File banner tidak valid' });
+    }
+};
+
+const deleteBanner = (req, res) => {
+    const file = banner.resolveBannerPath();
+    if (file) fs.unlinkSync(file);
+    banner.resetBannerCache();
+    res.json({ ok: true, message: 'Banner berhasil dihapus' });
 };
 
 // ==================== PAYMENT GATEWAYS ====================
@@ -354,6 +419,10 @@ const registerSettingsRoutes = (api) => {
     api.get('/settings', getSettings);
     api.patch('/settings/toggle', toggleSetting);
     api.put('/settings/store', updateStore);
+    api.patch('/settings/banner/toggle', setBannerEnabled);
+    api.get('/settings/banner/file', getBannerFile);
+    api.post('/settings/banner', uploadBanner);
+    api.delete('/settings/banner', deleteBanner);
     api.post('/settings/password', updatePassword);
     api.get('/settings/backup', backupDb);
     // Payment gateways

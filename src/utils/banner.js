@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const db = require('../models/db');
 
 const ASSETS_DIR = path.join(__dirname, '../../assets');
 // Accepted banner image formats, in priority order (first match wins)
@@ -25,11 +26,14 @@ const resolveBannerPath = () => {
  * Whether a banner image is available.
  */
 const hasBanner = () => resolveBannerPath() !== null;
+const isBannerEnabled = () => db.getConfig('banner_enabled', null, true) !== false;
+const resetBannerCache = () => { cachedFileId = null; };
 
 /**
  * Get banner source - cached file_id after first upload, else {source: path}, else null.
  */
 const getBannerSource = () => {
+    if (!isBannerEnabled()) return null;
     if (cachedFileId) return cachedFileId;
     const p = resolveBannerPath();
     return p ? { source: p } : null;
@@ -82,4 +86,4 @@ const editBannerCaption = async (ctx, caption, extra = {}) => {
 // Backward-compat export (some code references BANNER_PATH)
 const BANNER_PATH = path.join(ASSETS_DIR, 'banner.png');
 
-module.exports = { replyWithBanner, editBannerCaption, hasBanner, BANNER_PATH };
+module.exports = { replyWithBanner, editBannerCaption, hasBanner, isBannerEnabled, resolveBannerPath, resetBannerCache, BANNER_PATH };

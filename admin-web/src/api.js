@@ -49,6 +49,15 @@ export const resetPasswordToEnv = (recoveryPassword) =>
 
 export const fetchDashboard = () => apiFetch('/dashboard');
 
+export const toggleBanner = (enabled) => apiFetch('/settings/banner/toggle', { method: 'PATCH', body: JSON.stringify({ enabled }) });
+export const uploadBanner = (data_url) => apiFetch('/settings/banner', { method: 'POST', body: JSON.stringify({ data_url }) });
+export const deleteBanner = () => apiFetch('/settings/banner', { method: 'DELETE' });
+export async function fetchBannerBlob() {
+  const res = await fetch(BASE + '/settings/banner/file', { headers: { Authorization: `Bearer ${getToken()}` }, cache: 'no-store' });
+  if (!res.ok) throw new Error('Preview banner gagal dimuat');
+  return res.blob();
+}
+
 // ---- Orders ----
 export const fetchOrders = (params = {}) => {
   const qs = new URLSearchParams(params).toString();
