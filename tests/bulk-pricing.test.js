@@ -51,6 +51,9 @@ test('admin dan buyer memakai schema percent/fixed price yang sama', () => {
   const users = fs.readFileSync(path.join(root, 'admin-web/src/pages/Users.jsx'), 'utf8');
   assert.match(users, /table users-table/);
   assert.match(css, /\.users-table \.th-action/);
+  const vouchers = fs.readFileSync(path.join(root, 'admin-web/src/pages/Vouchers.jsx'), 'utf8');
+  assert.match(vouchers, /table vouchers-table/);
+  assert.match(css, /\.vouchers-table \.th-action/);
   assert.match(menu, /calculateBulkPrice/);
   assert.match(menu, /Harga Grosir/);
 });

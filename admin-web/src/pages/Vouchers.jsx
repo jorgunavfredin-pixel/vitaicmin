@@ -86,7 +86,7 @@ export default function Vouchers() {
           <div className="empty">Belum ada voucher. Klik "Buat Voucher" untuk menambah.</div>
         ) : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="table vouchers-table">
               <thead>
                 <tr>
                   <th>Kode</th><th>Tipe</th><th>Nilai</th>

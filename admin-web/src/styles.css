@@ -686,6 +686,10 @@ button { font-family: inherit; cursor: pointer; }
 .users-table td:last-child { width: 112px; text-align: center; padding-left: 10px !important; padding-right: 10px !important; }
 .users-table .stock-action-cell { width: 100%; padding-right: 0; justify-content: center; }
 
+.vouchers-table .th-action,
+.vouchers-table td:last-child { width: 112px; text-align: center; padding-left: 10px !important; padding-right: 10px !important; }
+.vouchers-table .stock-action-cell { width: 100%; padding-right: 0; justify-content: center; }
+
 /* ============ STOCK DRAWER ============ */
 .drawer.drawer-wide { width: 500px; max-width: 96vw; }
 .stock-summary {
