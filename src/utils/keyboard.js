@@ -6,7 +6,7 @@ const { Markup } = require('telegraf');
 const navButtons = (backCallback = 'admin_home') => {
     return [
         [
-            Markup.button.callback('⬅️ Back', backCallback),
+            Markup.button.callback('‹ Back', backCallback),
             Markup.button.callback('🏠 Home', 'admin_home')
         ]
     ];
@@ -77,9 +77,9 @@ const categoryListKeyboard = (categories, page = 1, perPage = 5) => {
     // Pagination if needed
     if (totalPages > 1) {
         const navRow = [];
-        if (page > 1) navRow.push(Markup.button.callback('⬅️ Prev', `adm_cat_page_${page - 1}`));
+        if (page > 1) navRow.push(Markup.button.callback('« Prev', `adm_cat_page_${page - 1}`));
         navRow.push(Markup.button.callback(`${page}/${totalPages}`, 'noop'));
-        if (page < totalPages) navRow.push(Markup.button.callback('➡️ Next', `adm_cat_page_${page + 1}`));
+        if (page < totalPages) navRow.push(Markup.button.callback('» Next', `adm_cat_page_${page + 1}`));
         buttons.push(navRow);
     }
 
@@ -143,9 +143,9 @@ const productListKeyboard = (products, categoryId, page = 1, perPage = 5) => {
     // Pagination
     if (totalPages > 1) {
         const navRow = [];
-        if (page > 1) navRow.push(Markup.button.callback('⬅️', `adm_prod_page_${categoryId}_${page - 1}`));
+        if (page > 1) navRow.push(Markup.button.callback('«', `adm_prod_page_${categoryId}_${page - 1}`));
         navRow.push(Markup.button.callback(`${page}/${totalPages}`, 'noop'));
-        if (page < totalPages) navRow.push(Markup.button.callback('➡️', `adm_prod_page_${categoryId}_${page + 1}`));
+        if (page < totalPages) navRow.push(Markup.button.callback('»', `adm_prod_page_${categoryId}_${page + 1}`));
         buttons.push(navRow);
     }
 
@@ -252,9 +252,9 @@ const ordersListKeyboard = (orders = [], page = 1, totalPages = 1, filter = 'all
     // Pagination
     if (totalPages > 1) {
         const navRow = [];
-        if (page > 1) navRow.push(Markup.button.callback('⬅️', `adm_orders_p_${filter}_${page - 1}`));
+        if (page > 1) navRow.push(Markup.button.callback('«', `adm_orders_p_${filter}_${page - 1}`));
         navRow.push(Markup.button.callback(`${page}/${totalPages}`, 'noop'));
-        if (page < totalPages) navRow.push(Markup.button.callback('➡️', `adm_orders_p_${filter}_${page + 1}`));
+        if (page < totalPages) navRow.push(Markup.button.callback('»', `adm_orders_p_${filter}_${page + 1}`));
         buttons.push(navRow);
     }
 
@@ -287,7 +287,7 @@ const orderDetailKeyboard = (orderId, status) => {
     }
 
     buttons.push([Markup.button.callback('🗑 Delete Order', `adm_order_delete_${orderId}`)]);
-    buttons.push([Markup.button.callback('⬅️ Back to List', 'adm_orders')]);
+    buttons.push([Markup.button.callback('‹ Back to List', 'adm_orders')]);
 
     return Markup.inlineKeyboard(buttons);
 };
@@ -383,22 +383,22 @@ const mainMenuKeyboard = (lang = 'id', userId = null) => {
 
     const texts = {
         id: {
-            products: '🛒 List Produk',
-            saldo: `💰 Saldo:${balanceText}`,
-            history: '🧾 Riwayat',
-            stock: '📦 Cek Stok',
-            language: '🌐 Bahasa',
-            sewaBot: '🤖 Sewa Bot',
-            support: '📞 Customer Service'
+            products: '▦ List Produk',
+            saldo: `● Saldo:${balanceText}`,
+            history: '≡ Riwayat',
+            stock: '▤ Cek Stok',
+            language: '◎ Bahasa',
+            sewaBot: '◇ Sewa Bot',
+            support: '? Customer Service'
         },
         en: {
-            products: '🛒 Products',
-            saldo: `💰 Balance:${balanceText}`,
-            history: '🧾 History',
-            stock: '📦 Check Stock',
-            language: '🌐 Language',
-            sewaBot: '🤖 Rent Bot',
-            support: '📞 Customer Service'
+            products: '▦ Products',
+            saldo: `● Balance:${balanceText}`,
+            history: '≡ History',
+            stock: '▤ Check Stock',
+            language: '◎ Language',
+            sewaBot: '◇ Rent Bot',
+            support: '? Customer Service'
         }
     };
 
@@ -432,7 +432,7 @@ const categoriesKeyboard = (categories, lang = 'id') => {
         return [Markup.button.callback(`${emoji} ${name}`, `cat_${cat.id}`)];
     });
 
-    const backText = lang === 'en' ? '⬅️ Back' : '⬅️ Kembali';
+    const backText = lang === 'en' ? '‹ Back' : '‹ Kembali';
     buttons.push([Markup.button.callback(backText, 'menu_home')]);
 
     return Markup.inlineKeyboard(buttons);
@@ -445,7 +445,7 @@ const productsKeyboard = (products, lang = 'id') => {
         return [Markup.button.callback(`${name} [${stock}]`, `prod_${prod.id}`)];
     });
 
-    const backText = lang === 'en' ? '⬅️ Back' : '⬅️ Kembali';
+    const backText = lang === 'en' ? '‹ Back' : '‹ Kembali';
     buttons.push([Markup.button.callback(backText, 'menu_categories')]);
 
     return Markup.inlineKeyboard(buttons);
@@ -455,47 +455,47 @@ const quantityKeyboard = (maxQty, productId, currentQty = 1, categoryId, lang = 
     const buttons = [];
     const styledCallback = (text, callback, style) => ({ ...Markup.button.callback(text, callback), style });
 
-    // Row 1: [-1] [Nx] [+1]
+    // Row 1: [−1] [Nx] [＋1]
     const qtyRow = [];
     if (currentQty > 1) {
-        qtyRow.push(styledCallback('-1', `qty_dec_${productId}_${currentQty}`, 'primary'));
+        qtyRow.push(styledCallback('−1', `qty_dec_${productId}_${currentQty}`, 'primary'));
     } else {
-        qtyRow.push(styledCallback('-1', 'noop', 'primary'));
+        qtyRow.push(styledCallback('−1', 'noop', 'primary'));
     }
     qtyRow.push(styledCallback(`${currentQty}x`, 'noop', 'primary'));
     if (currentQty < maxQty) {
-        qtyRow.push(styledCallback('+1', `qty_inc_${productId}_${currentQty}`, 'primary'));
+        qtyRow.push(styledCallback('＋1', `qty_inc_${productId}_${currentQty}`, 'primary'));
     } else {
-        qtyRow.push(styledCallback('+1', 'noop', 'primary'));
+        qtyRow.push(styledCallback('＋1', 'noop', 'primary'));
     }
     buttons.push(qtyRow);
 
-    // Row 2: [-5] [📦 Max: X] [+5]
+    // Row 2: [−5] [📦 Max: X] [＋5]
     const fastRow = [];
     if (currentQty > 5) {
-        fastRow.push(styledCallback('-5', `qty_dec5_${productId}_${currentQty}`, 'primary'));
+        fastRow.push(styledCallback('−5', `qty_dec5_${productId}_${currentQty}`, 'primary'));
     } else {
-        fastRow.push(styledCallback('-5', 'noop', 'primary'));
+        fastRow.push(styledCallback('−5', 'noop', 'primary'));
     }
     const maxLabel = maxQty >= 999 ? '♾' : maxQty;
     // Clickable: prompts the user to type a quantity (1..maxQty) instead of tapping +/-
-    const typeLabel = lang === 'en' ? `✍️ Type (max ${maxLabel})` : `✍️ Ketik (max ${maxLabel})`;
+    const typeLabel = lang === 'en' ? `Type (max ${maxLabel})` : `Ketik (max ${maxLabel})`;
     fastRow.push(styledCallback(typeLabel, `qtytype_${productId}_${currentQty}`, 'primary'));
     if (currentQty + 5 <= maxQty) {
-        fastRow.push(styledCallback('+5', `qty_inc5_${productId}_${currentQty}`, 'primary'));
+        fastRow.push(styledCallback('＋5', `qty_inc5_${productId}_${currentQty}`, 'primary'));
     } else {
-        fastRow.push(styledCallback('+5', 'noop', 'primary'));
+        fastRow.push(styledCallback('＋5', 'noop', 'primary'));
     }
     buttons.push(fastRow);
 
     // Direct Payment Buttons
     if (lang === 'en') {
-        buttons.push([styledCallback('✅ Continue Payment', `pay_confirm_${productId}_${currentQty}`, 'success')]);
+        buttons.push([styledCallback('Continue Payment ›', `pay_confirm_${productId}_${currentQty}`, 'success')]);
     } else {
-        buttons.push([styledCallback('✅ Lanjutkan Pembayaran', `pay_confirm_${productId}_${currentQty}`, 'success')]);
+        buttons.push([styledCallback('Lanjutkan Pembayaran ›', `pay_confirm_${productId}_${currentQty}`, 'success')]);
     }
 
-    const backText = lang === 'en' ? '⬅️ Back' : '⬅️ Kembali';
+    const backText = lang === 'en' ? '‹ Back' : '‹ Kembali';
     // Back to specific category instead of main menu
     // Use catnum_ to trigger the vertical list handler in handlers/keyboard.js
     const backAction = categoryId ? `catnum_${categoryId}` : 'menu_categories';
@@ -516,7 +516,7 @@ const buildPaymentButtonRows = (orderId, gateways, qrisEnabled, qrisText, saldoT
 
     const rows = [];
     const qris = gateways.map((gw, index) => ({
-        text: `📱 QRIS ${index + 1}`,
+        text: `▣ QRIS ${index + 1}`,
         callback: `pay_qgw_${gw.id || `env-${gw.provider}`}_${orderId}`
     }));
     const saldo = { text: saldoText, callback: saldoCallback };
@@ -535,8 +535,8 @@ const paymentMethodKeyboard = (orderId, lang = 'id') => {
     const settings = db.getSettings();
 
     const texts = {
-        id: { qris: '📱 QRIS', saldo: '💰 Saldo', voucher: '🎟️ Pakai Voucher', removeVoucher: '🗑 Hapus Voucher', cancel: '✘ Batalkan' },
-        en: { qris: '📱 QRIS', saldo: '💰 Balance', voucher: '🎟️ Apply Voucher', removeVoucher: '🗑 Remove Voucher', cancel: '✘ Cancel' }
+        id: { qris: '▣ QRIS', saldo: '● Saldo', voucher: '＋ Pakai Voucher', removeVoucher: '− Hapus Voucher', cancel: '× Batalkan' },
+        en: { qris: '▣ QRIS', saldo: '● Balance', voucher: '＋ Apply Voucher', removeVoucher: '− Remove Voucher', cancel: '× Cancel' }
     };
     const t = texts[lang] || texts.id;
 
@@ -601,8 +601,8 @@ const topupNominalKeyboard = (lang = 'id') => {
 };
 
 const paymentPendingKeyboard = (orderId, lang = 'id') => {
-    const cancelText = lang === 'en' ? '✘ Cancel Order' : '✘ Batalkan Order';
-    const checkText = lang === 'en' ? '⟲ Check Status' : '⟲ Cek Status';
+    const cancelText = lang === 'en' ? '× Cancel Order' : '× Batalkan Order';
+    const checkText = lang === 'en' ? '↻ Check Status' : '↻ Cek Status';
 
     return Markup.inlineKeyboard([
         [{ ...Markup.button.callback(checkText, `pay_check_${orderId}`), style: 'primary' }],
@@ -612,7 +612,7 @@ const paymentPendingKeyboard = (orderId, lang = 'id') => {
 
 
 const backToMenuKeyboard = (lang = 'id') => {
-    const homeText = lang === 'en' ? '🏠 Main Menu' : '🏠 Menu Utama';
+    const homeText = lang === 'en' ? '⌂ Main Menu' : '⌂ Menu Utama';
     return Markup.inlineKeyboard([
         [Markup.button.callback(homeText, 'menu_home')]
     ]);
@@ -622,13 +622,13 @@ const historyKeyboard = (page, totalPages, lang = 'id') => {
     const buttons = [];
     const navRow = [];
 
-    if (page > 1) navRow.push({ ...Markup.button.callback('⬅️', `history_${page - 1}`), style: 'primary' });
+    if (page > 1) navRow.push({ ...Markup.button.callback('«', `history_${page - 1}`), style: 'primary' });
     navRow.push(Markup.button.callback(`${page}/${totalPages}`, 'noop'));
-    if (page < totalPages) navRow.push({ ...Markup.button.callback('➡️', `history_${page + 1}`), style: 'primary' });
+    if (page < totalPages) navRow.push({ ...Markup.button.callback('»', `history_${page + 1}`), style: 'primary' });
 
     if (navRow.length > 1) buttons.push(navRow);
 
-    const homeText = lang === 'en' ? '🏠 Main Menu' : '🏠 Menu Utama';
+    const homeText = lang === 'en' ? '⌂ Main Menu' : '⌂ Menu Utama';
     buttons.push([Markup.button.callback(homeText, 'menu_home')]);
 
     return Markup.inlineKeyboard(buttons);

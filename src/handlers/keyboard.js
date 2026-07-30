@@ -114,10 +114,10 @@ const generateCategoryButtons = (categories, page, lang) => {
     // Pagination buttons
     const navRow = [];
     if (page > 0) {
-        navRow.push({ ...Markup.button.callback('⬅️ Prev', `catpage_${page - 1}`), style: 'success' });
+        navRow.push({ ...Markup.button.callback('Previous «', `catpage_${page - 1}`), style: 'success' });
     }
     if (page < totalPages - 1) {
-        navRow.push({ ...Markup.button.callback('Next ➡️', `catpage_${page + 1}`), style: 'success' });
+        navRow.push({ ...Markup.button.callback('Next »', `catpage_${page + 1}`), style: 'success' });
     }
     if (navRow.length > 0) buttons.push(navRow);
 
@@ -142,7 +142,7 @@ const registerKeyboardHandler = (bot) => {
     });
 
     // List Produk - show numbered category list
-    bot.hears(['🛒 List Produk', '🛒 Products'], async (ctx) => {
+    bot.hears(['▦ List Produk', '▦ Products', '🛒 List Produk', '🛒 Products'], async (ctx) => {
         clearTopupState(ctx);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
@@ -188,12 +188,12 @@ const registerKeyboardHandler = (bot) => {
             restock: 'Restock', price: 'Price', stock: 'Stock', sold: 'Sold', desc: 'Description',
             buy_btn: '🛒 Buy', remind_btn: '🔔 Remind',
             warning: '⚠️ Out of stock? Click remind to get notified when restocked',
-            back: '⬅️ Back to Categories'
+            back: '‹ Back to Categories'
         } : {
             restock: 'Restok', price: 'Harga', stock: 'Stok', sold: 'Terjual', desc: 'Deskripsi',
             buy_btn: '🛒 Beli', remind_btn: '🔔 Ingatkan',
             warning: '⚠️ Stok habis? Klik ingatkan untuk mendapatkan notif saat produk restok',
-            back: '⬅️ Kembali ke Kategori'
+            back: '‹ Kembali ke Kategori'
         };
 
         const totalPages = Math.ceil(products.length / PRODUCTS_PER_PAGE);
@@ -450,7 +450,7 @@ const registerKeyboardHandler = (bot) => {
         return { msg, buttons };
     };
 
-    bot.hears(['📦 Cek Stok', '📦 Check Stock'], async (ctx) => {
+    bot.hears(['▤ Cek Stok', '▤ Check Stock', '📦 Cek Stok', '📦 Check Stock'], async (ctx) => {
         clearTopupState(ctx);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
@@ -548,7 +548,7 @@ const registerKeyboardHandler = (bot) => {
         return { msg, totalPages };
     };
 
-    bot.hears(['🧾 Riwayat', '🧾 History'], async (ctx) => {
+    bot.hears(['≡ Riwayat', '≡ History', '🧾 Riwayat', '🧾 History'], async (ctx) => {
         clearTopupState(ctx);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
@@ -597,7 +597,7 @@ const registerKeyboardHandler = (bot) => {
     });
 
     // Ganti Bahasa
-    bot.hears(['🌐 Bahasa', '🌐 Language'], async (ctx) => {
+    bot.hears(['◎ Bahasa', '◎ Language', '🌐 Bahasa', '🌐 Language'], async (ctx) => {
         clearTopupState(ctx);
         const localeId = require('../locales/id');
         await ctx.reply(localeId.select_language, {
@@ -607,7 +607,7 @@ const registerKeyboardHandler = (bot) => {
     });
 
     // Customer Service
-    bot.hears(['📞 CS', '📞 Customer Service'], async (ctx) => {
+    bot.hears(['? CS', '? Customer Service', '📞 CS', '📞 Customer Service'], async (ctx) => {
         clearTopupState(ctx);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
@@ -630,7 +630,7 @@ const registerKeyboardHandler = (bot) => {
     };
 
     // Saldo Menu - show balance + topup nominals directly
-    bot.hears(/^💰 (Saldo|Balance)/, async (ctx) => {
+    bot.hears(/^[●💰] (Saldo|Balance)/, async (ctx) => {
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
 

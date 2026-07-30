@@ -132,7 +132,7 @@ test('checkout dan payment method memakai warna sesuai aksi', () => {
   const paymentRows = paymentMethodKeyboard('ORDER-STYLE', 'id').reply_markup.inline_keyboard;
   const buttons = paymentRows.flat();
   assert.ok(buttons.filter(b => b.text.includes('QRIS')).every(b => b.style === 'primary'));
-  assert.equal(buttons.find(b => b.text.startsWith('💰 Saldo'))?.style, 'success');
+  assert.equal(buttons.find(b => b.text.startsWith('● Saldo'))?.style, 'success');
   assert.equal(buttons.find(b => b.text.includes('Voucher'))?.style, 'danger');
   assert.equal(buttons.find(b => b.text.includes('Batalkan'))?.style, 'danger');
 
@@ -152,8 +152,8 @@ test('invoice saldo dan pagination history memakai warna yang diminta', () => {
     assert.ok(saldo.every(b => b.style === 'success'));
   }
   const legacyHistory = historyKeyboard(2, 3, 'id').reply_markup.inline_keyboard[0];
-  assert.equal(legacyHistory.find(b => b.text.includes('⬅')).style, 'primary');
-  assert.equal(legacyHistory.find(b => b.text.includes('➡')).style, 'primary');
+  assert.equal(legacyHistory.find(b => b.text.includes('«')).style, 'primary');
+  assert.equal(legacyHistory.find(b => b.text.includes('»')).style, 'primary');
 
   const keyboardSource = fs.readFileSync(path.join(__dirname, '../src/handlers/keyboard.js'), 'utf8');
   assert.match(keyboardSource, /history_page_1', style: 'primary'/);
@@ -174,4 +174,26 @@ test('flash sale banner memakai quote dan progress opsional multibahasa', () => 
   assert.match(admin, /Batasi jumlah transaksi flash sale/);
   assert.match(admin, /flash_limit_enabled/);
   assert.match(api, /flash_max_transactions/);
+});
+
+test('simbol buyer unicode konsisten dan keyboard lama tetap kompatibel', () => {
+  const { mainMenuKeyboard, quantityKeyboard, paymentMethodKeyboard, paymentPendingKeyboard } = require('../src/utils/keyboard');
+  const menu = mainMenuKeyboard('id').reply_markup.keyboard.flat().map(b => b.text);
+  assert.deepEqual(menu.map(t => t.split(' ')[0]), ['▦', '▤', '●', '≡', '◎', '◇', '?']);
+
+  const qty = quantityKeyboard(20, 'P', 2, 'C', 'id').reply_markup.inline_keyboard.flat().map(b => b.text);
+  for (const label of ['−1', '＋1', '−5', '＋5', 'Lanjutkan Pembayaran ›', '‹ Kembali']) assert.ok(qty.includes(label));
+
+  const payment = paymentMethodKeyboard('ORDER-SYMBOL', 'id').reply_markup.inline_keyboard.flat().map(b => b.text);
+  assert.ok(payment.some(t => t.startsWith('▣ QRIS')));
+  assert.ok(payment.includes('● Saldo'));
+  assert.ok(payment.includes('＋ Pakai Voucher'));
+  assert.ok(payment.includes('× Batalkan'));
+
+  const pending = paymentPendingKeyboard('ORDER-SYMBOL', 'id').reply_markup.inline_keyboard.flat().map(b => b.text);
+  assert.deepEqual(pending, ['↻ Cek Status', '× Batalkan Order']);
+
+  const source = fs.readFileSync(path.join(__dirname, '../src/handlers/keyboard.js'), 'utf8');
+  assert.match(source, /'▦ List Produk'.*'🛒 List Produk'/);
+  assert.match(source, /\[●💰\]/);
 });

@@ -14,7 +14,7 @@ Select a menu below to continue:`,
     menu_history: '📜 Transaction History',
     menu_support: '💬 Contact Support',
     menu_language: '🌐 Change Language',
-    menu_back: '⬅️ Back',
+    menu_back: '‹ Back',
     menu_home: '🏠 Main Menu',
     menu_cancel: '❌ Cancel',
 
@@ -49,9 +49,9 @@ Select a menu below to continue:`,
 
 Select payment method:`,
 
-    select_payment: '💳 *Select Payment Method:*',
-    payment_qris: '📱 QRIS (Indonesian E-Wallet)',
-    payment_saldo: '💰 Balance',
+    select_payment: '▣ *Select Payment Method:*',
+    payment_qris: '▣ QRIS (Indonesian E-Wallet)',
+    payment_saldo: '● Balance',
 
     // QRIS Payment
     qris_instruction: `📱 *QRIS Payment*

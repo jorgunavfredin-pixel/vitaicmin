@@ -14,7 +14,7 @@ Pilih menu di bawah untuk melanjutkan:`,
     menu_history: '📜 Riwayat Transaksi',
     menu_support: '💬 Hubungi Support',
     menu_language: '🌐 Ganti Bahasa',
-    menu_back: '⬅️ Kembali',
+    menu_back: '‹ Kembali',
     menu_home: '🏠 Menu Utama',
     menu_cancel: '❌ Batalkan',
 
@@ -49,9 +49,9 @@ Pilih menu di bawah untuk melanjutkan:`,
 
 Pilih metode pembayaran:`,
 
-    select_payment: '💳 *Pilih Metode Pembayaran:*',
-    payment_qris: '📱 QRIS (Dana/OVO/GoPay/dll)',
-    payment_saldo: '💰 Saldo',
+    select_payment: '▣ *Pilih Metode Pembayaran:*',
+    payment_qris: '▣ QRIS (Dana/OVO/GoPay/dll)',
+    payment_saldo: '● Saldo',
 
     // QRIS Payment
     qris_instruction: `📱 *Pembayaran QRIS*
