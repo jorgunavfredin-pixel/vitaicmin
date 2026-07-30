@@ -316,7 +316,7 @@ const registerOrderHandler = (bot) => {
             : `Rp${formatIDR(order.total_idr)}`;
         const waitingStatus = lang === 'en' ? 'Waiting for QRIS payment' : 'Menunggu pembayaran QRIS';
         const instruction = lang === 'en' ? 'Scan the QRIS above to complete payment.' : 'Scan QRIS di atas untuk membayar.';
-        const message = `${title}\n\n<b>${l.orderId}:</b> <code>${escapeHtml(orderId)}</code>\n<b>${l.prod}:</b> <b>${prodName}</b>\n<b>${l.qty}:</b> ${order.quantity} pcs\n\n<b>Subtotal:</b> ${subtotalDisplay}\n<b>${l.fee}:</b> ${feeDisplay}\n────────────────\n<b>${l.total}:</b>     <b>${totalDisplay}</b>\n\n<b>Status:</b> ${waitingStatus}\n<b>${l.valid}:</b> ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n${instruction}`;
+        const message = `${title}\n\n<b>${l.orderId}:</b> <code>${escapeHtml(orderId)}</code>\n<b>${l.prod}:</b> <b>${prodName}</b>\n<b>${l.qty}:</b> ${order.quantity} pcs\n\n<b>Subtotal:</b> ${subtotalDisplay}\n<b>${l.fee}:</b> ${feeDisplay}\n───────────\n<b>${l.total}:</b>     <b>${totalDisplay}</b>\n\n<b>Status:</b> ${waitingStatus}\n<b>${l.valid}:</b> ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n${instruction}`;
 
         try { await ctx.deleteMessage(); } catch (e) { }
 
