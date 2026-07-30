@@ -207,8 +207,7 @@ function StoreTab({ store, banner, showToast, onChanged }) {
         <Icon name="check" size={14} /> Perubahan langsung aktif di bot (tanpa restart). Kalau dikosongkan, sistem pakai nilai dari .env atau default.
       </div>
 
-      <BannerManager banner={banner} showToast={showToast} onChanged={onChanged} />
-
+      <div className="settings-store-grid">
       <div className="settings-form">
         <label className="field-label">Nama Toko</label>
         <input type="text" className="qty-field" placeholder="cth: Blackscout Store"
@@ -240,6 +239,8 @@ function StoreTab({ store, banner, showToast, onChanged }) {
         <button className="btn-primary" style={{ marginTop: 20 }} onClick={submit} disabled={busy}>
           {busy ? 'Menyimpan…' : 'Simpan Perubahan'}
         </button>
+      </div>
+      <BannerManager banner={banner} showToast={showToast} onChanged={onChanged} />
       </div>
     </div>
   );

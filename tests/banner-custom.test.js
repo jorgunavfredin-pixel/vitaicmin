@@ -29,5 +29,9 @@ test('admin banner memvalidasi upload, replace file, preview, toggle, dan delete
   assert.match(page, /function BannerManager/);
   assert.match(page, /Ganti Banner/);
   assert.match(page, /File aktif:/);
-  assert.match(css, /\.banner-preview/);
+  assert.match(css, /\.settings-store-grid[^}]*grid-template-columns/);
+  assert.match(css, /\.banner-preview img[^}]*object-fit: contain/);
+  assert.match(css, /\.banner-actions[^}]*grid-template-columns/);
+  assert.match(css, /\.banner-actions \.btn-primary, \.banner-actions \.btn-ghost[^}]*min-height: 38px/);
+  assert.doesNotMatch(css, /\.banner-preview[^}]*aspect-ratio/);
 });
