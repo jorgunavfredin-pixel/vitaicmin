@@ -11,6 +11,11 @@ test('runtime banner mendukung toggle dan reset cache', () => {
   assert.match(source, /isBannerEnabled/);
   assert.match(source, /resetBannerCache/);
   assert.match(source, /if \(!isBannerEnabled\(\)\) return null/);
+
+  const banner = require('../src/utils/banner');
+  assert.equal(typeof banner.getBannerSource, 'function');
+  assert.equal(typeof banner.hasBanner, 'function');
+  assert.equal(typeof banner.replyWithBanner, 'function');
 });
 
 test('pagination tanpa banner mengedit text, bukan delete dan kirim ulang', async () => {

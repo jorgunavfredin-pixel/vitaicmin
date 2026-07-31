@@ -93,4 +93,4 @@ const editBannerCaption = async (ctx, caption, extra = {}) => {
 // Backward-compat export (some code references BANNER_PATH)
 const BANNER_PATH = path.join(ASSETS_DIR, 'banner.png');
 
-module.exports = { replyWithBanner, editBannerCaption, hasBanner, isBannerEnabled, resolveBannerPath, resetBannerCache, BANNER_PATH };
+module.exports = { replyWithBanner, editBannerCaption, hasBanner, isBannerEnabled, getBannerSource, resolveBannerPath, resetBannerCache, BANNER_PATH };
