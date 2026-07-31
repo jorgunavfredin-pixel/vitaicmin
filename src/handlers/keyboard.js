@@ -207,7 +207,7 @@ const registerKeyboardHandler = (bot) => {
             : (category?.name_id || category?.name_en || 'Produk')).toUpperCase());
 
         let msg = `<blockquote><b>${labels.category}: ${categoryName}</b> (${labels.page} ${page + 1}/${totalPages})\n`;
-        msg += `${labels.sold}: ${formatIDR(categorySold)}pcs</blockquote>\n`;
+        msg += `${labels.sold}: ${formatIDR(categorySold)} pcs</blockquote>\n`;
         msg += `┊ⓘ ${labels.detail}\n\n`;
         const buttons = [];
 
@@ -231,7 +231,7 @@ const registerKeyboardHandler = (bot) => {
             msg += `╭─ <b>${displayName}</b>\n`;
             if (isFlash) msg += `┊ ${labels.flash} · <s>${normalPrice}</s> → <b>${flashPrice}</b>\n`;
             else msg += `┊ <b>${normalPrice}</b>\n`;
-            msg += `┊╰➤ ${labels.stock} ${stock} • ${labels.sold} ${formatIDR(soldCount)}pcs\n`;
+            msg += `┊╰➤ ${labels.stock} ${stock} • ${labels.sold} ${formatIDR(soldCount)} pcs\n`;
 
             if (!isFlash && prod.qty_discounts) {
                 const first = normalizeBulkTiers(prod.qty_discounts, prod.price_idr)[0];
@@ -279,9 +279,13 @@ const registerKeyboardHandler = (bot) => {
 
         const { msg, buttons } = await buildProductPage(products, 0, lang, catId);
 
-        await editBannerCaption(ctx, msg, {
-            reply_markup: { inline_keyboard: buttons }
-        });
+        const message = ctx.callbackQuery?.message;
+        if (message?.photo || message?.caption !== undefined) {
+            await editBannerCaption(ctx, msg, { reply_markup: { inline_keyboard: buttons } });
+        } else {
+            try { await ctx.deleteMessage(); } catch (_) { }
+            await replyWithBanner(ctx, msg, { reply_markup: { inline_keyboard: buttons } });
+        }
     });
 
     // Product list pagination
