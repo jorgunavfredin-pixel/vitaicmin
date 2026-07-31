@@ -67,19 +67,26 @@ const replyWithBanner = async (ctx, caption, extra = {}) => {
 };
 
 /**
- * Edit existing photo message caption (banner stays, text changes).
- * Falls back to delete + resend (photo or text) if current message is not a photo.
+ * Edit the current navigation message in place.
+ * Photo messages use captions; text-only fallback messages use normal text edits.
  */
 const editBannerCaption = async (ctx, caption, extra = {}) => {
+    const message = ctx.callbackQuery?.message || ctx.message || {};
+    const options = { parse_mode: 'HTML', ...extra };
     try {
-        await ctx.editMessageCaption(caption, {
-            parse_mode: 'HTML',
-            ...extra
-        });
+        if (message.photo || message.caption !== undefined) {
+            return await ctx.editMessageCaption(caption, options);
+        }
+        if (message.text !== undefined) {
+            return await ctx.editMessageText(caption, options);
+        }
+        // Unknown message shape: try caption first for backward compatibility.
+        return await ctx.editMessageCaption(caption, options);
     } catch (e) {
-        // Fallback: current message is text, not a photo
-        try { await ctx.deleteMessage(); } catch (e2) { }
-        await replyWithBanner(ctx, caption, extra);
+        if (/message is not modified/i.test(String(e?.description || e?.message || ''))) return;
+        // Last-resort compatibility fallback for non-editable/legacy message types.
+        try { await ctx.deleteMessage(); } catch (_) { }
+        return replyWithBanner(ctx, caption, extra);
     }
 };
 
