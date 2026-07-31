@@ -3,6 +3,40 @@ const { formatIDR, formatUSD, formatDateWIB, formatStockForUser, formatStockForF
 const { convertIDRtoUSD } = require('../payments/exchange');
 const log = require('../utils/logger');
 
+const getDeliveryProductName = (product, lang) => lang === 'en'
+    ? (product.name_en || product.name_id || '-')
+    : (product.name_id || product.name_en || '-');
+
+const buildTermsMessage = (product, lang = 'id') => {
+    const raw = lang === 'en'
+        ? (product.warranty_en || product.terms_en || '')
+        : (product.warranty_id || product.terms_id || '');
+    if (!String(raw).trim()) return '';
+    const content = safeHtmlSnk(raw, product.terms_format === 'html');
+    const title = lang === 'en' ? 'Warranty/Terms' : 'Garansi/SnK';
+    return `<b>≡ ${title}:</b>\n\n${content}`;
+};
+
+const buildDeliveryFile = (product, stocks) => stocks
+    .map(stock => formatStockForFile(product.stock_type, stock.data))
+    .join('\n\n');
+
+const buildDeliveryReceipt = (order, product, stocks, lang = 'id', fileMode = false) => {
+    const en = lang === 'en';
+    const title = en ? '🎉 Payment Successful' : '🎉 Pembayaran Berhasil';
+    const productName = escapeHtml(getDeliveryProductName(product, lang));
+    const labels = en
+        ? { product: 'Product', qty: 'Quantity', data: '≡ Account Data ━━━', thanks: 'Thank you for your purchase!', file: 'Account data is sent via TXT file.' }
+        : { product: 'Produk', qty: 'Jumlah', data: '≡ Data Akun ━━━', thanks: 'Terima kasih atas pembeliannya!', file: 'Data akun dikirim melalui file TXT.' };
+    let message = `<blockquote><b>${title}</b></blockquote>\n`;
+    message += `┊ <b>Order ID:</b> <code>${escapeHtml(order.id)}</code>\n`;
+    message += `┊ <b>${labels.product}:</b> <b>${productName}</b>\n`;
+    message += `┊ <b>${labels.qty}:</b> ${order.quantity} pcs\n\n`;
+    if (fileMode) return `${message}${labels.file}`;
+    const accounts = stocks.map(stock => formatStockForUser(product.stock_type, stock.data, lang)).join('\n\n');
+    return `${message}<b>${labels.data}</b>\n${accounts}\n━━━━━━━━━━━━━━━\n${labels.thanks}`;
+};
+
 /**
  * Deliver order to user
  * @param {Object} bot - Telegraf bot instance
@@ -65,62 +99,28 @@ const deliverOrder = async (bot, orderId) => {
         const lang = db.getUserLanguage(order.user_id);
         const locale = require(`../locales/${lang}`);
 
-        // Format account data for display
-        const accountsFormatted = stockToDeliver.map((stock, index) => {
-            const formatted = formatStockForUser(product.stock_type, stock.data, lang);
-            return `\n━━━ ${lang === 'en' ? 'Account' : 'Akun'} ${index + 1} ━━━\n${formatted}`;
-        }).join('\n');
-
-        // Get warranty/terms text (admin stores S&K in terms_id/terms_en)
-        const warranty = lang === 'en'
-            ? (product.warranty_en || product.terms_en)
-            : (product.warranty_id || product.terms_id);
-        const productName = lang === 'en' ? product.name_en : product.name_id;
-        const warrantyHtml = safeHtmlSnk(warranty, product.terms_format === 'html');
-
         const FILE_THRESHOLD = 20;
+        const destination = order.chat_id || order.user_id;
+        const termsMessage = buildTermsMessage(product, lang);
 
         if (order.quantity > FILE_THRESHOLD) {
-            // === LARGE ORDER: send accounts as .txt file ===
             const fs = require('fs');
             const path = require('path');
-
-            const txtContent = stockToDeliver.map((stock, index) => {
-                const formatted = formatStockForFile(product.stock_type, stock.data);
-                return `━━━ ${lang === 'en' ? 'Account' : 'Akun'} ${index + 1} ━━━\n${formatted}`;
-            }).join('\n\n');
-
+            const txtContent = buildDeliveryFile(product, stockToDeliver, lang);
             const tmpDir = path.join(__dirname, '../../tmp');
             if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
             const filePath = path.join(tmpDir, `${orderId}.txt`);
             fs.writeFileSync(filePath, txtContent, 'utf8');
-
-            const locale_msg = replacePlaceholders(locale.delivery_message_file, {
-                order_id: orderId,
-                product: productName,
-                quantity: order.quantity,
-                warranty: warrantyHtml
-            });
-
-            await bot.telegram.sendMessage(order.user_id, locale_msg || `🎉 <b>ORDER DELIVERED</b>\n\n<b>Order ID:</b> <code>${orderId}</code>\n<b>Produk:</b> ${escapeHtml(productName)}\n<b>Jumlah:</b> ${order.quantity} pcs\n\n📎 Data akun dikirim dalam file di bawah 👇\n\n📜 <b>Garansi/S&amp;K:</b>\n${warrantyHtml}`, { parse_mode: 'HTML' });
-
-            await bot.telegram.sendDocument(order.user_id, {
-                source: filePath,
-                filename: `${orderId}.txt`
-            });
-
-            try { fs.unlinkSync(filePath); } catch (e) { }
+            try {
+                await bot.telegram.sendMessage(destination, buildDeliveryReceipt(order, product, stockToDeliver, lang, true), { parse_mode: 'HTML' });
+                if (termsMessage) await bot.telegram.sendMessage(destination, termsMessage, { parse_mode: 'HTML' });
+                await bot.telegram.sendDocument(destination, { source: filePath, filename: `${orderId}.txt` });
+            } finally {
+                try { fs.unlinkSync(filePath); } catch (_) { }
+            }
         } else {
-            // === NORMAL ORDER: send in message ===
-            const message = replacePlaceholders(locale.delivery_message, {
-                order_id: orderId,
-                product: productName,
-                quantity: order.quantity,
-                accounts: accountsFormatted,
-                warranty: warranty || '-'
-            });
-
-            await bot.telegram.sendMessage(order.user_id, message, { parse_mode: 'HTML' });
+            await bot.telegram.sendMessage(destination, buildDeliveryReceipt(order, product, stockToDeliver, lang, false), { parse_mode: 'HTML' });
+            if (termsMessage) await bot.telegram.sendMessage(destination, termsMessage, { parse_mode: 'HTML' });
         }
 
         // Update order status
@@ -292,106 +292,32 @@ const handlePaymentSuccess = async (bot, orderId, paymentData = {}) => {
             }
         }
 
-        // Format account data for display
-        const accountsFormatted = stockToDeliver.map((stock, index) => {
-            const formatted = formatStockForUser(product.stock_type, stock.data, lang);
-            return `\n━━━ ${lang === 'en' ? 'Account' : 'Akun'} ${index + 1} ━━━\n${formatted}`;
-        }).join('\n');
-
-        // Get warranty/terms text (admin stores S&K in terms_id/terms_en)
-        const warranty = lang === 'en'
-            ? (product.warranty_en || product.terms_en)
-            : (product.warranty_id || product.terms_id);
-        const productName = lang === 'en' ? product.name_en : product.name_id;
-
-        // S&K: safely handle both old plain text and new HTML format
-        const warrantyHtml = safeHtmlSnk(warranty, product.terms_format === 'html');
-
         const FILE_THRESHOLD = 20;
+        const destination = order.chat_id || order.user_id;
+        const termsMessage = buildTermsMessage(product, lang);
 
-        // Telegram receipt prevents duplicate credential delivery after a crash/retry.
+        // Telegram receipt prevents duplicate credential delivery after a completed send.
         if (!order.delivery_message_id && order.quantity > FILE_THRESHOLD) {
-            // === LARGE ORDER: send accounts as .txt file ===
             const fs = require('fs');
             const path = require('path');
-
-            // Build .txt content (accounts only)
-            const txtContent = stockToDeliver.map((stock, index) => {
-                const formatted = formatStockForFile(product.stock_type, stock.data);
-                return `━━━ ${lang === 'en' ? 'Account' : 'Akun'} ${index + 1} ━━━\n${formatted}`;
-            }).join('\n\n');
-
-            // Write temp file
+            const txtContent = buildDeliveryFile(product, stockToDeliver, lang);
             const tmpDir = path.join(__dirname, '../../tmp');
             if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
             const filePath = path.join(tmpDir, `${orderId}.txt`);
             fs.writeFileSync(filePath, txtContent, 'utf8');
-
-            // Send chat message (order info + S&K, without accounts)
-            const title = lang === 'en' ? '🎉 <b>PAYMENT SUCCESSFUL</b>' : '🎉 <b>PEMBAYARAN BERHASIL</b>';
-            const l = lang === 'en' ? {
-                orderId: 'Order ID', prod: 'Product', qty: 'Quantity',
-                fileNote: '📎 Account data sent in the file below 👇',
-                warranty: 'Warranty/Terms', thanks: 'Thank you for your purchase!'
-            } : {
-                orderId: 'Order ID', prod: 'Produk', qty: 'Jumlah',
-                fileNote: '📎 Data akun dikirim dalam file di bawah 👇',
-                warranty: 'Garansi/S&amp;K', thanks: 'Terima kasih atas pembeliannya!'
-            };
-
-            const chatMessage = `${title}
-┏━━━━━━━━━━━━━━━━
-┣ <b>${l.orderId}:</b> <code>${orderId}</code>
-┣ <b>${l.prod}:</b> ${escapeHtml(productName)}
-┗ <b>${l.qty}:</b> ${order.quantity} pcs
-
-${l.fileNote}
-
-📜 <b>${l.warranty}:</b>
-${warrantyHtml}
-
-🙏 ${l.thanks}`;
-
-            await bot.telegram.sendMessage(order.chat_id || order.user_id, chatMessage, { parse_mode: 'HTML', message_effect_id: '5046509860389126442' });
-
-            // Send .txt file and persist Telegram receipt before final DB settlement.
-            const sentDocument = await bot.telegram.sendDocument(order.chat_id || order.user_id, {
-                source: filePath,
-                filename: `${orderId}.txt`
-            });
-            db.updateOrder(orderId, { delivery_message_id: sentDocument.message_id });
-
-            // Cleanup temp file
-            try { fs.unlinkSync(filePath); } catch (e) { }
-
+            try {
+                const receipt = buildDeliveryReceipt(order, product, stockToDeliver, lang, true);
+                const sentReceipt = await bot.telegram.sendMessage(destination, receipt, { parse_mode: 'HTML', message_effect_id: '5046509860389126442' });
+                if (termsMessage) await bot.telegram.sendMessage(destination, termsMessage, { parse_mode: 'HTML' });
+                await bot.telegram.sendDocument(destination, { source: filePath, filename: `${orderId}.txt` });
+                db.updateOrder(orderId, { delivery_message_id: sentReceipt.message_id });
+            } finally {
+                try { fs.unlinkSync(filePath); } catch (_) { }
+            }
         } else if (!order.delivery_message_id) {
-            // === NORMAL ORDER: send accounts in message ===
-            const title = lang === 'en' ? '🎉 <b>PAYMENT SUCCESSFUL</b>' : '🎉 <b>PEMBAYARAN BERHASIL</b>';
-            const l = lang === 'en' ? {
-                orderId: 'Order ID', prod: 'Product', qty: 'Quantity',
-                accounts: 'YOUR ACCOUNT(S)', warranty: 'Warranty/Terms',
-                thanks: 'Thank you for your purchase!'
-            } : {
-                orderId: 'Order ID', prod: 'Produk', qty: 'Jumlah',
-                accounts: 'AKUN KAMU', warranty: 'Garansi/S&amp;K',
-                thanks: 'Terima kasih atas pembeliannya!'
-            };
-
-            const combinedMessage = `${title}
-┏━━━━━━━━━━━━━━━━
-┣ <b>${l.orderId}:</b> <code>${orderId}</code>
-┣ <b>${l.prod}:</b> ${escapeHtml(productName)}
-┗ <b>${l.qty}:</b> ${order.quantity} pcs
-
-📋 <b>${l.accounts}:</b>
-${accountsFormatted}
-
-📜 <b>${l.warranty}:</b>
-${warrantyHtml}
-
-🙏 ${l.thanks}`;
-
-            const sentDelivery = await bot.telegram.sendMessage(order.chat_id || order.user_id, combinedMessage, { parse_mode: 'HTML', message_effect_id: '5046509860389126442' });
+            const receipt = buildDeliveryReceipt(order, product, stockToDeliver, lang, false);
+            const sentDelivery = await bot.telegram.sendMessage(destination, receipt, { parse_mode: 'HTML', message_effect_id: '5046509860389126442' });
+            if (termsMessage) await bot.telegram.sendMessage(destination, termsMessage, { parse_mode: 'HTML' });
             db.updateOrder(orderId, { delivery_message_id: sentDelivery.message_id });
         }
 
@@ -494,6 +420,9 @@ ${accountsInfo}`;
 };
 
 module.exports = {
+    buildDeliveryReceipt,
+    buildTermsMessage,
+    buildDeliveryFile,
     deliverOrder,
     handlePaymentSuccess,
     notifyAdminDelivery,
