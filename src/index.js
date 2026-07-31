@@ -396,21 +396,23 @@ app.post('/webhook/klikqris', async (req, res) => {
         const order = db.getOrderById(parsed.orderId);
         if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
 
-        // Signature verifikasi: signature statis yang disimpan saat create.
+        // Signature verifikasi: best-effort. Skema signature webhook tidak
+        // terdokumentasi dan berbeda dari signature create; jalur SUCCESS tetap
+        // diamankan oleh verifyTransaction (polling authoritative) di bawah.
         const gw = order.gateway_id ? db.getPaymentGatewayById(order.gateway_id) : null;
         const creds = gw?.provider === 'klikqris' ? gw.credentials : {
             api_key: process.env.KLIKQRIS_API_KEY || '',
             merchant_id: process.env.KLIKQRIS_MERCHANT_ID || ''
         };
         const stored = order.gateway_signature || parsed.signature;
-        if (!klikqris.verifyWebhookSignature(parsed.signature, stored)) {
-            return res.status(401).json({ success: false, error: 'Invalid signature' });
+        if (parsed.signature && stored && !klikqris.verifyWebhookSignature(parsed.signature, stored)) {
+            log.warn(`[WEBHOOK] ⚠️ KlikQRIS signature mismatch order=${parsed.orderId} — lanjut via polling verify`);
         }
         // Amount: KlikQRIS total_amount >= order.total_idr (unique code bisa menambah).
         if (parsed.amount && order.total_idr && parsed.amount < order.total_idr) {
             return res.status(400).json({ success: false, error: 'Amount mismatch' });
         }
-        if (!db.claimWebhookEvent(`${parsed.orderId}-${parsed.signature}`, 'klikqris', parsed.orderId)) {
+        if (!db.claimWebhookEvent(`${parsed.orderId}-${parsed.signature || 'nosig'}`, 'klikqris', parsed.orderId)) {
             return res.json({ success: true, duplicate: true });
         }
         log.info(`[PAYMENT] provider=klikqris event=webhook order=${parsed.orderId} ` +
@@ -420,7 +422,7 @@ app.post('/webhook/klikqris', async (req, res) => {
         if (parsed.status === 'completed') {
             const verified = await klikqris.verifyTransaction(parsed.orderId, order.total_idr, creds);
             if (!verified.valid) {
-                db.releaseWebhookEvent(`${parsed.orderId}-${parsed.signature}`);
+                db.releaseWebhookEvent(`${parsed.orderId}-${parsed.signature || 'nosig'}`);
                 return res.status(400).json({ success: false, error: `Transaction not verified (${verified.status})` });
             }
             const delivered = await handlePaymentSuccess(bot, parsed.orderId, {
@@ -428,7 +430,7 @@ app.post('/webhook/klikqris', async (req, res) => {
                 amount: parsed.amount
             });
             if (!delivered) {
-                db.releaseWebhookEvent(`${parsed.orderId}-${parsed.signature}`);
+                db.releaseWebhookEvent(`${parsed.orderId}-${parsed.signature || 'nosig'}`);
                 return res.status(500).json({ success: false, error: 'Delivery failed' });
             }
             log.info(`[PAYMENT] provider=klikqris event=verified order=${parsed.orderId} status=paid`);

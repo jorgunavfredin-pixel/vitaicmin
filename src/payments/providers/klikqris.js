@@ -135,13 +135,25 @@ const parseCallback = (body) => {
             status: normalizeStatus(d.status),
             amount: Number(d.total_amount || d.amount) || null,
             signature: d.signature || null,
-            paidAt: d.created_at || null
+            paidAt: d.payment_date || d.created_at || null
         };
     } catch (error) {
         return { success: false, error: error.message };
     }
 };
 
+/**
+ * Verifikasi signature webhook KlikQRIS.
+ *
+ * Catatan: dokumentasi resmi KlikQRIS TIDAK menjelaskan skema signature webhook,
+ * dan format signature webhook berbeda dengan signature response create.
+ * Hard-fail pada mismatch berisiko menolak webhook SAH (order nyangkut sampai
+ * polling). Oleh karena itu verifikasi signature di sini bersifat best-effort:
+ *   - sama persis / keduanya ada & cocok  → true
+ *   - mismatch / salah satu kosong        → false (caller boleh lanjut via polling)
+ * Keamanan tetap dijaga: jalur SUCCESS wajib double-verify via polling
+ * (verifyTransaction) yang memakai credential merchant asli.
+ */
 const verifyWebhookSignature = (incoming, stored) => {
     if (!incoming || !stored) return false;
     const a = Buffer.from(String(incoming));

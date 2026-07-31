@@ -78,6 +78,23 @@ test('parseCallback membaca data.order_id + status + signature', () => {
   assert.equal(klikqris.verifyWebhookSignature('', 'SIG123'), false);
 });
 
+test('parseCallback menangani payload FLAT resmi KlikQRIS (tanpa bungkus data)', () => {
+  // Dokumentasi resmi: { order_id, status, amount, total_amount, payment_date, signature }
+  const p = klikqris.parseCallback({
+    order_id: 'DIRECT-176835469862-8460-202601252147',
+    status: 'PAID',
+    amount: 1000,
+    total_amount: 1215,
+    payment_date: '2026-01-25 21:48:01',
+    signature: '8n3v9z...1738681234'
+  });
+  assert.equal(p.success, true);
+  assert.equal(p.orderId, 'DIRECT-176835469862-8460-202601252147');
+  assert.equal(p.status, 'completed');
+  assert.equal(p.amount, 1215);
+  assert.equal(p.paidAt, '2026-01-25 21:48:01');
+});
+
 test('testConnection memakai status dummy dan mendeteksi auth error', async () => {
   calls = [];
   const ok = await klikqris.testConnection({ api_key: 'K', merchant_id: 'M' });
