@@ -67,7 +67,7 @@ const createQRIS = async (orderId, amount, creds = {}, options = {}) => {
 
         const response = await axios.post(`${BASE_URL}${CREATE_ENDPOINT}`, payload, {
             headers: headersFor(creds),
-            timeout: 15000
+            timeout: 30000
         });
         const body = response.data || {};
         const data = body.data || body;
@@ -94,9 +94,11 @@ const createQRIS = async (orderId, amount, creds = {}, options = {}) => {
             }
         };
     } catch (error) {
+        const timedOut = /timeout/i.test(error.message || '');
         log.error(`[PAYMENT] provider=klikqris event=create_failed order=${orderId} ` +
-            `http=${error.response?.status || '-'} error=${error.response?.data?.message || error.message}`);
-        return { success: false, error: error.response?.data?.message || error.message };
+            `http=${error.response?.status || '-'} error=${error.response?.data?.message || error.message}` +
+            (timedOut ? ' (timeout — transaksi mungkin ter-create; polling akan menemukannya)' : ''));
+        return { success: false, error: error.response?.data?.message || error.message, timedOut };
     }
 };
 
