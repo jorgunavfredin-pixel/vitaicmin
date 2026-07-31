@@ -46,8 +46,9 @@ COPY --from=webbuilder /web/dist ./admin-web/dist
 # Create directories for volumes
 RUN mkdir -p /app/src/database /app/assets /app/logs
 
-# Default assets (will be overridden by volume mount if buyer uploads)
-COPY assets/ ./assets/
+# NOTE: assets/ TIDAK di-copy dari repo (folder di-track hanya berisi .gitkeep).
+# Banner & media diisi lewat volume mount: /root/data/{name}/assets -> /app/assets.
+# Kalau perlu default banner, mount dari host, jangan commit binary ke repo.
 
 # Internal port always 3000 (mapped to random external port)
 EXPOSE 3000

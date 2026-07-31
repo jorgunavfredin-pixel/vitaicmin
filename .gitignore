@@ -5,7 +5,13 @@ node_modules/
 src/database/
 
 # Assets (banner/media lokal)
-assets/
+# assets/ di-track tapi hanya file default yang di-commit:
+# - .gitkeep (biar folder selalu ada saat clone → Docker build tidak gagal)
+# - banner default toko (placeholder)
+# Upload admin (banner toko, qris-custom, dll) tetap di-ignore.
+assets/*
+!assets/.gitkeep
+!assets/banner.png
 
 # Build output frontend
 admin-web/node_modules/
