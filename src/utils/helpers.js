@@ -233,8 +233,8 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
     if (flashDiscount > 0) paymentRows.push(`${'Flash Sale'.padEnd(14)}−${await money(flashDiscount)}`);
     if (bulkDiscount > 0) paymentRows.push(`${(lang === 'en' ? 'Bulk' : 'Grosir').padEnd(14)}−${await money(bulkDiscount)}`);
     if (voucherDiscount > 0) {
-        const code = order.voucher_code ? ` ${escapeHtml(order.voucher_code)}` : '';
-        paymentRows.push(`${(`${lang === 'en' ? 'Voucher' : 'Voucher'}${code}`).padEnd(14)}−${await money(voucherDiscount)}`);
+        paymentRows.push(`${(lang === 'en' ? 'Voucher' : 'Voucher').padEnd(14)}−${await money(voucherDiscount)}`);
+        if (order.voucher_code) paymentRows.push(`  ${escapeHtml(order.voucher_code)}`);
     }
     paymentRows.push('────────────────');
     paymentRows.push(`${l.total.padEnd(14)}${await money(order.total_idr)}`);
