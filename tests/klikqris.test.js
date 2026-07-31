@@ -45,7 +45,7 @@ test('createQRIS mengirim x-api-key/id_merchant dan memetakan response', async (
   assert.equal(result.success, true);
   const [method, url, body, config] = calls[0];
   assert.equal(method, 'POST');
-  assert.equal(url, `${BASE}/api/qrisv2/create`);
+  assert.equal(url, `${BASE}/api/qris/create`);
   assert.equal(body.order_id, 'INV-123');
   assert.equal(body.id_merchant, 'MID');
   assert.equal(body.amount, 1000);

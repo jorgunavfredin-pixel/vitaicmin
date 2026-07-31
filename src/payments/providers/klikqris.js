@@ -2,17 +2,22 @@
  * KlikQRIS provider adapter (QRIS only).
  *
  * Docs/source: https://github.com/gammarinaldi/klikqris-adapter
+ * Endpoint resmi (dokumen merchant): https://klikqris.com/api/qris/create
  *
  * Endpoints yang dipakai:
- *   - POST https://klikqris.com/api/qrisv2/create  — buat transaksi QRIS
- *       body  : { order_id, id_merchant, amount, keterangan }
+ *   - POST https://klikqris.com/api/qris/create  — buat transaksi QRIS
+ *       body  : { order_id, id_merchant, amount, keterangan, callback_url? }
  *       header: x-api-key, id_merchant
  *       resp  : { status, message, data: { order_id, amount, total_amount, qris_url,
- *                expired_at, direct_url, signature } }
+ *                qris_image, expired_at, paid_at, signature, ... } }
  *   - GET  https://klikqris.com/api/qris/status/{order_id} — cek status
  *       header: x-api-key, id_merchant
  *       resp  : { status, message, data: { order_id, status, amount, amount_uniq,
  *                total_amount, qris_url, qris_image, expired_at, paid_at, signature } }
+ *
+ * Catatan penting: JANGAN pakai /api/qrisv2/create (MY PG mode) — endpoint itu
+ * butuh izin khusus "MY PG" yang tidak dimiliki semua merchant (403: MY PG mode
+ * is not allowed for this merchant). Endpoint /api/qris/create adalah mode standar.
  *
  * Webhook payload:
  *   { data: { order_id, amount, total_amount, status, signature, created_at } }
@@ -41,6 +46,9 @@ const headersFor = (creds = {}) => ({
     'User-Agent': 'Mozilla/5.0 (Vitaicmin Bot; Independent Service)'
 });
 
+const CREATE_ENDPOINT = '/api/qris/create';
+const STATUS_ENDPOINT = '/api/qris/status';
+
 const createQRIS = async (orderId, amount, creds = {}, options = {}) => {
     const merchantId = String(creds.merchant_id || '').trim();
     if (!creds.api_key || !merchantId) {
@@ -53,7 +61,11 @@ const createQRIS = async (orderId, amount, creds = {}, options = {}) => {
             amount: Math.round(amount),
             keterangan: String(options.description || `Pembayaran ${orderId}`)
         };
-        const response = await axios.post(`${BASE_URL}/api/qrisv2/create`, payload, {
+        // callback_url opsional: arahkan webhook KlikQRIS ke endpoint kita.
+        const notifyUrl = String(options.callback_url || process.env.WEBHOOK_URL || '').trim();
+        if (notifyUrl) payload.callback_url = `${notifyUrl.replace(/\/$/, '')}/webhook/klikqris`;
+
+        const response = await axios.post(`${BASE_URL}${CREATE_ENDPOINT}`, payload, {
             headers: headersFor(creds),
             timeout: 15000
         });
@@ -90,7 +102,7 @@ const createQRIS = async (orderId, amount, creds = {}, options = {}) => {
 
 const checkStatus = async (orderId, amount, creds = {}, options = {}) => {
     try {
-        const response = await axios.get(`${BASE_URL}/api/qris/status/${encodeURIComponent(orderId)}`, {
+        const response = await axios.get(`${BASE_URL}${STATUS_ENDPOINT}/${encodeURIComponent(orderId)}`, {
             headers: headersFor(creds),
             timeout: 10000
         });
