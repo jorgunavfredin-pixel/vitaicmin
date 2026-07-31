@@ -30,6 +30,7 @@ axios.post = async (url, body, config) => {
   return { data: { status: true, message: 'ok', data: {
     order_id: 'INV-123', amount: 1000, total_amount: 1016,
     qris_url: 'https://klikqris.com/storage/qris_api/qris_INV-123.png',
+    qris_image: 'data:image/png;base64,iVBORw0KGgoAAAA',
     direct_url: 'https://klikqris.com', expired_at: '2026-07-31 18:56:03',
     signature: 'SIG123'
   } } };
@@ -51,8 +52,8 @@ test('createQRIS mengirim x-api-key/id_merchant dan memetakan response', async (
   assert.equal(body.amount, 1000);
   assert.equal(config.headers['x-api-key'], 'KEY');
   assert.equal(config.headers['id_merchant'], 'MID');
-  assert.equal(result.data.qris_string, 'https://klikqris.com/storage/qris_api/qris_INV-123.png');
-  assert.equal(result.data.qr_image, null);
+  assert.equal(result.data.qris_string, null);
+  assert.equal(result.data.qr_image, 'data:image/png;base64,iVBORw0KGgoAAAA');
   assert.equal(result.data.total_payment, 1016);
   assert.equal(result.data.signature, 'SIG123');
 });

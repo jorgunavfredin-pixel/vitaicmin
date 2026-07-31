@@ -80,16 +80,17 @@ const createQRIS = async (orderId, amount, creds = {}, options = {}) => {
             success: true,
             data: {
                 order_id: data.order_id || orderId,
-                qris_string: data.qris_url || null,
-                qr_image: data.qris_image || null,
+                // KlikQRIS tidak punya qris_string mentah; yang tersedia adalah GAMBAR
+                // QRIS (qris_image base64 atau qris_url PNG). JANGAN isi qris_string
+                // dengan URL gambar — renderer akan salah generate QR dari URL.
+                qris_string: null,
+                qr_image: data.qris_image || data.qris_url || null,
                 amount: data.amount || amount,
                 fee: Math.max(0, Number(data.total_amount || amount) - Number(data.amount || amount)),
                 total_payment: data.total_amount || amount,
                 trx_reference: data.order_id || null,
                 expired_at: data.expired_at || null,
                 signature: data.signature || null,
-                // KlikQRIS tidak menyediakan qris_text mentah; gunakan URL QRIS gambar.
-                // Untuk renderer, qris_url adalah PNG siap tampil.
                 qris_url: data.qris_url || null
             }
         };

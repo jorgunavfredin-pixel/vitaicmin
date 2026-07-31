@@ -122,7 +122,15 @@ const saveConfig = (input = {}) => {
 
 const fetchImageBuffer = async (source) => {
   if (Buffer.isBuffer(source)) return source;
-  const response = await axios.get(String(source), { responseType: 'arraybuffer', timeout: 12_000, maxContentLength: 5 * 1024 * 1024 });
+  const str = String(source || '');
+  // Data URL (base64) — mis. qris_image dari KlikQRIS: data:image/png;base64,...
+  const m = str.match(/^data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=]+)$/i);
+  if (m) {
+    const buffer = Buffer.from(m[2], 'base64');
+    if (!buffer.length || buffer.length > 5 * 1024 * 1024) throw new Error('Ukuran gambar QRIS melebihi 5 MB');
+    return buffer;
+  }
+  const response = await axios.get(str, { responseType: 'arraybuffer', timeout: 12_000, maxContentLength: 5 * 1024 * 1024 });
   return Buffer.from(response.data);
 };
 
