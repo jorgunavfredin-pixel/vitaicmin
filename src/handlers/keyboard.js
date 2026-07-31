@@ -2,7 +2,7 @@ const db = require('../models/db');
 const { formatIDR, formatUSD, convertIDRtoUSD, notifyAdmins, escapeHtml } = require('../utils/helpers');
 const { normalizeBulkTiers } = require('../utils/bulkPricing');
 const { Markup } = require('telegraf');
-const { replyWithBanner, editBannerCaption, hasBanner } = require('../utils/banner');
+const { replyWithBanner, editBannerCaption, getBannerSource } = require('../utils/banner');
 const { getBalance, getBalanceHistory } = require('../payments/balance');
 const gateway = require('../payments/gateway');
 const { cancelOrder } = require('../services/reminder');
@@ -282,7 +282,7 @@ const registerKeyboardHandler = (bot) => {
         const message = ctx.callbackQuery?.message;
         if (message?.photo || message?.caption !== undefined) {
             await editBannerCaption(ctx, msg, { reply_markup: { inline_keyboard: buttons } });
-        } else if (hasBanner()) {
+        } else if (getBannerSource() !== null) {
             try { await ctx.deleteMessage(); } catch (_) { }
             await replyWithBanner(ctx, msg, { reply_markup: { inline_keyboard: buttons } });
         } else {
