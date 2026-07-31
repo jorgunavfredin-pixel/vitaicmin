@@ -32,4 +32,7 @@ test('renderer kategori memakai agregat dan layout baru tanpa scan semua order',
   assert.match(source, /<blockquote><b>\$\{labels\.category\}:/);
   assert.match(source, /Detail produk di halaman checkout/);
   assert.match(source, /┊╰➤/);
+  assert.match(source, /hasBanner\(\)/);
+  assert.match(source, /else if \(hasBanner\(\)\)/);
+  assert.match(source, /else \{\s*await editBannerCaption\(ctx, msg/s);
 });
