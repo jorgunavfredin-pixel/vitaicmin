@@ -62,6 +62,33 @@ async function generateCheckoutMessage(product, quantity, lang) {
 
     return `<b>${l.title}</b>\n\n<b>${name}</b>${desc ? `\n<i>${desc}</i>` : ''}\n\n<pre>${rows.join('\n')}</pre>${tierDetails}\n\n<i>${l.prompt}</i>`;
 }
+
+const CHECKOUT_CAPTION_LIMIT = 1000;
+const isMediaMessage = (message) => !!(message?.photo || message?.caption !== undefined);
+
+const updateCheckoutMessage = async (ctx, message, keyboard = {}) => {
+    const extra = { parse_mode: 'HTML', ...keyboard };
+    const current = ctx.callbackQuery?.message || ctx.message || {};
+    if (isMediaMessage(current) && message.length <= CHECKOUT_CAPTION_LIMIT) {
+        return ctx.editMessageCaption(message, extra);
+    }
+    if (isMediaMessage(current)) {
+        try { await ctx.deleteMessage(); } catch (_) { }
+        return ctx.reply(message, extra);
+    }
+    return ctx.editMessageText(message, extra);
+};
+
+const sendPaymentConfirmation = async (ctx, message, keyboard = {}) => {
+    const extra = { parse_mode: 'HTML', ...keyboard };
+    const current = ctx.callbackQuery?.message || {};
+    if (isMediaMessage(current)) {
+        try { await ctx.deleteMessage(); } catch (_) { }
+        return ctx.reply(message, extra);
+    }
+    return ctx.editMessageText(message, extra);
+};
+
 /**
  * Register menu handlers
  * @param {Object} bot - Telegraf bot instance
@@ -218,11 +245,7 @@ const registerMenuHandler = (bot) => {
         const message = await generateCheckoutMessage(product, 1, lang);
         const maxQty = product.stock_mode === 'unlimited' ? 999 : stockCount;
 
-        try { await ctx.deleteMessage(); } catch (e) { }
-        await ctx.reply(message, {
-            parse_mode: 'HTML',
-            ...quantityKeyboard(maxQty, productId, 1, product.category_id, lang)
-        });
+        await updateCheckoutMessage(ctx, message, quantityKeyboard(maxQty, productId, 1, product.category_id, lang));
     });
 
     // Increase Quantity
@@ -246,14 +269,7 @@ const registerMenuHandler = (bot) => {
         await ctx.answerCbQuery();
         const message = await generateCheckoutMessage(product, nextQty, lang);
 
-        try {
-            await ctx.editMessageText(message, {
-                parse_mode: 'HTML',
-                ...quantityKeyboard(maxQty, productId, nextQty, product.category_id, lang)
-            });
-        } catch (e) {
-            // Ignore 'message is not modified' error
-        }
+        await updateCheckoutMessage(ctx, message, quantityKeyboard(maxQty, productId, nextQty, product.category_id, lang));
     });
 
     // Decrease Quantity
@@ -277,14 +293,7 @@ const registerMenuHandler = (bot) => {
         await ctx.answerCbQuery();
         const message = await generateCheckoutMessage(product, nextQty, lang);
 
-        try {
-            await ctx.editMessageText(message, {
-                parse_mode: 'HTML',
-                ...quantityKeyboard(maxQty, productId, nextQty, product.category_id, lang)
-            });
-        } catch (e) {
-            // Ignore 'message is not modified' error
-        }
+        await updateCheckoutMessage(ctx, message, quantityKeyboard(maxQty, productId, nextQty, product.category_id, lang));
     });
 
     // Increase Quantity by 5
@@ -308,12 +317,7 @@ const registerMenuHandler = (bot) => {
         await ctx.answerCbQuery();
         const message = await generateCheckoutMessage(product, nextQty, lang);
 
-        try {
-            await ctx.editMessageText(message, {
-                parse_mode: 'HTML',
-                ...quantityKeyboard(maxQty, productId, nextQty, product.category_id, lang)
-            });
-        } catch (e) { }
+        await updateCheckoutMessage(ctx, message, quantityKeyboard(maxQty, productId, nextQty, product.category_id, lang));
     });
 
     // Decrease Quantity by 5
@@ -337,12 +341,7 @@ const registerMenuHandler = (bot) => {
         await ctx.answerCbQuery();
         const message = await generateCheckoutMessage(product, nextQty, lang);
 
-        try {
-            await ctx.editMessageText(message, {
-                parse_mode: 'HTML',
-                ...quantityKeyboard(maxQty, productId, nextQty, product.category_id, lang)
-            });
-        } catch (e) { }
+        await updateCheckoutMessage(ctx, message, quantityKeyboard(maxQty, productId, nextQty, product.category_id, lang));
     });
 
     // Payment Confirmation
@@ -410,10 +409,7 @@ const registerMenuHandler = (bot) => {
 
         const msg = await buildPaymentConfirmation(order, lang, db, convertIDRtoUSD);
 
-        await ctx.editMessageText(msg, {
-            parse_mode: 'HTML',
-            ...require('../utils/keyboard').paymentMethodKeyboard(order.id, lang)
-        });
+        await sendPaymentConfirmation(ctx, msg, require('../utils/keyboard').paymentMethodKeyboard(order.id, lang));
     });
 
     // ===== TYPE QUANTITY (repurposed "Max" button) =====
@@ -453,6 +449,7 @@ const registerMenuHandler = (bot) => {
             productId,
             chatId: ctx.chat.id,
             checkoutMessageId,
+            checkoutIsMedia: isMediaMessage(ctx.callbackQuery.message),
             promptMessageId: promptMsg.message_id,
             categoryId: product.category_id,
             expiresAt: Date.now() + 10 * 60 * 1000
@@ -510,12 +507,14 @@ const registerMenuHandler = (bot) => {
 
         const message = await generateCheckoutMessage(product, qty, lang);
         try {
-            await ctx.telegram.editMessageText(state.chatId, state.checkoutMessageId, undefined, message, {
-                parse_mode: 'HTML',
-                ...quantityKeyboard(maxQty, state.productId, qty, product.category_id, lang)
-            });
+            const extra = { parse_mode: 'HTML', ...quantityKeyboard(maxQty, state.productId, qty, product.category_id, lang) };
+            if (state.checkoutIsMedia && message.length <= CHECKOUT_CAPTION_LIMIT) {
+                await ctx.telegram.editMessageCaption(state.chatId, state.checkoutMessageId, undefined, message, extra);
+            } else {
+                await ctx.telegram.editMessageText(state.chatId, state.checkoutMessageId, undefined, message, extra);
+            }
         } catch (e) { }
     });
 };
 
-module.exports = { registerMenuHandler, generateCheckoutMessage };
+module.exports = { registerMenuHandler, generateCheckoutMessage, updateCheckoutMessage, sendPaymentConfirmation, CHECKOUT_CAPTION_LIMIT };
