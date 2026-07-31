@@ -492,8 +492,8 @@ function ProductFormModal({ prod, categories, onClose, onSaved, toast }) {
 
         <div className="tab-bar" style={{ marginBottom: 18 }}>
           <button type="button" className={`tab-item tab-icon ${formTab === 'general' ? 'active' : ''}`} onClick={() => setFormTab('general')}><Icon name="settings" size={16} /> Informasi Utama</button>
-          <button type="button" className={`tab-item tab-icon ${formTab === 'desc' ? 'active' : ''}`} onClick={() => setFormTab('desc')}><Icon name="desc" size={16} /> Deskripsi & Garansi</button>
-          <button type="button" className={`tab-item tab-icon ${formTab === 'terms' ? 'active' : ''}`} onClick={() => setFormTab('terms')}><Icon name="terms" size={16} /> Syarat & Ketentuan</button>
+          <button type="button" className={`tab-item tab-icon ${formTab === 'desc' ? 'active' : ''}`} onClick={() => setFormTab('desc')}><Icon name="desc" size={16} /> Deskripsi</button>
+          <button type="button" className={`tab-item tab-icon ${formTab === 'terms' ? 'active' : ''}`} onClick={() => setFormTab('terms')}><Icon name="terms" size={16} /> Garansi & SnK</button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -554,16 +554,7 @@ function ProductFormModal({ prod, categories, onClose, onSaved, toast }) {
                   Recommended maximum 100 characters for a compact buyer view. Longer text is still allowed. ({formData.description_en.length} characters)
                 </div>
               </div>
-              <div>
-                <label className="field-label">Garansi (Indonesia)</label>
-                <input type="text" className="qty-field" placeholder="Contoh: Garansi Full 30 Hari"
-                  value={formData.warranty_id} onChange={(e) => handleChange('warranty_id', e.target.value)} />
-              </div>
-              <div>
-                <label className="field-label">Garansi (Inggris)</label>
-                <input type="text" className="qty-field" placeholder="Contoh: Full 30 Days Warranty"
-                  value={formData.warranty_en} onChange={(e) => handleChange('warranty_en', e.target.value)} />
-              </div>
+
             </div>
           )}
 
@@ -577,12 +568,12 @@ function ProductFormModal({ prod, categories, onClose, onSaved, toast }) {
                 </select>
               </div>
               <div>
-                <label className="field-label">Syarat & Ketentuan (Indonesia)</label>
+                <label className="field-label">Garansi & SnK (Indonesia)</label>
                 <textarea rows={4} className="qty-field" style={{ resize: 'vertical' }} placeholder="Aturan garansi, klaim, & instruksi pemakaian..."
                   value={formData.terms_id} onChange={(e) => handleChange('terms_id', e.target.value)} />
               </div>
               <div>
-                <label className="field-label">Syarat & Ketentuan (Inggris)</label>
+                <label className="field-label">Garansi & SnK (Inggris)</label>
                 <textarea rows={4} className="qty-field" style={{ resize: 'vertical' }} placeholder="Warranty rules, claim & usage instructions..."
                   value={formData.terms_en} onChange={(e) => handleChange('terms_en', e.target.value)} />
               </div>

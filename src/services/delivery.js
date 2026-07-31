@@ -8,9 +8,7 @@ const getDeliveryProductName = (product, lang) => lang === 'en'
     : (product.name_id || product.name_en || '-');
 
 const buildTermsMessage = (product, lang = 'id') => {
-    const raw = lang === 'en'
-        ? (product.warranty_en || product.terms_en || '')
-        : (product.warranty_id || product.terms_id || '');
+    const raw = lang === 'en' ? (product.terms_en || '') : (product.terms_id || '');
     if (!String(raw).trim()) return '';
     const content = safeHtmlSnk(raw, product.terms_format === 'html');
     const title = lang === 'en' ? 'Warranty/Terms' : 'Garansi/SnK';
@@ -308,17 +306,25 @@ const handlePaymentSuccess = async (bot, orderId, paymentData = {}) => {
             try {
                 const receipt = buildDeliveryReceipt(order, product, stockToDeliver, lang, true);
                 const sentReceipt = await bot.telegram.sendMessage(destination, receipt, { parse_mode: 'HTML', message_effect_id: '5046509860389126442' });
-                if (termsMessage) await bot.telegram.sendMessage(destination, termsMessage, { parse_mode: 'HTML' });
-                await bot.telegram.sendDocument(destination, { source: filePath, filename: `${orderId}.txt` });
-                db.updateOrder(orderId, { delivery_message_id: sentReceipt.message_id });
+                const sentTerms = termsMessage ? await bot.telegram.sendMessage(destination, termsMessage, { parse_mode: 'HTML' }) : null;
+                const sentFile = await bot.telegram.sendDocument(destination, { source: filePath, filename: `${orderId}.txt` });
+                db.updateOrder(orderId, {
+                    delivery_message_id: sentReceipt.message_id,
+                    delivery_terms_message_id: sentTerms?.message_id || null,
+                    delivery_file_message_id: sentFile.message_id
+                });
             } finally {
                 try { fs.unlinkSync(filePath); } catch (_) { }
             }
         } else if (!order.delivery_message_id) {
             const receipt = buildDeliveryReceipt(order, product, stockToDeliver, lang, false);
             const sentDelivery = await bot.telegram.sendMessage(destination, receipt, { parse_mode: 'HTML', message_effect_id: '5046509860389126442' });
-            if (termsMessage) await bot.telegram.sendMessage(destination, termsMessage, { parse_mode: 'HTML' });
-            db.updateOrder(orderId, { delivery_message_id: sentDelivery.message_id });
+            const sentTerms = termsMessage ? await bot.telegram.sendMessage(destination, termsMessage, { parse_mode: 'HTML' }) : null;
+            db.updateOrder(orderId, {
+                delivery_message_id: sentDelivery.message_id,
+                delivery_terms_message_id: sentTerms?.message_id || null,
+                delivery_file_message_id: null
+            });
         }
 
         const settled = db.completeProductOrder(

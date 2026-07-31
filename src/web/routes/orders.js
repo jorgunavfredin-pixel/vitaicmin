@@ -241,8 +241,10 @@ const refund = (bot) => async (req, res) => {
         delivered_data: []
     }, 'refund');
 
-    if (order.delivery_message_id && (order.chat_id || order.user_id)) {
-        try { await bot.telegram.deleteMessage(order.chat_id || order.user_id, order.delivery_message_id); } catch (e) { /* ignore */ }
+    const deliveryChatId = order.chat_id || order.user_id;
+    const deliveryMessageIds = [order.delivery_message_id, order.delivery_terms_message_id, order.delivery_file_message_id].filter(Boolean);
+    for (const messageId of deliveryMessageIds) {
+        try { await bot.telegram.deleteMessage(deliveryChatId, messageId); } catch (e) { /* message may already be gone */ }
     }
     try {
         await bot.telegram.sendMessage(order.chat_id || order.user_id,

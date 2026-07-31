@@ -1,10 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const root = path.join(__dirname, '..');
 const { buildDeliveryReceipt, buildTermsMessage, buildDeliveryFile } = require('../src/services/delivery');
 
 const product = {
   name_id: 'Gemini <Pro>', name_en: 'Gemini Pro', stock_type: 'email_pass',
-  warranty_id: 'Garansi <30> hari', warranty_en: '30-day warranty', terms_format: 'text'
+  terms_id: 'Garansi <30> hari', terms_en: '30-day warranty', terms_format: 'text'
 };
 const stocks = [
   { data: 'one@example.com|pass1' },
@@ -40,6 +43,19 @@ test('terms kosong tidak menghasilkan pesan kedua dan English sinkron', () => {
   assert.match(msg, /Payment Successful/);
   assert.match(msg, /Account Data/);
   assert.match(msg, /Thank you for your purchase!/);
+});
+
+test('source delivery menyimpan receipt terms file dan refund menghapus ketiganya', () => {
+  const delivery = fs.readFileSync(path.join(root, 'src/services/delivery.js'), 'utf8');
+  const refund = fs.readFileSync(path.join(root, 'src/web/routes/orders.js'), 'utf8');
+  const admin = fs.readFileSync(path.join(root, 'admin-web/src/pages/Products.jsx'), 'utf8');
+  assert.match(delivery, /delivery_terms_message_id/);
+  assert.match(delivery, /delivery_file_message_id/);
+  assert.match(refund, /delivery_terms_message_id/);
+  assert.match(refund, /delivery_file_message_id/);
+  assert.match(admin, /Garansi & SnK \(Indonesia\)/);
+  assert.doesNotMatch(admin, />Garansi \(Indonesia\)</);
+  assert.doesNotMatch(admin, /Syarat & Ketentuan \(Indonesia\)/);
 });
 
 test('lima stock type existing tetap terformat pada receipt baru', () => {

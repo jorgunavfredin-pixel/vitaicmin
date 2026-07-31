@@ -24,6 +24,21 @@ function runScenario(script) {
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 }
 
+test('legacy garansi digabung aman ke SnK dan semua delivery message id tersimpan', () => {
+  const out = runScenario(`
+    const p=db.addProduct({category_id:'c',name_id:'P',name_en:'P',price_idr:1000,warranty_id:'Garansi lama',terms_id:'Aturan lama',warranty_en:'Old warranty',terms_en:''});
+    db.mergeLegacyWarrantyTerms();
+    const merged=db.getProductById(p.id);
+    const o=db.createOrder({user_id:'1',product_id:p.id,quantity:1,total_idr:1000,status:'delivered'});
+    db.updateOrder(o.id,{delivery_message_id:11,delivery_terms_message_id:12,delivery_file_message_id:13});
+    const saved=db.getOrderById(o.id);
+    console.log(JSON.stringify({terms_id:merged.terms_id,terms_en:merged.terms_en,ids:[saved.delivery_message_id,saved.delivery_terms_message_id,saved.delivery_file_message_id]}));
+  `);
+  assert.equal(out.terms_id, 'Garansi lama\n\nAturan lama');
+  assert.equal(out.terms_en, 'Old warranty');
+  assert.deepEqual(out.ids, [11, 12, 13]);
+});
+
 test('gateway dengan order pending/processing terdeteksi dan tidak dianggap kosong', () => {
   const out = runScenario(`
     const gw=db.createPaymentGateway({provider:'pakasir',label:'A',credentials:{api_key:'k',slug:'s'}});

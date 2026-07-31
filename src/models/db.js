@@ -75,6 +75,8 @@ db.exec(`
     reminder_message_id INTEGER,
     reminder_chat_id TEXT,
     delivery_message_id INTEGER,
+  delivery_terms_message_id INTEGER,
+  delivery_file_message_id INTEGER,
     created_at TEXT,
     paid_at TEXT,
     delivered_at TEXT,
@@ -90,6 +92,27 @@ try {
 } catch (e) {
   db.exec('ALTER TABLE orders ADD COLUMN delivery_message_id INTEGER');
 }
+for (const column of ['delivery_terms_message_id', 'delivery_file_message_id']) {
+  try { db.prepare(`SELECT ${column} FROM orders LIMIT 1`).get(); }
+  catch (_) { db.exec(`ALTER TABLE orders ADD COLUMN ${column} INTEGER`); }
+}
+
+const mergeLegacyWarrantyTerms = () => {
+  const rows = db.prepare(`SELECT id,warranty_id,warranty_en,terms_id,terms_en FROM products
+    WHERE COALESCE(warranty_id,'')<>'' OR COALESCE(warranty_en,'')<>''`).all();
+  const update = db.prepare('UPDATE products SET warranty_id=?, warranty_en=?, terms_id=?, terms_en=? WHERE id=?');
+  const merge = (warranty, terms) => {
+    const w = String(warranty || '').trim(); const t = String(terms || '').trim();
+    if (!w) return t;
+    if (!t) return w;
+    if (t === w || t.startsWith(`${w}\n\n`)) return t;
+    return `${w}\n\n${t}`;
+  };
+  const txn = db.transaction(() => rows.forEach(r => update.run('', '', merge(r.warranty_id, r.terms_id), merge(r.warranty_en, r.terms_en), r.id)));
+  txn();
+  return rows.length;
+};
+mergeLegacyWarrantyTerms();
 
 // Migration: add flash sale columns to products
 try {
@@ -686,7 +709,7 @@ const updateOrder = (orderId, updates, reason) => {
   const order = getOrderById(orderId);
   if (!order) return null;
   const merged = { ...order, ...updates };
-  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=?, gateway_id=?, flash_sale_applied=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, merged.gateway_id || null, merged.flash_sale_applied ? 1 : 0, orderId);
+  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, delivery_terms_message_id=?, delivery_file_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=?, gateway_id=?, flash_sale_applied=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.delivery_terms_message_id || null, merged.delivery_file_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, merged.gateway_id || null, merged.flash_sale_applied ? 1 : 0, orderId);
   const updatedOrder = getOrderById(orderId);
   dbEvents.emit('order_change', updatedOrder, reason || 'update');
   return updatedOrder;
@@ -1301,7 +1324,7 @@ module.exports = {
   // Categories
   getCategories, addCategory, updateCategory, deleteCategory,
   // Products
-  getProducts, getProductsByCategory, getProductById, addProduct, updateProduct, deleteProduct,
+  getProducts, getProductsByCategory, getProductById, addProduct, updateProduct, deleteProduct, mergeLegacyWarrantyTerms,
   // Stock
   getStock, getStockByProduct, getAvailableStockCount, getUnsoldUnreservedStock, addStock, addBulkStock, markStockAsSold, restoreStock, deleteStock, clearProductStock, removeLastStock, reserveStock, releaseReservedStock, getReservedStock,
   // Orders
