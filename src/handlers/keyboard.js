@@ -1052,7 +1052,9 @@ const registerKeyboardHandler = (bot) => {
 
         db.updateOrder(topupOrder.id, {
             message_id: sentMsg.message_id,
-            gateway_id: qrisResult.gateway_id || null
+            gateway_id: qrisResult.gateway_id || null,
+            gateway_signature: qrisResult.data?.signature || null,
+            gateway_reference: qrisResult.data?.trx_reference || null
         });
     }
 };

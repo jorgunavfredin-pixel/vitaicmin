@@ -339,7 +339,9 @@ const registerOrderHandler = (bot) => {
         db.updateOrder(orderId, {
             status: 'pending',
             message_id: sentMsg.message_id,
-            gateway_id: qrisResult.gateway_id || null
+            gateway_id: qrisResult.gateway_id || null,
+            gateway_signature: qrisResult.data?.signature || null,
+            gateway_reference: qrisResult.data?.trx_reference || null
         });
 
         await notifyAdminNewOrder(ctx.telegram, orderId, order, 'QRIS');

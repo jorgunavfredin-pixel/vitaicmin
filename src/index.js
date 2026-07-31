@@ -384,6 +384,62 @@ app.post('/webhook/xoftware', async (req, res) => {
     }
 });
 
+// KlikQRIS webhook: signature statis dari response create dibandingkan dengan
+// signature yang dikirim webhook. Diperkuat dengan verifikasi order/amount/status.
+app.post('/webhook/klikqris', async (req, res) => {
+    try {
+        const db = require('./models/db');
+        const klikqris = require('./payments/providers/klikqris');
+        const parsed = klikqris.parseCallback(req.body);
+        if (!parsed.success) return res.status(400).json({ success: false, error: parsed.error });
+
+        const order = db.getOrderById(parsed.orderId);
+        if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+
+        // Signature verifikasi: signature statis yang disimpan saat create.
+        const gw = order.gateway_id ? db.getPaymentGatewayById(order.gateway_id) : null;
+        const creds = gw?.provider === 'klikqris' ? gw.credentials : {
+            api_key: process.env.KLIKQRIS_API_KEY || '',
+            merchant_id: process.env.KLIKQRIS_MERCHANT_ID || ''
+        };
+        const stored = order.gateway_signature || parsed.signature;
+        if (!klikqris.verifyWebhookSignature(parsed.signature, stored)) {
+            return res.status(401).json({ success: false, error: 'Invalid signature' });
+        }
+        // Amount: KlikQRIS total_amount >= order.total_idr (unique code bisa menambah).
+        if (parsed.amount && order.total_idr && parsed.amount < order.total_idr) {
+            return res.status(400).json({ success: false, error: 'Amount mismatch' });
+        }
+        if (!db.claimWebhookEvent(`${parsed.orderId}-${parsed.signature}`, 'klikqris', parsed.orderId)) {
+            return res.json({ success: true, duplicate: true });
+        }
+        log.info(`[PAYMENT] provider=klikqris event=webhook order=${parsed.orderId} ` +
+            `status=${parsed.status} amount=${parsed.amount || '-'}`);
+
+        if (order.status !== 'pending') return res.json({ success: true });
+        if (parsed.status === 'completed') {
+            const verified = await klikqris.verifyTransaction(parsed.orderId, order.total_idr, creds);
+            if (!verified.valid) {
+                db.releaseWebhookEvent(`${parsed.orderId}-${parsed.signature}`);
+                return res.status(400).json({ success: false, error: `Transaction not verified (${verified.status})` });
+            }
+            const delivered = await handlePaymentSuccess(bot, parsed.orderId, {
+                transaction_id: parsed.orderId,
+                amount: parsed.amount
+            });
+            if (!delivered) {
+                db.releaseWebhookEvent(`${parsed.orderId}-${parsed.signature}`);
+                return res.status(500).json({ success: false, error: 'Delivery failed' });
+            }
+            log.info(`[PAYMENT] provider=klikqris event=verified order=${parsed.orderId} status=paid`);
+        }
+        res.json({ success: true });
+    } catch (error) {
+        log.error('[WEBHOOK] KlikQRIS error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Telegram webhook (optional, for production)
 app.post('/webhook/telegram', (req, res) => {
     bot.handleUpdate(req.body, res);
@@ -408,6 +464,7 @@ const startBot = async () => {
             console.log(`📍 PaKasir Webhook  : ${WEBHOOK_URL}/webhook/qris`);
             console.log(`📍 WijayaPay Webhook: ${WEBHOOK_URL}/webhook/wijayapay`);
             console.log(`📍 Xoftware Webhook : ${WEBHOOK_URL}/webhook/xoftware`);
+            console.log(`📍 KlikQRIS Webhook : ${WEBHOOK_URL}/webhook/klikqris`);
         });
 
         // Use polling for development

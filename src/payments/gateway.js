@@ -19,7 +19,8 @@ const log = require('../utils/logger');
 const ADAPTERS = {
     pakasir: require('./providers/pakasir'),
     wijayapay: require('./providers/wijayapay'),
-    xoftware: require('./providers/xoftware')
+    xoftware: require('./providers/xoftware'),
+    klikqris: require('./providers/klikqris')
 };
 
 const getAdapter = (provider) => ADAPTERS[provider] || null;
@@ -31,7 +32,8 @@ const SUPPORTED_PROVIDERS = Object.keys(ADAPTERS);
 const PROVIDER_FIELDS = {
     pakasir: ['api_key', 'slug'],
     wijayapay: ['code_merchant', 'api_key'],
-    xoftware: ['api_key', 'merchant_id', 'webhook_secret', 'registered_notify_url']
+    xoftware: ['api_key', 'merchant_id', 'webhook_secret', 'registered_notify_url'],
+    klikqris: ['api_key', 'merchant_id']
 };
 
 /**
@@ -56,6 +58,11 @@ const envCredential = (provider) => {
         const registered_notify_url = process.env.XOWFTWARE_NOTIFY_URL || '';
         const fee_direction = process.env.XOWFTWARE_FEE_DIRECTION === 'user' ? 'user' : 'merchant';
         if (api_key || merchant_id || webhook_secret || registered_notify_url) return { api_key, merchant_id, webhook_secret, registered_notify_url, fee_direction };
+    }
+    if (provider === 'klikqris') {
+        const api_key = process.env.KLIKQRIS_API_KEY || '';
+        const merchant_id = process.env.KLIKQRIS_MERCHANT_ID || '';
+        if (api_key || merchant_id) return { api_key, merchant_id };
     }
     return null;
 };
@@ -105,7 +112,7 @@ const listActiveGateways = () => {
     }));
 };
 
-const providerLabel = (provider) => ({ pakasir: 'PaKasir', wijayapay: 'WijayaPay', xoftware: 'Xoftware Pay' }[provider] || provider);
+const providerLabel = (provider) => ({ pakasir: 'PaKasir', wijayapay: 'WijayaPay', xoftware: 'Xoftware Pay', klikqris: 'KlikQRIS' }[provider] || provider);
 
 const hasCompleteCreds = (provider, creds) => {
     if (!creds) return false;

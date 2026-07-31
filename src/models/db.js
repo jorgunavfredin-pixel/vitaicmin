@@ -80,7 +80,10 @@ db.exec(`
     created_at TEXT,
     paid_at TEXT,
     delivered_at TEXT,
-    expires_at TEXT
+    expires_at TEXT,
+    gateway_id TEXT,
+    gateway_signature TEXT,
+    gateway_reference TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
   CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
@@ -199,6 +202,21 @@ try {
 } catch (e) {
   db.exec('ALTER TABLE orders ADD COLUMN gateway_id TEXT');
   console.log('[DB] Added gateway_id column to orders table');
+}
+
+// Migration: gateway_signature & gateway_reference (untuk provider signature statis
+// seperti KlikQRIS — signature dari response create dibandingkan saat webhook).
+try {
+  db.prepare('SELECT gateway_signature FROM orders LIMIT 1').get();
+} catch (e) {
+  db.exec('ALTER TABLE orders ADD COLUMN gateway_signature TEXT');
+  console.log('[DB] Added gateway_signature column to orders table');
+}
+try {
+  db.prepare('SELECT gateway_reference FROM orders LIMIT 1').get();
+} catch (e) {
+  db.exec('ALTER TABLE orders ADD COLUMN gateway_reference TEXT');
+  console.log('[DB] Added gateway_reference column to orders table');
 }
 
 db.exec(`
@@ -709,7 +727,7 @@ const updateOrder = (orderId, updates, reason) => {
   const order = getOrderById(orderId);
   if (!order) return null;
   const merged = { ...order, ...updates };
-  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, delivery_terms_message_id=?, delivery_file_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=?, gateway_id=?, flash_sale_applied=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.delivery_terms_message_id || null, merged.delivery_file_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, merged.gateway_id || null, merged.flash_sale_applied ? 1 : 0, orderId);
+  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, delivery_terms_message_id=?, delivery_file_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=?, gateway_id=?, flash_sale_applied=?, gateway_signature=?, gateway_reference=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.delivery_terms_message_id || null, merged.delivery_file_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, merged.gateway_id || null, merged.flash_sale_applied ? 1 : 0, merged.gateway_signature || null, merged.gateway_reference || null, orderId);
   const updatedOrder = getOrderById(orderId);
   dbEvents.emit('order_change', updatedOrder, reason || 'update');
   return updatedOrder;

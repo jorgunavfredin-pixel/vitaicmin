@@ -26,6 +26,13 @@ const PROVIDER_META = {
       { key: 'webhook_secret', label: 'Webhook Secret', secret: true, placeholder: 'Masukkan Webhook Secret' },
       { key: 'registered_notify_url', label: 'Notify URL yang Di-approve', secret: false, placeholder: 'https://t.me/nama_bot' }
     ]
+  },
+  klikqris: {
+    label: 'KlikQRIS',
+    fields: [
+      { key: 'api_key', label: 'API Key', secret: true, placeholder: 'Masukkan API Key' },
+      { key: 'merchant_id', label: 'Merchant ID', secret: false, placeholder: 'cth: 123456789' }
+    ]
   }
 };
 
