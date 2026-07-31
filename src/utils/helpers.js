@@ -229,7 +229,7 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
         `${l.prod.padEnd(14)}${productName}`,
         `${l.qty.padEnd(14)}${order.quantity} pcs`
     ];
-    const paymentRows = [`${l.subtotal.padEnd(14)}${await money(normalSubtotal)}`];
+    const paymentRows = [`${l.subtotal.padEnd(14)} ${await money(normalSubtotal)}`];
     if (flashDiscount > 0) paymentRows.push(`${'Flash Sale'.padEnd(14)}−${await money(flashDiscount)}`);
     if (bulkDiscount > 0) paymentRows.push(`${(lang === 'en' ? 'Bulk' : 'Grosir').padEnd(14)}−${await money(bulkDiscount)}`);
     if (voucherDiscount > 0) {
@@ -237,7 +237,7 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
         if (order.voucher_code) paymentRows.push(`  ${escapeHtml(order.voucher_code)}`);
     }
     paymentRows.push('────────────────');
-    paymentRows.push(`${l.total.padEnd(14)}${await money(order.total_idr)}`);
+    paymentRows.push(`${l.total.padEnd(14)} ${await money(order.total_idr)}`);
 
     let msg = `${l.title}\n\n<pre>${summaryRows.join('\n')}</pre>\n<pre>${paymentRows.join('\n')}</pre>`;
     msg += `\n<b>${l.method}</b>\n${l.select}`;
