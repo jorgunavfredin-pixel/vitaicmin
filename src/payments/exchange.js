@@ -5,14 +5,13 @@ let exchangeRateCache = {
     rate: 16000, // Default fallback rate
     lastFetch: 0
 };
-
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 
 /**
  * Fetch current USD to IDR exchange rate with retry
  * @returns {Promise<number>} - Exchange rate
  */
-const fetchExchangeRate = async () => {
+const fetchExchangeRateNetwork = async () => {
     const now = Date.now();
 
     // Return cached rate if still valid
@@ -69,7 +68,20 @@ const fetchExchangeRate = async () => {
     console.log(`Using cached/default rate: 1 USD = ${exchangeRateCache.rate} IDR`);
     return exchangeRateCache.rate;
 };
-
+// Concurrent checkout renders share one in-flight network request. Without this,
+// rapid quantity taps before the cache is warm can trigger several 5s API calls.
+let exchangeRateInFlight = null;
+const fetchExchangeRate = async () => {
+    const now = Date.now();
+    if (now - exchangeRateCache.lastFetch < CACHE_DURATION) return exchangeRateCache.rate;
+    if (!exchangeRateInFlight) {
+        exchangeRateInFlight = fetchExchangeRateNetwork()
+            .catch(() => exchangeRateCache.rate)
+            .finally(() => { exchangeRateInFlight = null; });
+    }
+    // Stale-while-revalidate: checkout never waits for an external rate API.
+    return exchangeRateCache.rate;
+};
 /**
  * Convert IDR to USD
  * @param {number} amountIDR - Amount in IDR
@@ -79,7 +91,6 @@ const convertIDRtoUSD = async (amountIDR) => {
     const rate = await fetchExchangeRate();
     return amountIDR / rate;
 };
-
 /**
  * Convert USD to IDR
  * @param {number} amountUSD - Amount in USD
@@ -89,7 +100,6 @@ const convertUSDtoIDR = async (amountUSD) => {
     const rate = await fetchExchangeRate();
     return amountUSD * rate;
 };
-
 /**
  * Get current exchange rate
  * @returns {Promise<number>} - Current rate
@@ -97,7 +107,6 @@ const convertUSDtoIDR = async (amountUSD) => {
 const getExchangeRate = async () => {
     return await fetchExchangeRate();
 };
-
 /**
  * Format price for display
  * @param {number} amountIDR - Amount in IDR
@@ -111,7 +120,6 @@ const formatPrice = async (amountIDR, lang = 'id') => {
     }
     return `Rp ${new Intl.NumberFormat('id-ID').format(amountIDR)}`;
 };
-
 module.exports = {
     fetchExchangeRate,
     convertIDRtoUSD,

@@ -24,6 +24,19 @@ function runScenario(script) {
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 }
 
+test('penjualan banyak produk diagregasi sekali tanpa tabel baru', () => {
+  const out = runScenario(`
+    const a=db.addProduct({category_id:'c',name_id:'A',name_en:'A',price_idr:1000});
+    await new Promise(r=>setTimeout(r,2));
+    const b=db.addProduct({category_id:'c',name_id:'B',name_en:'B',price_idr:1000});
+    db.createOrder({user_id:'1',product_id:a.id,quantity:2,total_idr:2000,status:'delivered'});
+    db.createOrder({user_id:'2',product_id:a.id,quantity:3,total_idr:3000,status:'paid'});
+    db.createOrder({user_id:'3',product_id:b.id,quantity:4,total_idr:4000,status:'cancelled'});
+    console.log(JSON.stringify(db.getSoldQtyByProducts([a.id,b.id])));
+  `);
+  assert.deepEqual(Object.values(out).sort((a,b)=>a-b), [0,5]);
+});
+
 test('legacy garansi digabung aman ke SnK dan semua delivery message id tersimpan', () => {
   const out = runScenario(`
     const p=db.addProduct({category_id:'c',name_id:'P',name_en:'P',price_idr:1000,warranty_id:'Garansi lama',terms_id:'Aturan lama',warranty_en:'Old warranty',terms_en:''});

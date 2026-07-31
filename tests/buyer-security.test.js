@@ -206,8 +206,8 @@ test('compact product card dan checkout tier aktif memakai hierarchy ringkas', a
 
   assert.match(keyboard, /╭─ <b>\$\{displayName\}<\/b>/);
   assert.match(keyboard, /labels\.stock.*•.*labels\.sold/);
-  assert.match(keyboard, /labels\.bulk} » <b>/);
-  assert.match(keyboard, /╰ <i>\$\{desc\}<\/i>/);
+  assert.match(keyboard, /labels\.bulk} › <b>/);
+  assert.match(keyboard, /Detail produk di halaman checkout/);
   assert.doesNotMatch(keyboard, /╭─〔|labels\.restock/);
 
   assert.match(menu, /Harga grosir/);
@@ -242,8 +242,8 @@ test('judul kategori pagination produk konfirmasi dan invoice memakai layout mon
   const helpers = fs.readFileSync(path.join(root, 'src/utils/helpers.js'), 'utf8');
   const order = fs.readFileSync(path.join(root, 'src/handlers/order.js'), 'utf8');
 
-  assert.match(keyboard, /categoryName\.toUpperCase\(\)/);
-  assert.match(keyboard, /Pilih produk yang ingin dibeli/);
+  assert.match(keyboard, /\.toUpperCase\(\)\);/);
+  assert.match(keyboard, /<blockquote><b>\$\{labels\.category\}:/);
   assert.match(keyboard, /« Produk Sebelumnya/);
   assert.match(keyboard, /Produk Berikutnya »/);
   assert.match(menu, /<pre>\$\{rows\.join/);
@@ -261,8 +261,7 @@ test('deskripsi fallback dan voucher tetap mengedit halaman konfirmasi yang sama
   const keyboard = fs.readFileSync(path.join(root, 'src/handlers/keyboard.js'), 'utf8');
   const menu = fs.readFileSync(path.join(root, 'src/handlers/menu.js'), 'utf8');
   const order = fs.readFileSync(path.join(root, 'src/handlers/order.js'), 'utf8');
-  assert.match(keyboard, /No description\./);
-  assert.match(keyboard, /Tidak ada deskripsi\./);
+  assert.doesNotMatch(keyboard, /No description\.|Tidak ada deskripsi\./);
   assert.match(menu, /No description\./);
   assert.match(menu, /Tidak ada deskripsi\./);
   assert.match(order, /confirmationMessageId/);

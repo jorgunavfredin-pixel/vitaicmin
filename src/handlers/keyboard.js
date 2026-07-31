@@ -185,106 +185,77 @@ const registerKeyboardHandler = (bot) => {
 
     const buildProductPage = async (products, page, lang, catId) => {
         const labels = lang === 'en' ? {
-            stock: 'Stock', sold: 'Sold', bulk: 'Bulk', flash: 'Flash Sale',
-            buy_btn: '🛒 Buy', remind_btn: '🔔 Remind',
-            warning: '⚠️ Out of stock? Click remind to get notified when restocked',
+            category: 'Category', page: 'Page', stock: 'Stock', sold: 'Sold', bulk: 'Bulk', flash: 'Flash Sale',
+            detail: 'Product details are on the checkout page', buy_btn: '🛒 Buy', remind_btn: '🔔 Remind',
             back: '‹ Back to Categories'
         } : {
-            stock: 'Stok', sold: 'Terjual', bulk: 'Grosir', flash: 'Flash Sale',
-            buy_btn: '🛒 Beli', remind_btn: '🔔 Ingatkan',
-            warning: '⚠️ Stok habis? Klik ingatkan untuk mendapatkan notif saat produk restok',
+            category: 'Kategori', page: 'Hal', stock: 'Stok', sold: 'Terjual', bulk: 'Grosir', flash: 'Flash Sale',
+            detail: 'Detail produk di halaman checkout', buy_btn: '🛒 Beli', remind_btn: '🔔 Ingatkan',
             back: '‹ Kembali ke Kategori'
         };
-
-        const totalPages = Math.ceil(products.length / PRODUCTS_PER_PAGE);
+        const totalPages = Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE));
         const start = page * PRODUCTS_PER_PAGE;
         const pageProducts = products.slice(start, start + PRODUCTS_PER_PAGE);
-
-        const hasOutOfStock = pageProducts.some(p => {
-            if (p.stock_mode === 'unlimited') return false;
-            return db.getAvailableStockCount(p.id) === 0;
-        });
+        const soldByProduct = db.getSoldQtyByProducts(products.map(p => p.id));
+        const categorySold = Object.values(soldByProduct).reduce((sum, qty) => sum + qty, 0);
+        const stockByProduct = Object.fromEntries(pageProducts.map(prod => [prod.id,
+            prod.stock_mode === 'unlimited' ? '♾ Unlimited' : db.getAvailableStockCount(prod.id)
+        ]));
         const category = db.getCategories().find(c => String(c.id) === String(catId));
-        const categoryName = escapeHtml(lang === 'en'
+        const categoryName = escapeHtml(String(lang === 'en'
             ? (category?.name_en || category?.name_id || 'Products')
-            : (category?.name_id || category?.name_en || 'Produk'));
-        let msg = `<b>${categoryName.toUpperCase()}</b>\n${lang === 'en' ? 'Select a product to purchase.' : 'Pilih produk yang ingin dibeli.'}\n\n`;
-        if (hasOutOfStock) msg += `${labels.warning}\n\n`;
+            : (category?.name_id || category?.name_en || 'Produk')).toUpperCase());
 
-        if (totalPages > 1) {
-            msg += `📄 ${page + 1}/${totalPages}\n\n`;
-        }
-
+        let msg = `<blockquote><b>${labels.category}: ${categoryName}</b> (${labels.page} ${page + 1}/${totalPages})\n`;
+        msg += `${labels.sold}: ${formatIDR(categorySold)}pcs</blockquote>\n`;
+        msg += `┊ⓘ ${labels.detail}\n\n`;
         const buttons = [];
 
         for (const prod of pageProducts) {
             const rawName = lang === 'en' ? (prod.name_en || prod.name_id) : (prod.name_id || prod.name_en);
-            const rawDesc = lang === 'en'
-                ? (prod.description_en || prod.description_id || 'No description.')
-                : (prod.description_id || prod.description_en || 'Tidak ada deskripsi.');
-            const name = escapeHtml(rawName);
-            const desc = escapeHtml(rawDesc);
-            const stock = prod.stock_mode === 'unlimited' ? '♾ Unlimited' : db.getAvailableStockCount(prod.id);
-
-            let priceText;
+            const displayName = rawName ? escapeHtml(rawName) : '-';
+            const stock = stockByProduct[prod.id];
+            const soldCount = soldByProduct[String(prod.id)] || 0;
             const isFlash = db.isFlashSaleActive(prod);
             const effectivePrice = db.getEffectivePrice(prod);
-
+            let normalPrice;
+            let flashPrice;
             if (lang === 'en') {
-                const usdPrice = await convertIDRtoUSD(effectivePrice);
-                priceText = `$${formatUSD(usdPrice)}`;
-                if (isFlash) {
-                    const origUsd = await convertIDRtoUSD(prod.price_idr);
-                    priceText = `<s>$${formatUSD(origUsd)}</s> → <b>$${formatUSD(usdPrice)}</b>`;
-                }
+                normalPrice = `$${formatUSD(await convertIDRtoUSD(prod.price_idr))}`;
+                flashPrice = `$${formatUSD(await convertIDRtoUSD(effectivePrice))}`;
             } else {
-                priceText = `Rp${formatIDR(effectivePrice)}`;
-                if (isFlash) {
-                    priceText = `<s>Rp${formatIDR(prod.price_idr)}</s> → <b>Rp${formatIDR(effectivePrice)}</b>`;
-                }
+                normalPrice = `Rp${formatIDR(prod.price_idr)}`;
+                flashPrice = `Rp${formatIDR(effectivePrice)}`;
             }
 
-            const allOrders = db.getOrders();
-            const soldCount = allOrders
-                .filter(o => o.product_id === prod.id && (o.status === 'delivered' || o.status === 'paid'))
-                .reduce((sum, o) => sum + o.quantity, 0);
-
-            const displayName = rawName ? escapeHtml(rawName) : '-';
             msg += `╭─ <b>${displayName}</b>\n`;
-            if (isFlash) msg += `├ ${labels.flash} · ${priceText}\n`;
-            else msg += `├ <b>${priceText}</b>\n`;
-            msg += `├ ${labels.stock} ${stock} • ${labels.sold} ${soldCount}\n`;
+            if (isFlash) msg += `┊ ${labels.flash} · <s>${normalPrice}</s> → <b>${flashPrice}</b>\n`;
+            else msg += `┊ <b>${normalPrice}</b>\n`;
+            msg += `┊╰➤ ${labels.stock} ${stock} • ${labels.sold} ${formatIDR(soldCount)}pcs\n`;
 
-            // Show discount info if set and not on flash sale
             if (!isFlash && prod.qty_discounts) {
                 const first = normalizeBulkTiers(prod.qty_discounts, prod.price_idr)[0];
                 if (first) {
                     const value = first.type === 'fixed_price'
                         ? `${lang === 'en' ? '$' + formatUSD(await convertIDRtoUSD(first.price)) : 'Rp ' + formatIDR(first.price)}/pcs`
                         : `${first.percent}%`;
-                    msg += `├ ${labels.bulk} » <b>${value}</b> (Min. ${first.min_qty})\n`;
+                    msg += `┊╰➤ ${labels.bulk} › <b>${value}</b> (Min. ${first.min_qty})\n`;
                 }
             }
-            msg += `╰ <i>${desc}</i>\n\n`;
+            msg += `╰ - - - - - - - - - - - - - - - - - - - - - ╯\n`;
 
             const isOutOfStock = stock !== '♾ Unlimited' && stock === 0;
-            if (isOutOfStock) {
-                buttons.push([Markup.button.callback(`${labels.remind_btn} ${rawName}`, `remind_${prod.id}`)]);
-            } else {
-                buttons.push([{ ...Markup.button.callback(`${labels.buy_btn} ${rawName}`, `prod_${prod.id}`), style: 'primary' }]);
-            }
+            if (isOutOfStock) buttons.push([Markup.button.callback(`${labels.remind_btn} ${rawName}`, `remind_${prod.id}`)]);
+            else buttons.push([{ ...Markup.button.callback(`${labels.buy_btn} ${rawName}`, `prod_${prod.id}`), style: 'primary' }]);
         }
 
-        // Pagination buttons
         if (totalPages > 1) {
             const navBtns = [];
             if (page > 0) navBtns.push({ ...Markup.button.callback(lang === 'en' ? '« Prev Products' : '« Produk Sebelumnya', `catpage_${catId}_${page - 1}`), style: 'primary' });
             if (page < totalPages - 1) navBtns.push({ ...Markup.button.callback(lang === 'en' ? 'Next Products »' : 'Produk Berikutnya »', `catpage_${catId}_${page + 1}`), style: 'success' });
             buttons.push(navBtns);
         }
-
         buttons.push([{ ...Markup.button.callback(labels.back, 'back_to_categories'), style: 'success' }]);
-
         return { msg, buttons };
     };
 

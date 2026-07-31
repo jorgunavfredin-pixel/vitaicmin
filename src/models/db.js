@@ -912,7 +912,20 @@ const getSoldQtyByProduct = (productId, sinceDays = 30) => {
   const r = db.prepare(
     "SELECT COALESCE(SUM(quantity), 0) AS qty FROM orders WHERE product_id = ? AND status IN ('paid', 'delivered') AND COALESCE(delivered_at, paid_at, created_at) >= ?"
   ).get(productId, cutoff);
-  return r.qty || 0;
+  return r?.qty || 0;
+};
+
+// One aggregate query for product/category cards. Existing orders remain the source of truth;
+// no counter table or schema migration is needed.
+const getSoldQtyByProducts = (productIds) => {
+  const ids = [...new Set((productIds || []).filter(Boolean).map(String))];
+  const result = Object.fromEntries(ids.map(id => [id, 0]));
+  if (!ids.length) return result;
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = db.prepare(`SELECT product_id, COALESCE(SUM(quantity),0) qty FROM orders
+    WHERE product_id IN (${placeholders}) AND status IN ('paid','delivered') GROUP BY product_id`).all(...ids);
+  for (const row of rows) result[String(row.product_id)] = Number(row.qty) || 0;
+  return result;
 };
 
 const getTopSpenders = (limit = 10) => {
@@ -1332,7 +1345,7 @@ module.exports = {
   // Users
   getUsers, getUser, createOrUpdateUser, setUserLanguage, getUserLanguage,
   // Stats
-  getStats, getDetailedStats, getTopSpenders, getSoldQtyByProduct,
+  getStats, getDetailedStats, getTopSpenders, getSoldQtyByProduct, getSoldQtyByProducts,
   // Vouchers
   getVouchers, getVoucherByCode, createVoucher, useVoucher, deleteVoucher, calculateDiscount, hasUserRedeemedVoucher, redeemVoucher, claimVoucherHold, releaseVoucherHold, refreshVoucherHold, purgeExpiredVoucherHolds,
   // Settings
