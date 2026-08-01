@@ -81,11 +81,21 @@ test('buyer UX memakai live settings, HTML aman, WIB, statistik produk, dan fee 
   assert.match(security, /user\?\.banned/);
 });
 
-test('runtime category renderer mengimpor escapeHtml dan aman untuk karakter HTML', () => {
+test('runtime category renderer aman, mempertahankan kapitalisasi admin, dan spacing compact', () => {
   const { generateCategoryListMsg } = require('../src/handlers/keyboard');
-  const msg = generateCategoryListMsg([{ id: 'C1', name_id: 'A&B <Promo>', name_en: 'A&B <Promo>' }], 0, 'id');
-  assert.match(msg, /A&amp;B &lt;PROMO&gt;/i);
-  assert.doesNotMatch(msg, /A&B <Promo>/i);
+  const msg = generateCategoryListMsg([
+    { id: 'C1', name_id: 'Apple Music', name_en: 'Apple Music' },
+    { id: 'C2', name_id: 'A&B <Promo>', name_en: 'A&B <Promo>' }
+  ], 0, 'id');
+
+  assert.match(msg, /A&amp;B &lt;Promo&gt;/);
+  assert.doesNotMatch(msg, /A&B <Promo>/);
+  assert.match(msg, /┊ 2\. Apple Music/);
+  assert.doesNotMatch(msg, /APPLE MUSIC/);
+  assert.doesNotMatch(msg, /╭|╰|- - -/);
+  assert.match(msg, /<blockquote><b>Total Kategori:<\/b> 2\n<b>Halaman<\/b> 1\/1<\/blockquote>\n/);
+  assert.match(msg, /<\/blockquote>\n┊ 1\./);
+  assert.match(msg, /┊ 2\. Apple Music\n\n<i>Pilih nomor yang ada di bawah untuk melihat produk:<\/i>$/);
 });
 
 test('daftar kategori A-Z sinkron dengan tombol dan label multibahasa', () => {
@@ -98,7 +108,7 @@ test('daftar kategori A-Z sinkron dengan tombol dan label multibahasa', () => {
   assert.deepEqual(sortCategoriesAZ(categories, 'id').map(c => c.id), ['a', 'e', 'z']);
   assert.deepEqual(sortCategoriesAZ(categories, 'en').map(c => c.id), ['z', 'e', 'a']);
   const idMsg = generateCategoryListMsg(categories, 0, 'id');
-  assert.match(idMsg, /1\. <b>ALFA<\/b>[\s\S]*2\. <b>ÉCLAIR<\/b>[\s\S]*3\. <b>ZULU<\/b>/);
+  assert.match(idMsg, /┊ 1\. Alfa[\s\S]*┊ 2\. Éclair[\s\S]*┊ 3\. Zulu/);
   const markup = generateCategoryButtons(categories, 0, 'id');
   assert.deepEqual(markup.reply_markup.inline_keyboard[0].map(b => b.callback_data), ['catnum_a', 'catnum_e', 'catnum_z']);
   assert.ok(markup.reply_markup.inline_keyboard[0].every(b => b.style === 'primary'));

@@ -35,12 +35,12 @@ const generateCategoryListMsg = (categories, page, lang) => {
     const end = Math.min(start + ITEMS_PER_PAGE, total);
     const items = categories.slice(start, end);
 
-    // Payment info header
-    // Simple welcome message
+    // Header tanpa blank line: welcome → flash sale (jika ada) → statistik → kategori.
     const storeName = db.getConfig('store_name', 'STORE_NAME', 'Store');
-    let msg = `👋 Hiiii.....\nWelcome to <b>${escapeHtml(storeName)}</b>\n\n`;
+    let msg = `👋 Hiiii.....\nWelcome to <b>${escapeHtml(storeName)}</b>\n`;
 
     // One Telegram quote for all active flash-sale products.
+    // Isi flash sale dipertahankan; hanya blank line di luar blockquote yang dihapus.
     const activeFS = db.getActiveFlashSales().filter(fs => fs.active !== false && (!fs.flash_slots?.limited || fs.flash_slots.remaining > 0));
     if (activeFS.length > 0) {
         const flashLines = ['━━⚡️ 𝗙 𝗟 𝗔 𝗦 𝗛  𝗦 𝗔 𝗟 𝗘 ⚡️━━'];
@@ -63,22 +63,23 @@ const generateCategoryListMsg = (categories, page, lang) => {
             }
             flashLines.push('');
         }
-        msg += `<blockquote>${flashLines.join('\n').trim()}</blockquote>\n\n`;
+        msg += `<blockquote>${flashLines.join('\n').trim()}</blockquote>\n`;
     }
 
-    msg += '╭─────────────────\n';
-    msg += lang === 'en'
-        ? `┊ <b>Total Categories:</b> ${total}\n┊ <b>Page</b> ${page + 1}/${totalPages}\n`
-        : `┊ <b>Total Kategori:</b> ${total}\n┊ <b>Halaman</b> ${page + 1}/${totalPages}\n`;
-    msg += '┊ - - - - - - - - - - -\n';
+    const stats = lang === 'en'
+        ? `<b>Total Categories:</b> ${total}\n<b>Page</b> ${page + 1}/${totalPages}`
+        : `<b>Total Kategori:</b> ${total}\n<b>Halaman</b> ${page + 1}/${totalPages}`;
+    msg += `<blockquote>${stats}</blockquote>\n`;
 
     items.forEach((cat, idx) => {
         const num = start + idx + 1;
-        const name = escapeHtml(String(lang === 'en' ? (cat.name_en || cat.name_id || '') : (cat.name_id || cat.name_en || '')).toUpperCase());
-        msg += `┊ ${num}. <b>${name}</b>\n`;
+        // Pertahankan kapitalisasi persis seperti yang ditulis admin.
+        const rawName = lang === 'en' ? (cat.name_en || cat.name_id || '') : (cat.name_id || cat.name_en || '');
+        msg += `┊ ${num}. ${escapeHtml(String(rawName))}\n`;
     });
 
-    msg += '╰─────────────────\n\n';
+    // Satu-satunya blank line: tepat sebelum instruksi.
+    msg += '\n';
     msg += lang === 'en'
         ? '<i>Select number below to view product:</i>'
         : '<i>Pilih nomor yang ada di bawah untuk melihat produk:</i>';
