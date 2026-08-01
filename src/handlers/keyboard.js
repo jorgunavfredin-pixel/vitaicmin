@@ -203,9 +203,10 @@ const registerKeyboardHandler = (bot) => {
             prod.stock_mode === 'unlimited' ? '♾ Unlimited' : db.getAvailableStockCount(prod.id)
         ]));
         const category = db.getCategories().find(c => String(c.id) === String(catId));
+        // Nama kategori mengikuti kapitalisasi persis dari admin.
         const categoryName = escapeHtml(String(lang === 'en'
             ? (category?.name_en || category?.name_id || 'Products')
-            : (category?.name_id || category?.name_en || 'Produk')).toUpperCase());
+            : (category?.name_id || category?.name_en || 'Produk')));
 
         let msg = `<blockquote><b>${labels.category}: ${categoryName}</b> (${labels.page} ${page + 1}/${totalPages})\n`;
         msg += `${labels.sold}: ${formatIDR(categorySold)} pcs</blockquote>\n`;

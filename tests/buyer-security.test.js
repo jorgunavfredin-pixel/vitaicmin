@@ -224,7 +224,9 @@ test('compact product card dan checkout tier aktif memakai hierarchy ringkas', a
   assert.match(menu, /Bulk price/);
   assert.match(menu, /Hemat/);
   assert.match(menu, /Savings/);
-  assert.match(menu, /<i>\$\{desc\}<\/i>/);
+  assert.match(menu, /<blockquote>🛒 <b>\$\{l\.title\}<\/b><\/blockquote>/);
+  assert.match(menu, /\$\{desc\}/);
+  assert.doesNotMatch(menu, /<i>\$\{desc\}<\/i>/);
 
   assert.match(admin, /Disarankan maksimal 100 karakter/);
   assert.match(admin, /description_id\.length/);
@@ -237,33 +239,53 @@ test('compact product card dan checkout tier aktif memakai hierarchy ringkas', a
     price_idr: 1000, stock_mode: 'unlimited', active: true,
     qty_discounts: JSON.stringify([{ min_qty: 2, type: 'fixed_price', price: 750 }])
   }, 2, 'id');
-  assert.match(rendered, /<b>Produk &lt;A&gt;<\/b>/);
-  assert.match(rendered, /<i>Akun private &amp; garansi<\/i>/);
+  assert.match(rendered, /^<blockquote>🛒 <b>Checkout Produk<\/b><\/blockquote>\n<b>Produk:<\/b> Produk &lt;A&gt;\nAkun private &amp; garansi\n\n/);
   assert.match(rendered, /Harga grosir\s+Rp750\/pcs/);
   assert.match(rendered, /Hemat\s+Rp500/);
   assert.match(rendered, /<pre>[\s\S]*Total\s+Rp1\.500[\s\S]*<\/pre>/);
-  assert.doesNotMatch(rendered, /Harga satuan/);
+  assert.match(rendered, /<blockquote>📦 Harga Grosir<\/blockquote>\n└ Min\. 2 pcs → Rp750\/pcs/);
+  assert.match(rendered, /\n\n<blockquote>Atur jumlah lalu lanjut ke pembayaran:<\/blockquote>$/);
+  assert.doesNotMatch(rendered, /Harga satuan|PRODUK &lt;A&gt;/);
 });
 
-test('judul kategori pagination produk konfirmasi dan invoice memakai layout monospace', () => {
+test('kategori, konfirmasi, invoice, dan receipt mempertahankan case admin serta layout baru', async () => {
   const root = path.join(__dirname, '..');
   const keyboard = fs.readFileSync(path.join(root, 'src/handlers/keyboard.js'), 'utf8');
-  const menu = fs.readFileSync(path.join(root, 'src/handlers/menu.js'), 'utf8');
-  const helpers = fs.readFileSync(path.join(root, 'src/utils/helpers.js'), 'utf8');
-  const order = fs.readFileSync(path.join(root, 'src/handlers/order.js'), 'utf8');
-
-  assert.match(keyboard, /\.toUpperCase\(\)\);/);
+  const delivery = fs.readFileSync(path.join(root, 'src/services/delivery.js'), 'utf8');
+  assert.doesNotMatch(keyboard.slice(keyboard.indexOf('const categoryName'), keyboard.indexOf('let msg =', keyboard.indexOf('const categoryName'))), /toUpperCase/);
   assert.match(keyboard, /<blockquote><b>\$\{labels\.category\}:/);
   assert.match(keyboard, /« Produk Sebelumnya/);
   assert.match(keyboard, /Produk Berikutnya »/);
-  assert.match(menu, /<pre>\$\{rows\.join/);
-  assert.match(helpers, /<pre>\$\{summaryRows\.join/);
-  assert.match(helpers, /<pre>\$\{paymentRows\.join/);
-  assert.doesNotMatch(order, /<pre>\$\{invoiceRows\.join/);
-  assert.match(order, /<b>\$\{l\.orderId}:<\/b> <code>/);
-  assert.match(order, /<b>\$\{l\.prod}:<\/b> <b>\$\{prodName}<\/b>/);
-  assert.match(order, /<b>\$\{l\.total}:<\/b>     <b>\$\{totalDisplay}<\/b>/);
-  assert.match(order, /Scan QRIS di atas untuk membayar/);
+  assert.doesNotMatch(delivery, /getDeliveryProductName[\s\S]{0,180}toUpperCase/);
+
+  const product = {
+    id: 'P1', name_id: 'Gemini Ai Pro', name_en: 'Gemini Ai Pro',
+    price_idr: 1000, qty_discounts: JSON.stringify([{ min_qty: 2, type: 'fixed_price', price: 750 }])
+  };
+  const order = { id: 'ORD-20260802-0001', product_id: 'P1', quantity: 6, total_idr: 4500, discount_amount: 0 };
+  const fakeDb = {
+    getProductById: () => product,
+    isFlashSaleActive: () => false,
+    getEffectivePrice: p => p.price_idr,
+    getVoucherByCode: () => null
+  };
+  const { buildPaymentConfirmation } = require('../src/utils/helpers');
+  const confirm = await buildPaymentConfirmation(order, 'id', fakeDb, async n => n / 16000);
+  assert.match(confirm, /^<blockquote>✅ <b>Konfirmasi Pembayaran<\/b><\/blockquote>\n\n/);
+  assert.match(confirm, /<b>Produk:<\/b> Gemini Ai Pro\n<b>Jumlah:<\/b> 6 pcs\n<pre>/);
+  assert.match(confirm, /Grosir\s+−Rp1\.500/);
+  assert.match(confirm, /<b>Metode Pembayaran<\/b>\n<blockquote>Pilih salah satu metode di bawah:<\/blockquote>$/);
+  assert.doesNotMatch(confirm, /GEMINI AI PRO/);
+
+  const { buildQrisInvoiceMessage } = require('../src/handlers/order');
+  const invoice = buildQrisInvoiceMessage({
+    order: { quantity: 1 }, product, orderId: order.id,
+    subtotalDisplay: 'Rp1.000', feeDisplay: 'Rp 97', totalDisplay: 'Rp 1.097', timeoutMinutes: 5, lang: 'id'
+  });
+  assert.match(invoice, /^<blockquote>🧾 <b>Invoice Pesanan<\/b><\/blockquote>\n\n/);
+  assert.match(invoice, /<b>Produk:<\/b> Gemini Ai Pro/);
+  assert.match(invoice, /<blockquote><b>Total Bayar:     Rp 1\.097<\/b><\/blockquote>\n\n/);
+  assert.match(invoice, /<b>Status:<\/b> Menunggu pembayaran QRIS\n<b>Berlaku:<\/b> 5 menit\n\nScan QRIS di atas untuk membayar\.$/);
 });
 
 test('deskripsi fallback dan voucher tetap mengedit halaman konfirmasi yang sama', () => {
@@ -272,8 +294,7 @@ test('deskripsi fallback dan voucher tetap mengedit halaman konfirmasi yang sama
   const menu = fs.readFileSync(path.join(root, 'src/handlers/menu.js'), 'utf8');
   const order = fs.readFileSync(path.join(root, 'src/handlers/order.js'), 'utf8');
   assert.doesNotMatch(keyboard, /No description\.|Tidak ada deskripsi\./);
-  assert.match(menu, /No description\./);
-  assert.match(menu, /Tidak ada deskripsi\./);
+  assert.doesNotMatch(menu, /No description\.|Tidak ada deskripsi\./);
   assert.match(order, /confirmationMessageId/);
   assert.match(order, /force_reply: true/);
   assert.match(order, /reply_to_message\?\.message_id !== state\.promptMessageId/);

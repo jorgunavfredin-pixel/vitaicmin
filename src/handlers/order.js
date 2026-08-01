@@ -14,6 +14,33 @@ const {
     mainMenuKeyboard
 } = require('../utils/keyboard');
 
+/** Pure QRIS invoice renderer: layout/case only, no payment calculation. */
+const buildQrisInvoiceMessage = ({ order, product, orderId, subtotalDisplay, feeDisplay, totalDisplay, timeoutMinutes, lang = 'id' }) => {
+    const rawProdName = lang === 'en'
+        ? (product.name_en || product.name_id || '-')
+        : (product.name_id || product.name_en || '-');
+    const prodName = escapeHtml(rawProdName);
+    const title = lang === 'en' ? 'Order Invoice' : 'Invoice Pesanan';
+    const l = lang === 'en'
+        ? { orderId: 'Order ID', prod: 'Product', qty: 'Quantity', total: 'Total Payment', valid: 'Valid for', fee: 'Fee' }
+        : { orderId: 'Order ID', prod: 'Produk', qty: 'Jumlah', total: 'Total Bayar', valid: 'Berlaku', fee: 'Fee' };
+    const waitingStatus = lang === 'en' ? 'Waiting for QRIS payment' : 'Menunggu pembayaran QRIS';
+    const instruction = lang === 'en' ? 'Scan the QRIS above to complete payment.' : 'Scan QRIS di atas untuk membayar.';
+
+    let message = `<blockquote>🧾 <b>${title}</b></blockquote>\n\n`;
+    message += `<b>${l.orderId}:</b> <code>${escapeHtml(orderId)}</code>\n`;
+    message += `<b>${l.prod}:</b> ${prodName}\n`;
+    message += `<b>${l.qty}:</b> ${order.quantity} pcs\n\n`;
+    message += `<b>Subtotal:</b> ${subtotalDisplay}\n`;
+    message += `<b>${l.fee}:</b> ${feeDisplay}\n`;
+    message += `───────────\n`;
+    message += `<blockquote><b>${l.total}:     ${totalDisplay}</b></blockquote>\n\n`;
+    message += `<b>Status:</b> ${waitingStatus}\n`;
+    message += `<b>${l.valid}:</b> ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n`;
+    message += instruction;
+    return message;
+};
+
 /**
  * Register order handlers
  * @param {Object} bot - Telegraf bot instance
@@ -292,16 +319,6 @@ const registerOrderHandler = (bot) => {
         const { renderPaymentImage, getPlainQR } = require('../services/qrisCustom');
 
         const product = db.getProductById(order.product_id);
-        const prodName = escapeHtml(lang === 'en' ? product.name_en : product.name_id);
-
-        const title = lang === 'en' ? '🧾 <b>ORDER INVOICE</b>' : '🧾 <b>INVOICE PESANAN</b>';
-        const l = lang === 'en' ? {
-            orderId: 'Order ID', prod: 'Product', qty: 'Quantity', total: 'TOTAL PAYMENT',
-            status: 'Status: Waiting for QRIS payment', valid: 'Valid for', fee: 'Fee'
-        } : {
-            orderId: 'Order ID', prod: 'Produk', qty: 'Jumlah', total: 'TOTAL BAYAR',
-            status: 'Status: Menunggu pembayaran QRIS', valid: 'Berlaku', fee: 'Fee'
-        };
         const totalAmount = qrisResult.data.total_payment || order.total_idr;
         const buyerFee = Math.max(0, totalAmount - order.total_idr);
         const totalDisplay = lang === 'en'
@@ -314,9 +331,9 @@ const registerOrderHandler = (bot) => {
         const subtotalDisplay = lang === 'en'
             ? `$${formatUSD(await convertIDRtoUSD(order.total_idr))}`
             : `Rp${formatIDR(order.total_idr)}`;
-        const waitingStatus = lang === 'en' ? 'Waiting for QRIS payment' : 'Menunggu pembayaran QRIS';
-        const instruction = lang === 'en' ? 'Scan the QRIS above to complete payment.' : 'Scan QRIS di atas untuk membayar.';
-        const message = `${title}\n\n<b>${l.orderId}:</b> <code>${escapeHtml(orderId)}</code>\n<b>${l.prod}:</b> <b>${prodName}</b>\n<b>${l.qty}:</b> ${order.quantity} pcs\n\n<b>Subtotal:</b> ${subtotalDisplay}\n<b>${l.fee}:</b> ${feeDisplay}\n───────────\n<b>${l.total}:</b>     <b>${totalDisplay}</b>\n\n<b>Status:</b> ${waitingStatus}\n<b>${l.valid}:</b> ${timeoutMinutes} ${lang === 'en' ? 'minutes' : 'menit'}\n\n${instruction}`;
+        const message = buildQrisInvoiceMessage({
+            order, product, orderId, subtotalDisplay, feeDisplay, totalDisplay, timeoutMinutes, lang
+        });
 
         try { await ctx.deleteMessage(); } catch (e) { }
 
@@ -812,4 +829,4 @@ const updateOrderMasukCompleted = async (telegram, orderId) => {
     adminNotifMessages.delete(orderId);
 };
 
-module.exports = { registerOrderHandler, updateOrderMasukCompleted };
+module.exports = { registerOrderHandler, updateOrderMasukCompleted, buildQrisInvoiceMessage };

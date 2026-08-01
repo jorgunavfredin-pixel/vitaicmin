@@ -18,10 +18,10 @@ async function generateCheckoutMessage(product, quantity, lang) {
     const pricing = calculateBulkPrice(effectivePrice, quantity, product.qty_discounts, isFlash);
     const rawName = lang === 'en' ? (product.name_en || product.name_id || '-') : (product.name_id || product.name_en || '-');
     const rawDesc = lang === 'en'
-        ? (product.description_en || product.description_id || 'No description.')
-        : (product.description_id || product.description_en || 'Tidak ada deskripsi.');
+        ? (product.description_en || product.description_id || '')
+        : (product.description_id || product.description_en || '');
     const name = escapeHtml(rawName);
-    const desc = escapeHtml(rawDesc);
+    const desc = escapeHtml(String(rawDesc).trim());
     const stock = product.stock_mode === 'unlimited' ? '♾ Unlimited' : db.getAvailableStockCount(product.id);
 
     const money = async (value) => lang === 'en'
@@ -32,11 +32,11 @@ async function generateCheckoutMessage(product, quantity, lang) {
     const savingsDisplay = await money(pricing.discount_amount);
 
     const l = lang === 'en' ? {
-        title: 'CHECKOUT PRODUCT', stock: 'Stock', unit: 'Unit price', bulk: 'Bulk price',
+        title: 'Checkout Product', stock: 'Stock', unit: 'Unit price', bulk: 'Bulk price',
         qty: 'Quantity', savings: 'Savings', total: 'Total', tiers: 'Bulk Prices',
         prompt: 'Adjust quantity then proceed to payment:'
     } : {
-        title: 'CHECKOUT PRODUK', stock: 'Stok', unit: 'Harga satuan', bulk: 'Harga grosir',
+        title: 'Checkout Produk', stock: 'Stok', unit: 'Harga satuan', bulk: 'Harga grosir',
         qty: 'Jumlah', savings: 'Hemat', total: 'Total', tiers: 'Harga Grosir',
         prompt: 'Atur jumlah lalu lanjut ke pembayaran:'
     };
@@ -54,13 +54,13 @@ async function generateCheckoutMessage(product, quantity, lang) {
     if (!isFlash && pricing.tiers.length) {
         const tierRows = [];
         for (const tier of pricing.tiers) {
-            const value = tier.type === 'fixed_price' ? `${await money(tier.price)}/pcs` : `${tier.percent}%`;
-            tierRows.push(`Min. ${tier.min_qty} pcs      ${value}`);
+            const value = tier.type === 'fixed_price' ? `${await money(tier.price)}/pcs` : `-${tier.percent}%/pcs`;
+            tierRows.push(`└ Min. ${tier.min_qty} pcs → ${value}`);
         }
-        tierDetails = `\n\n<b>${l.tiers}</b>\n<pre>${tierRows.join('\n')}</pre>`;
+        tierDetails = `\n<blockquote>📦 ${l.tiers}</blockquote>\n${tierRows.join('\n')}`;
     }
 
-    return `<b>${l.title}</b>\n\n<b>${name}</b>${desc ? `\n<i>${desc}</i>` : ''}\n\n<pre>${rows.join('\n')}</pre>${tierDetails}\n\n<i>${l.prompt}</i>`;
+    return `<blockquote>🛒 <b>${l.title}</b></blockquote>\n<b>${lang === 'en' ? 'Product' : 'Produk'}:</b> ${name}${desc ? `\n${desc}` : ''}\n\n<pre>${rows.join('\n')}</pre>${tierDetails}\n\n<blockquote>${l.prompt}</blockquote>`;
 }
 
 const isMediaMessage = (message) => !!(message?.photo || message?.caption !== undefined);

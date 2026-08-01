@@ -167,7 +167,11 @@ const escapeMarkdown = (text) => {
  */
 const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData = null) => {
     const product = db.getProductById(order.product_id);
-    const productName = escapeHtml(lang === 'en' ? product.name_en : product.name_id);
+    // Pertahankan kapitalisasi nama produk persis seperti yang ditulis admin.
+    const rawProductName = lang === 'en'
+        ? (product.name_en || product.name_id || '-')
+        : (product.name_id || product.name_en || '-');
+    const productName = escapeHtml(rawProductName);
     const isFlash = db.isFlashSaleActive(product);
     const effectivePrice = db.getEffectivePrice(product);
 
@@ -187,7 +191,7 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
     }
 
     const l = lang === 'en' ? {
-        title: '🧾 <b>Payment Confirmation</b>',
+        title: 'Payment Confirmation',
         status: 'Status: Waiting for payment ⏳',
         orderId: 'Order ID',
         prod: 'Product',
@@ -200,7 +204,7 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
         voucherApplied: '🎟 <b>Voucher Applied</b> ✅',
         codeVoucher: 'Code Voucher'
     } : {
-        title: '🧾 <b>Konfirmasi Pembayaran</b>',
+        title: 'Konfirmasi Pembayaran',
         status: 'Status: Menunggu pembayaran ⏳',
         orderId: 'Order ID',
         prod: 'Produk',
@@ -224,12 +228,8 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
     const flashDiscount = Math.max(0, normalSubtotal - flashSubtotal);
     const voucherDiscount = order.discount_amount || 0;
 
-    const summaryRows = [
-        `${l.orderId.padEnd(14)}${escapeHtml(order.id)}`,
-        `${l.prod.padEnd(14)}${productName}`,
-        `${l.qty.padEnd(14)}${order.quantity} pcs`
-    ];
     const paymentRows = [`${l.subtotal.padEnd(14)} ${await money(normalSubtotal)}`];
+
     if (flashDiscount > 0) paymentRows.push(`${'Flash Sale'.padEnd(14)}−${await money(flashDiscount)}`);
     if (bulkDiscount > 0) paymentRows.push(`${(lang === 'en' ? 'Bulk' : 'Grosir').padEnd(14)}−${await money(bulkDiscount)}`);
     if (voucherDiscount > 0) {
@@ -239,8 +239,13 @@ const buildPaymentConfirmation = async (order, lang, db, convertFn, voucherData 
     paymentRows.push('────────────────');
     paymentRows.push(`${l.total.padEnd(14)} ${await money(order.total_idr)}`);
 
-    let msg = `${l.title}\n\n<pre>${summaryRows.join('\n')}</pre>\n<pre>${paymentRows.join('\n')}</pre>`;
-    msg += `\n<b>${l.method}</b>\n${l.select}`;
+    let msg = `<blockquote>✅ <b>${l.title}</b></blockquote>\n\n`;
+    msg += `<b>${l.orderId}:</b> <code>${escapeHtml(order.id)}</code>\n`;
+    msg += `<b>${l.prod}:</b> ${productName}\n`;
+    msg += `<b>${l.qty}:</b> ${order.quantity} pcs\n`;
+    msg += `<pre>${paymentRows.join('\n')}</pre>\n`;
+    msg += `<b>${l.method}</b>\n`;
+    msg += `<blockquote>${l.select}</blockquote>`;
     return msg;
 };
 
