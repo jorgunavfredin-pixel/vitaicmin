@@ -55,8 +55,10 @@ EXPOSE 3000
 ENV PORT=3000
 ENV TZ=Asia/Jakarta
 
-# Health check
+# Health check — pakai 127.0.0.1, bukan localhost:
+# wget resolve localhost ke ::1 (IPv6) sedangkan server listen IPv4 saja,
+# sehingga healthcheck selalu gagal walau server sehat.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -qO- http://localhost:3000/ || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/ || exit 1
 
 CMD ["node", "src/index.js"]
