@@ -270,8 +270,7 @@ const orderDetailKeyboard = (orderId, status) => {
         buttons.push([Markup.button.callback('🔁 Replace Account', `adm_order_replace_${orderId}`)]);
     }
 
-    buttons.push([Markup.button.callback('🗑 Delete Order', `adm_order_delete_${orderId}`)]);
-    buttons.push([Markup.button.callback('‹ Back to List', 'adm_orders')]);
+    buttons.push([Markup.button.callback('‹ Kembali ke Orders', 'adm_orders')]);
 
     return Markup.inlineKeyboard(buttons);
 };

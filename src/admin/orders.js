@@ -7,7 +7,9 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../models/db');
 const { formatIDR, formatDateWIB, getWIBToday, escapeMarkdown } = require('../utils/helpers');
+const { safeCsvCell } = require('../utils/csv');
 const escMd = (t) => t ? escapeMarkdown(String(t)) : '';
+const { redeliverOrder, replaceOrderAccount, refundOrder } = require('../services/adminOrders');
 const {
     ordersListKeyboard,
     orderDetailKeyboard,
@@ -116,7 +118,7 @@ function registerOrderHandlers(bot, { isAdmin, adminStates }) {
                 o.created_at ? formatDateWIB(o.created_at) : '-',
                 o.paid_at ? formatDateWIB(o.paid_at) : '-',
                 o.delivered_at ? formatDateWIB(o.delivered_at) : '-'
-            ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+            ].map(safeCsvCell).join(',');
         });
 
         const csv = [headers.join(','), ...rows].join('\n');
@@ -190,255 +192,55 @@ function registerOrderHandlers(bot, { isAdmin, adminStates }) {
         });
     });
 
-    // Redeliver
+    // Shared redeliver
     bot.action(/^adm_order_redeliver_(.+)$/, async (ctx) => {
         if (!isAdmin(ctx.from.id)) return;
         await ctx.answerCbQuery();
-
-        const orderId = ctx.match[1];
-        const order = db.getOrderById(orderId);
-        if (!order || !order.delivered_data || order.delivered_data.length === 0) {
-            await ctx.answerCbQuery('❌ Tidak ada data untuk dikirim ulang', { show_alert: true });
-            return;
-        }
-
-        const prod = db.getProductById(order.product_id);
-        const user = db.getUser(order.user_id);
-        const lang = user?.language || 'id';
-        const prodName = lang === 'en' ? prod?.name_en : prod?.name_id;
-
-        let redeliverMsg = `🔄 *REDELIVER*\n`;
-        redeliverMsg += `┏━━━━━━━━━━━━━━━━\n`;
-        redeliverMsg += `┣ Order: \`${orderId}\`\n`;
-        redeliverMsg += `┣ Product: ${prodName || '?'}\n`;
-        redeliverMsg += `┗ Qty: ${order.quantity}\n\n`;
-        redeliverMsg += `📋 *YOUR ACCOUNT(S):*\n`;
-
-        order.delivered_data.forEach((d, i) => {
-            redeliverMsg += `\n━━━ ${lang === 'en' ? 'Account' : 'Akun'} ${i + 1} ━━━\n`;
-            const lines = d.split('|').map(l => l.trim());
-            if (prod?.stock_type === 'vcc') {
-                redeliverMsg += `💳 Card: \`${lines[0] || '-'}\`\n`;
-                if (lines[1]) redeliverMsg += `📅 Expiry: ${lines[1]}\n`;
-                if (lines[2]) redeliverMsg += `🔒 CVV: ${lines[2]}\n`;
-            } else {
-                lines.forEach(l => { redeliverMsg += `\`${l}\`\n`; });
-            }
-        });
-
         try {
-            await ctx.telegram.sendMessage(order.chat_id, redeliverMsg, { parse_mode: 'Markdown' });
-            await ctx.answerCbQuery('✅ Berhasil dikirim ulang ke user!');
-        } catch (err) {
-            await ctx.answerCbQuery(`❌ Gagal kirim: ${err.message}`, { show_alert: true });
-        }
+            await redeliverOrder({ telegram: ctx.telegram, orderId: ctx.match[1] });
+            await ctx.reply('✅ Berhasil dikirim ulang ke user!');
+        } catch (e) { await ctx.reply(`❌ ${e.message}`); }
     });
-
-    // Replace Account (Step 1: Confirm)
     bot.action(/^adm_order_replace_(.+)$/, async (ctx) => {
         if (!isAdmin(ctx.from.id)) return;
-        await ctx.answerCbQuery();
-
         const orderId = ctx.match[1];
         const order = db.getOrderById(orderId);
-        if (!order) return;
-
-        const prod = db.getProductById(order.product_id);
-        if (!prod) {
-            await ctx.answerCbQuery('❌ Produk tidak ditemukan', { show_alert: true });
-            return;
-        }
-
-        const availableStock = db.getStockByProduct(order.product_id).filter(s => !s.sold && !s.reserved_by);
-
-        if (availableStock.length === 0) {
-            await ctx.answerCbQuery('❌ Stok habis! Tidak bisa replace.', { show_alert: true });
-            return;
-        }
-
-        await ctx.editMessageText(`⚠️ *Replace akun order \`${orderId}\`?*\n\nAkun baru akan diambil dari stok ${prod.name_id} (${availableStock.length} tersedia).\nAkun baru akan dikirim ke user.`, {
-            parse_mode: 'Markdown',
-            ...orderReplaceConfirmKeyboard(orderId)
-        });
+        if (!order) return ctx.answerCbQuery('Order tidak ditemukan', { show_alert: true });
+        const available = db.getUnsoldUnreservedStock(order.product_id).length;
+        await ctx.answerCbQuery();
+        if (!available) return ctx.answerCbQuery('Stok habis!', { show_alert: true });
+        await ctx.editMessageText(`⚠️ *Replace akun order \`${orderId}\`?*\n\nTersedia: ${available} stok.`, { parse_mode: 'Markdown', ...orderReplaceConfirmKeyboard(orderId) });
     });
 
-    // Replace Account (Step 2: Execute)
     bot.action(/^adm_order_confirm_replace_(.+)$/, async (ctx) => {
         if (!isAdmin(ctx.from.id)) return;
         await ctx.answerCbQuery();
-
         const orderId = ctx.match[1];
-        const order = db.getOrderById(orderId);
-        if (!order) return;
-
-        const prod = db.getProductById(order.product_id);
-        if (!prod) {
-            await ctx.editMessageText('❌ Produk tidak ditemukan.', {
-                reply_markup: { inline_keyboard: [[{ text: '⬅️ Back', callback_data: `adm_order_view_${orderId}` }]] }
-            });
-            return;
-        }
-
-        const availableStock = db.getStockByProduct(order.product_id).filter(s => !s.sold && !s.reserved_by);
-
-        if (availableStock.length === 0) {
-            await ctx.editMessageText('❌ Stok habis! Tidak bisa replace.', {
-                reply_markup: { inline_keyboard: [[{ text: '⬅️ Back', callback_data: `adm_order_view_${orderId}` }]] }
-            });
-            return;
-        }
-
-        const newStock = availableStock[0];
-        db.markStockAsSold([newStock.id], order.user_id, orderId);
-
-        // Low stock alert
-        const remainingAfterReplace = db.getStockByProduct(order.product_id).length;
-        if (remainingAfterReplace < 3) {
-            try {
-                const icon = remainingAfterReplace === 0 ? '🔴' : '🟡';
-                for (const aid of ADMIN_IDS) {
-                    await ctx.telegram.sendMessage(aid,
-                        `${icon} *LOW STOCK ALERT*\n\n📦 ${prod.name_id}\n📊 Sisa stok: *${remainingAfterReplace}*\n\n${remainingAfterReplace === 0 ? '⛔ STOK HABIS!' : '⚠️ Segera restock!'}`,
-                        { parse_mode: 'Markdown' }
-                    );
-                }
-            } catch (e) { /* ignore */ }
-        }
-
-        const user = db.getUser(order.user_id);
-        const lang = user?.language || 'id';
-        const prodName = lang === 'en' ? prod?.name_en : prod?.name_id;
-
-        let replaceMsg = `🔁 *REPLACEMENT ACCOUNT*\n`;
-        replaceMsg += `┏━━━━━━━━━━━━━━━━\n`;
-        replaceMsg += `┣ Order: \`${orderId}\`\n`;
-        replaceMsg += `┣ Product: ${prodName || '?'}\n`;
-        replaceMsg += `┗ Replacement for troubled account\n\n`;
-        replaceMsg += `📋 *NEW ACCOUNT:*\n`;
-        replaceMsg += `\n━━━ ${lang === 'en' ? 'Replacement' : 'Pengganti'} ━━━\n`;
-
-        const stockData = newStock.data;
-        const lines = stockData.split('|').map(l => l.trim());
-        if (prod.stock_type === 'vcc') {
-            replaceMsg += `💳 Card: \`${lines[0] || '-'}\`\n`;
-            if (lines[1]) replaceMsg += `📅 Expiry: ${lines[1]}\n`;
-            if (lines[2]) replaceMsg += `🔒 CVV: ${lines[2]}\n`;
-        } else {
-            lines.forEach(l => { replaceMsg += `\`${l}\`\n`; });
-        }
-
-        const warranty = lang === 'en'
-            ? (prod.warranty_en || prod.terms_en)
-            : (prod.warranty_id || prod.terms_id);
-        if (warranty) {
-            replaceMsg += `\n📜 *${lang === 'en' ? 'Warranty/Terms' : 'Garansi/S&K'}:*\n${warranty}\n`;
-        }
-
-        replaceMsg += `\n🙏 ${lang === 'en' ? 'Sorry for the inconvenience!' : 'Mohon maaf atas ketidaknyamanan!'}`;
-
         try {
-            await ctx.telegram.sendMessage(order.chat_id, replaceMsg, { parse_mode: 'Markdown' });
-
-            const updatedDelivered = [...(order.delivered_data || []), stockData];
-            const updatedStockIds = [...(order.stock_ids || []), newStock.id];
-            db.updateOrder(orderId, {
-                delivered_data: updatedDelivered,
-                stock_ids: updatedStockIds,
-                replaced_at: new Date().toISOString()
-            });
-
-            const remaining = availableStock.length - 1;
-            const successMsg = '✅ Replace berhasil!\n\nAkun baru dikirim ke user.\nStok ' + prod.name_id + ': ' + remaining + ' tersisa';
-            await ctx.editMessageText(successMsg, {
-                parse_mode: 'Markdown',
-                reply_markup: { inline_keyboard: [[{ text: '⬅️ Back', callback_data: `adm_order_view_${orderId}` }]] }
-            });
-        } catch (err) {
-            await ctx.editMessageText('❌ Gagal kirim: ' + err.message, {
-                reply_markup: { inline_keyboard: [[{ text: '⬅️ Back', callback_data: `adm_order_view_${orderId}` }]] }
-            });
-        }
+            const result = await replaceOrderAccount({ telegram: ctx.telegram, orderId, count: 1 });
+            await ctx.editMessageText(`✅ Replace berhasil!\n\nSisa stok: ${result.remaining}`, { reply_markup: { inline_keyboard: [[{ text: '‹ Kembali', callback_data: `adm_order_view_${orderId}` }]] } });
+        } catch (e) { await ctx.editMessageText(`❌ ${e.message}`, { reply_markup: { inline_keyboard: [[{ text: '‹ Kembali', callback_data: `adm_order_view_${orderId}` }]] } }); }
     });
-
-    // Refund (Step 1: Confirm)
     bot.action(/^adm_order_refund_(.+)$/, async (ctx) => {
         if (!isAdmin(ctx.from.id)) return;
-        await ctx.answerCbQuery();
-
         const orderId = ctx.match[1];
         const order = db.getOrderById(orderId);
+        await ctx.answerCbQuery();
         if (!order) return;
-
-        await ctx.editMessageText(`⚠️ *Refund order \`${orderId}\`?*\n\nStok akan dikembalikan (${order.stock_ids?.length || 0} item).\nUser akan diberi notifikasi refund.`, {
-            parse_mode: 'Markdown',
-            ...orderRefundConfirmKeyboard(orderId)
-        });
+        await ctx.editMessageText(`⚠️ *Refund order \`${orderId}\`?*\n\nStok akan ditarik kembali dan seluruh pesan delivery dibersihkan.`, { parse_mode: 'Markdown', ...orderRefundConfirmKeyboard(orderId) });
     });
 
-    // Refund (Step 2: Execute)
     bot.action(/^adm_order_confirm_refund_(.+)$/, async (ctx) => {
         if (!isAdmin(ctx.from.id)) return;
         await ctx.answerCbQuery();
-
         const orderId = ctx.match[1];
-        const order = db.getOrderById(orderId);
-        if (!order) return;
-
-        if (order.stock_ids && order.stock_ids.length > 0) {
-            db.restoreStock(order.stock_ids);
-        }
-
-        db.updateOrder(orderId, {
-            status: 'refunded',
-            refunded_at: new Date().toISOString()
-        });
-
-        if (order.delivery_message_id && (order.chat_id || order.user_id)) {
-            try {
-                await ctx.telegram.deleteMessage(order.chat_id || order.user_id, order.delivery_message_id);
-            } catch (e) { /* message may already be deleted */ }
-        }
-
         try {
-            const prodLabel = order.product_id === 'TOPUP' ? '💰 Topup Saldo' : (db.getProductById(order.product_id)?.name_id || '?');
-            await ctx.telegram.sendMessage(order.chat_id || order.user_id,
-                `💰 *REFUND NOTICE*\n\nOrder \`${orderId}\` (${prodLabel}) has been refunded by admin.\nPlease contact admin for payment refund details.`,
-                { parse_mode: 'Markdown' }
-            );
-        } catch (e) { /* user may have blocked bot */ }
-
-        await ctx.editMessageText(`✅ Order \`${orderId}\` berhasil di-refund.\n\nStok dikembalikan: ${order.stock_ids?.length || 0} item`, {
-            parse_mode: 'Markdown',
-            reply_markup: { inline_keyboard: [[{ text: '⬅️ Back', callback_data: `adm_order_view_${orderId}` }]] }
-        });
+            const result = await refundOrder({ telegram: ctx.telegram, orderId });
+            await ctx.editMessageText(`✅ Order \`${orderId}\` berhasil di-refund.\n\nStok dikembalikan: ${result.restored} item`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '‹ Kembali', callback_data: `adm_order_view_${orderId}` }]] } });
+        } catch (e) { await ctx.editMessageText(`❌ ${e.message}`, { reply_markup: { inline_keyboard: [[{ text: '‹ Kembali', callback_data: `adm_order_view_${orderId}` }]] } }); }
     });
 
-    // Delete Order (Step 1: Confirm)
-    bot.action(/^adm_order_delete_(.+)$/, async (ctx) => {
-        if (!isAdmin(ctx.from.id)) return;
-        await ctx.answerCbQuery();
 
-        const orderId = ctx.match[1];
-        await ctx.editMessageText(`⚠️ *Hapus order \`${orderId}\`?*\n\nAksi ini tidak bisa dibatalkan!`, {
-            parse_mode: 'Markdown',
-            ...orderDeleteConfirmKeyboard(orderId)
-        });
-    });
-
-    // Delete Order (Step 2: Execute)
-    bot.action(/^adm_order_confirm_delete_(.+)$/, async (ctx) => {
-        if (!isAdmin(ctx.from.id)) return;
-        await ctx.answerCbQuery();
-
-        const orderId = ctx.match[1];
-        db.releaseReservedStock(orderId);
-        db.deleteOrder(orderId);
-
-        await ctx.editMessageText(`🗑 Order \`${orderId}\` berhasil dihapus.`, {
-            parse_mode: 'Markdown',
-            reply_markup: { inline_keyboard: [[{ text: '⬅️ Back to Orders', callback_data: 'adm_orders' }]] }
-        });
-    });
 }
 
 module.exports = { registerOrderHandlers };

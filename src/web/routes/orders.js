@@ -6,6 +6,8 @@
 const db = require('../../models/db');
 const { formatIDR, formatDateWIB, getWIBToday } = require('../../utils/helpers');
 const { requireAuth } = require('../auth');
+const { redeliverOrder, replaceOrderAccount, refundOrder } = require('../../services/adminOrders');
+const { safeCsvCell } = require('../../utils/csv');
 
 const ADMIN_IDS = (process.env.ADMIN_ID || '').split(',').map(id => id.trim()).filter(Boolean);
 const STATUSES = ['pending', 'delivered', 'expired', 'cancelled', 'refunded'];
@@ -118,7 +120,7 @@ const exportOrders = (req, res) => {
                 o.created_at ? formatDateWIB(o.created_at) : '-',
                 o.paid_at ? formatDateWIB(o.paid_at) : '-',
                 o.delivered_at ? formatDateWIB(o.delivered_at) : '-'
-            ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+            ].map(safeCsvCell).join(',');
         });
         const csv = [headers.join(','), ...rows].join('\n');
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -146,113 +148,20 @@ const getOrder = (req, res) => {
     });
 };
 
-// ---- POST /orders/:id/redeliver ----
+// ---- Shared order mutations ----
 const redeliver = (bot) => async (req, res) => {
-    const order = db.getOrderById(req.params.id);
-    if (!order || !order.delivered_data || order.delivered_data.length === 0) {
-        return res.status(400).json({ error: 'Tidak ada data untuk dikirim ulang' });
-    }
-    const prod = db.getProductById(order.product_id);
-    const user = db.getUser(order.user_id);
-    const lang = user?.language || 'id';
-    const prodName = lang === 'en' ? prod?.name_en : prod?.name_id;
-
-    let msg = `🔄 *REDELIVER*\n┏━━━━━━━━━━━━━━━━\n┣ Order: \`${order.id}\`\n┣ Product: ${prodName || '?'}\n┗ Qty: ${order.quantity}\n\n📋 *YOUR ACCOUNT(S):*\n`;
-    order.delivered_data.forEach((d, i) => {
-        msg += `\n━━━ ${lang === 'en' ? 'Account' : 'Akun'} ${i + 1} ━━━\n` + formatAccountMd(d, prod?.stock_type);
-    });
-
-    try {
-        await bot.telegram.sendMessage(order.chat_id || order.user_id, msg, { parse_mode: 'Markdown' });
-        res.json({ ok: true, message: 'Akun berhasil dikirim ulang ke user' });
-    } catch (e) {
-        res.status(500).json({ error: 'Gagal kirim: ' + e.message });
-    }
+    try { const r = await redeliverOrder({ telegram: bot.telegram, orderId: req.params.id }); res.json({ ok: true, message: r.message }); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 
-// ---- POST /orders/:id/replace ----
 const replaceAccount = (bot) => async (req, res) => {
-    const order = db.getOrderById(req.params.id);
-    if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
-    const prod = db.getProductById(order.product_id);
-    if (!prod) return res.status(400).json({ error: 'Produk tidak ditemukan' });
-
-    const count = Math.max(1, parseInt(req.body.count) || 1);
-
-    const availableStock = db.getStockByProduct(order.product_id).filter(s => !s.sold && !s.reserved_by);
-    if (availableStock.length < count) {
-        return res.status(400).json({ error: `Stok tidak cukup! Hanya tersedia ${availableStock.length} stok.` });
-    }
-
-    const stocksToReplace = availableStock.slice(0, count);
-    const stockIdsToMark = stocksToReplace.map(s => s.id);
-    db.markStockAsSold(stockIdsToMark, order.user_id, order.id);
-    await notifyLowStock(bot, prod);
-
-    const user = db.getUser(order.user_id);
-    const lang = user?.language || 'id';
-    const prodName = lang === 'en' ? prod?.name_en : prod?.name_id;
-
-    let msg = `🔁 *REPLACEMENT ACCOUNT*\n┏━━━━━━━━━━━━━━━━\n┣ Order: \`${order.id}\`\n┣ Product: ${prodName || '?'}\n┗ Replacement for troubled account (${count} pcs)\n\n📋 *NEW ACCOUNT(S):*\n`;
-    
-    stocksToReplace.forEach((stock, idx) => {
-        msg += `\n━━━ ${lang === 'en' ? `Replacement ${idx + 1}` : `Pengganti ${idx + 1}`} ━━━\n` + formatAccountMd(stock.data, prod.stock_type);
-    });
-
-    try {
-        await bot.telegram.sendMessage(order.chat_id || order.user_id, msg, { parse_mode: 'Markdown' });
-        db.updateOrder(order.id, {
-            delivered_data: [...(order.delivered_data || []), ...stocksToReplace.map(s => s.data)],
-            stock_ids: [...(order.stock_ids || []), ...stockIdsToMark],
-            replaced_at: new Date().toISOString()
-        }, 'replace');
-        res.json({ ok: true, message: `Akun pengganti dikirim. Sisa stok: ${availableStock.length - count}` });
-    } catch (e) {
-        res.status(500).json({ error: 'Gagal kirim: ' + e.message });
-    }
+    try { const r = await replaceOrderAccount({ telegram: bot.telegram, orderId: req.params.id, count: req.body.count }); res.json({ ok: true, message: `Akun pengganti dikirim. Sisa stok: ${r.remaining}` }); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 
-// ---- POST /orders/:id/refund ----
 const refund = (bot) => async (req, res) => {
-    const order = db.getOrderById(req.params.id);
-    if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
-
-    // Idempotensi: cegah refund ganda.
-    if (order.status === 'refunded') {
-        return res.status(400).json({ error: 'Order ini sudah di-refund.' });
-    }
-
-    // Tarik balik stok yang sudah terkirim ke buyer → kembalikan ke pool admin (sold=0).
-    // Untuk order delivered, akun ada di stock_ids. Kita juga clear reserved_by supaya benar-benar
-    // balik ke pool "available" (markStockAsSold tidak reset reserved_by, restoreStock hanya set sold=0).
-    let restored = 0;
-    if (order.stock_ids && order.stock_ids.length > 0) {
-        db.restoreStock(order.stock_ids);
-        restored = order.stock_ids.length;
-    }
-    // Lepas juga stok yang masih ter-reserve untuk order ini (kasus order pending yang di-refund).
-    db.releaseReservedStock(order.id);
-
-    // Kosongkan jejak pengiriman supaya akun tak bisa dikirim ulang / replace setelah refund.
-    db.updateOrder(order.id, {
-        status: 'refunded',
-        refunded_at: new Date().toISOString(),
-        stock_ids: [],
-        delivered_data: []
-    }, 'refund');
-
-    const deliveryChatId = order.chat_id || order.user_id;
-    const deliveryMessageIds = [order.delivery_message_id, order.delivery_terms_message_id, order.delivery_file_message_id].filter(Boolean);
-    for (const messageId of deliveryMessageIds) {
-        try { await bot.telegram.deleteMessage(deliveryChatId, messageId); } catch (e) { /* message may already be gone */ }
-    }
-    try {
-        await bot.telegram.sendMessage(order.chat_id || order.user_id,
-            `💰 *REFUND NOTICE*\n\nOrder \`${order.id}\` (${productLabel(order)}) has been refunded by admin.\nPlease contact admin for payment refund details.`,
-            { parse_mode: 'Markdown' });
-    } catch (e) { /* user may have blocked bot */ }
-
-    res.json({ ok: true, message: `Order di-refund. Stok ditarik balik ke admin: ${restored} item. Kini order hanya bisa dihapus.` });
+    try { const r = await refundOrder({ telegram: bot.telegram, orderId: req.params.id }); res.json({ ok: true, message: `Order di-refund. Stok ditarik balik: ${r.restored} item.` }); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 
 // ---- DELETE /orders/:id ----

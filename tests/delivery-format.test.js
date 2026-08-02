@@ -47,7 +47,7 @@ test('terms kosong tidak menghasilkan pesan kedua dan English sinkron', () => {
 
 test('source delivery menyimpan receipt terms file dan refund menghapus ketiganya', () => {
   const delivery = fs.readFileSync(path.join(root, 'src/services/delivery.js'), 'utf8');
-  const refund = fs.readFileSync(path.join(root, 'src/web/routes/orders.js'), 'utf8');
+  const refund = fs.readFileSync(path.join(root, 'src/services/adminOrders.js'), 'utf8');
   const admin = fs.readFileSync(path.join(root, 'admin-web/src/pages/Products.jsx'), 'utf8');
   assert.match(delivery, /delivery_terms_message_id/);
   assert.match(delivery, /delivery_file_message_id/);

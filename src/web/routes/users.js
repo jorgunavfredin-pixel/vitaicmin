@@ -4,6 +4,7 @@
  */
 const db = require('../../models/db');
 const balance = require('../../payments/balance');
+const { adjustUserBalance } = require('../../services/adminBalance');
 
 // Bangun ringkasan spend & order count per user dari tabel orders (sekali query).
 const buildSpendMap = () => {
@@ -175,28 +176,17 @@ const adjustBalance = (req, res) => {
         const user = db.getUser(id);
         if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
-        const action = (req.body.action || '').toLowerCase();
-        const amount = parseInt(req.body.amount);
-        const note = (req.body.note || '').trim() || 'Penyesuaian oleh admin (web)';
-
-        if (isNaN(amount) || amount < 0) return res.status(400).json({ error: 'Nominal tidak valid' });
-
-        let result;
-        if (action === 'add') {
-            result = balance.addBalance(id, amount, 'admin', note);
-        } else if (action === 'deduct') {
-            const cur = balance.getBalance(id);
-            const newBal = Math.max(0, cur - amount);
-            result = balance.setBalance(id, newBal, note);
-        } else if (action === 'set') {
-            result = balance.setBalance(id, amount, note);
-        } else {
-            return res.status(400).json({ error: 'Action tidak valid (add/deduct/set)' });
-        }
-
+        const result = adjustUserBalance({
+            userId: id,
+            action: String(req.body.action || '').toLowerCase(),
+            amount: req.body.amount,
+            note: req.body.note,
+            actorId: 'web-admin',
+            channel: 'web'
+        });
         res.json({ ok: true, balance: result.balance, message: `Saldo diperbarui: Rp ${result.balance.toLocaleString('id-ID')}` });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(e.status || 500).json({ error: e.message });
     }
 };
 

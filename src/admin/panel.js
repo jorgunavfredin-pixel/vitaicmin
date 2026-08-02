@@ -31,6 +31,7 @@ const { registerBroadcastHandlers, handleBroadcast, handleBroadcastCategory } = 
 const { registerSettingsHandlers } = require('./settings');
 const { registerSaldoHandlers } = require('./saldo');
 const { AdminStateManager } = require('./state');
+const { adjustUserBalance } = require('../services/adminBalance');
 
 const ADMIN_IDS = (process.env.ADMIN_ID || '').split(',').map(id => id.trim()).filter(Boolean);
 const adminStates = new AdminStateManager();
@@ -223,52 +224,28 @@ const registerAdminHandler = (bot) => {
                     }
                     break;
                 }
-                case 'saldo_add': {
-                    const { addBalance: adminAddBal } = require('../payments/balance');
-                    const addAmt = parseInt(text.replace(/[^0-9]/g, ''));
-                    if (isNaN(addAmt) || addAmt <= 0) {
-                        await tgCtx.reply('❌ Nominal tidak valid. Masukkan angka positif.');
-                        break;
-                    }
-                    adminAddBal(state.targetUserId, addAmt, 'admin', 'Ditambahkan oleh Admin');
-                    adminStates.delete(tgCtx.from.id.toString());
-                    const { getBalance: getBalAdd } = require('../payments/balance');
-                    await tgCtx.reply(`✅ Berhasil tambah saldo!\n\n👤 User: \`${state.targetUserId}\`\n➕ Ditambahkan: Rp ${formatIDR(addAmt)}\n💵 Saldo baru: Rp ${formatIDR(getBalAdd(state.targetUserId))}`, {
-                        parse_mode: 'Markdown',
-                        reply_markup: { inline_keyboard: [[Markup.button.callback('👤 Lihat User', `adm_saldo_user_${state.targetUserId}`)], ...navButtons('adm_saldo')] }
-                    });
-                    break;
-                }
-                case 'saldo_deduct': {
-                    const { getBalance: getBalDed, deductBalance: adminDedBal } = require('../payments/balance');
-                    const dedAmt = parseInt(text.replace(/[^0-9]/g, ''));
-                    if (isNaN(dedAmt) || dedAmt <= 0) {
-                        await tgCtx.reply('❌ Nominal tidak valid. Masukkan angka positif.');
-                        break;
-                    }
-                    const currentBal = getBalDed(state.targetUserId);
-                    if (dedAmt > currentBal) {
-                        await tgCtx.reply(`❌ Saldo tidak cukup. Saldo saat ini: Rp ${formatIDR(currentBal)}`);
-                        break;
-                    }
-                    adminDedBal(state.targetUserId, dedAmt, '', 'Dikurangi oleh Admin');
-                    adminStates.delete(tgCtx.from.id.toString());
-                    await tgCtx.reply(`✅ Berhasil kurangi saldo!\n\n👤 User: \`${state.targetUserId}\`\n➖ Dikurangi: Rp ${formatIDR(dedAmt)}\n💵 Saldo baru: Rp ${formatIDR(getBalDed(state.targetUserId))}`, {
-                        parse_mode: 'Markdown',
-                        reply_markup: { inline_keyboard: [[Markup.button.callback('👤 Lihat User', `adm_saldo_user_${state.targetUserId}`)], ...navButtons('adm_saldo')] }
-                    });
-                    break;
-                }
+                case 'saldo_add':
+                case 'saldo_deduct':
                 case 'saldo_set': {
-                    const { setBalance: adminSetBal, getBalance: getBalSet } = require('../payments/balance');
-                    const newBal = parseInt(text.replace(/[^0-9]/g, ''));
-                    if (isNaN(newBal) || newBal < 0) {
-                        await tgCtx.reply('❌ Nominal tidak valid. Masukkan angka >= 0.');
+                    const amount = parseInt(text.replace(/[^0-9]/g, ''));
+                    const allowZero = state.action === 'saldo_set';
+                    if (isNaN(amount) || amount < (allowZero ? 0 : 1)) {
+                        await tgCtx.reply('❌ Nominal tidak valid.');
                         break;
                     }
-                    adminSetBal(state.targetUserId, newBal, 'Set oleh Admin');
+                    state.amount = amount;
+                    state.balanceAction = state.action.replace('saldo_', '');
+                    state.action = 'saldo_note';
+                    adminStates.setFor(tgCtx, state);
+                    await tgCtx.reply('📝 Kirim catatan/alasan penyesuaian saldo:');
+                    break;
+                }
+                case 'saldo_note': {
+                    const note = text.trim();
+                    if (!note) { await tgCtx.reply('❌ Catatan wajib diisi.'); break; }
+                    const result = adjustUserBalance({ userId: state.targetUserId, action: state.balanceAction, amount: state.amount, note, actorId: tgCtx.from.id, channel: 'telegram' });
                     adminStates.delete(tgCtx.from.id.toString());
-                    await tgCtx.reply(`✅ Saldo berhasil diset!\n\n👤 User: \`${state.targetUserId}\`\n💵 Saldo baru: Rp ${formatIDR(newBal)}`, {
+                    await tgCtx.reply(`✅ Saldo berhasil diperbarui!\n\n👤 User: \`${state.targetUserId}\`\n💵 Saldo baru: Rp ${formatIDR(result.balance)}\n📝 ${note}`, {
                         parse_mode: 'Markdown',
                         reply_markup: { inline_keyboard: [[Markup.button.callback('👤 Lihat User', `adm_saldo_user_${state.targetUserId}`)], ...navButtons('adm_saldo')] }
                     });

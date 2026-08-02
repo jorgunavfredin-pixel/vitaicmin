@@ -600,6 +600,18 @@ const markStockAsSold = (stockIds, userId, orderId) => {
   batch();
 };
 
+// Atomic claim khusus replacement admin: mencegah dua adapter mengambil stok yang sama.
+const claimReplacementStock = db.transaction((productId, count, userId, orderId) => {
+  const rows = db.prepare('SELECT id, data FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NULL LIMIT ?').all(productId, count);
+  if (rows.length < count) return null;
+  const now = new Date().toISOString();
+  const claim = db.prepare('UPDATE stock SET sold = 1, sold_to = ?, sold_at = ?, order_id = ? WHERE id = ? AND sold = 0 AND reserved_by IS NULL');
+  for (const row of rows) {
+    if (claim.run(userId, now, orderId, row.id).changes !== 1) throw new Error('REPLACEMENT_STOCK_RACE');
+  }
+  return rows;
+});
+
 const restoreStock = (stockIds) => {
   const update = db.prepare('UPDATE stock SET sold = 0, sold_to = NULL, sold_at = NULL, order_id = NULL WHERE id = ?');
   const batch = db.transaction(() => {
@@ -1377,7 +1389,7 @@ module.exports = {
   // Products
   getProducts, getProductsByCategory, getProductById, addProduct, updateProduct, deleteProduct, mergeLegacyWarrantyTerms,
   // Stock
-  getStock, getStockByProduct, getAvailableStockCount, getStockSummary, getUnsoldUnreservedStock, addStock, addBulkStock, markStockAsSold, restoreStock, deleteStock, clearProductStock, removeLastStock, reserveStock, releaseReservedStock, getReservedStock,
+  getStock, getStockByProduct, getAvailableStockCount, getStockSummary, getUnsoldUnreservedStock, addStock, addBulkStock, markStockAsSold, claimReplacementStock, restoreStock, deleteStock, clearProductStock, removeLastStock, reserveStock, releaseReservedStock, getReservedStock,
   // Orders
   getOrders, getOrderById, getOrdersByUser, getPendingOrders, getPendingQRISOrders, getActiveTopupOrderByUser, recoverStaleQrisProcessing, generateOrderId, createOrder, updateOrder, deleteOrder, claimOrderForPayment, claimOrderForDelivery, releaseOrderDeliveryClaim, claimOrderForExpiry, releaseOrderExpiryClaim, recoverPaymentClaims, completeTopupOrder, completeProductOrder,
   // Users
