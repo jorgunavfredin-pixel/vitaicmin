@@ -34,9 +34,10 @@ const actionFor = (data) => {
 };
 
 const stockHears = hears.find(item => Array.isArray(item.trigger) && item.trigger.includes('▤ Cek Stok')).handler;
+const historyHears = hears.find(item => Array.isArray(item.trigger) && item.trigger.includes('≡ Riwayat')).handler;
 const originals = {};
 const mockDb = (readyCount) => {
-  for (const key of ['getUserLanguage', 'getCategories', 'getProductsByCategory', 'getAvailableStockCount', 'getConfig', 'getActiveFlashSales']) {
+  for (const key of ['getUserLanguage', 'getCategories', 'getProductsByCategory', 'getAvailableStockCount', 'getConfig', 'getActiveFlashSales', 'getOrdersByUser', 'getProductById']) {
     originals[key] = db[key];
   }
   const categories = Array.from({ length: readyCount + 1 }, (_, i) => ({
@@ -102,9 +103,35 @@ test('pagination stok maksimal 10 kategori dan tombolnya kondisional', async () 
       await found.handler(ctx);
       const row = ctx.calls.edits[0].extra.reply_markup.inline_keyboard[0];
       assert.deepEqual(row.map(b => b.text), expected);
+      assert.equal(row.find(b => b.text.includes('Refresh')).style, undefined);
+      for (const button of row.filter(b => !b.text.includes('Refresh'))) assert.equal(button.style, 'success');
+      assert.equal(ctx.calls.edits[0].extra.reply_markup.inline_keyboard[1][0].style, 'primary');
       const categoryCount = (ctx.calls.edits[0].text.match(/<b>Kategori \d+<\/b>/g) || []).length;
       assert.equal(categoryCount, data.endsWith('_2') ? 1 : 10);
     }
+  } finally { restoreDb(); }
+});
+
+test('riwayat menampilkan maksimal 10 transaksi sekaligus tanpa pagination dan layout lurus', async () => {
+  mockDb(1);
+  try {
+    db.getOrdersByUser = () => Array.from({ length: 12 }, (_, i) => ({
+      id: `XXX-20260802-${String(i + 1).padStart(4, '0')}`,
+      product_id: 'P1', quantity: 1, total_idr: 7000,
+      status: i === 0 ? 'delivered' : 'expired'
+    }));
+    db.getProductById = () => ({ name_id: 'SuperGrok AI 7 Hari', name_en: 'SuperGrok AI 7 Days' });
+    const ctx = makeCtx();
+    await historyHears(ctx);
+    assert.equal(ctx.calls.replies.length, 1);
+    const { text, extra } = ctx.calls.replies[0];
+    assert.match(text, /^<blockquote><b>10 TRANSAKSI TERAKHIR<\/b><\/blockquote>\n1\. <code>XXX-20260802-0001<\/code>/);
+    assert.match(text, /&#160;&#160;&#160;&#160;<b>Status:<\/b> ✅ SUCCESS\n&#160;&#160;&#160;&#160;<b>Item:<\/b> SuperGrok AI 7 Hari ×1\n&#160;&#160;&#160;&#160;<b>Total:<\/b> Rp 7\.000/);
+    assert.match(text, /10\. <code>XXX-20260802-0010<\/code>/);
+    assert.doesNotMatch(text, /XXX-20260802-0011|📄|╭─|╰─/);
+    assert.equal(extra.parse_mode, 'HTML');
+    assert.equal(extra.reply_markup, undefined);
+    assert.equal(actions.some(item => item.trigger instanceof RegExp && 'history_page_1'.match(item.trigger)), false);
   } finally { restoreDb(); }
 });
 

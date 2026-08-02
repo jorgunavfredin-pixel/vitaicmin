@@ -151,8 +151,8 @@ test('checkout dan payment method memakai warna sesuai aksi', () => {
   assert.match(keyboardSource, /back_to_categories'\), style: 'success'/);
 });
 
-test('invoice saldo dan pagination history memakai warna yang diminta', () => {
-  const { paymentPendingKeyboard, topupNominalKeyboard, historyKeyboard } = require('../src/utils/keyboard');
+test('invoice dan saldo memakai warna yang diminta; riwayat baru tanpa pagination', () => {
+  const { paymentPendingKeyboard, topupNominalKeyboard } = require('../src/utils/keyboard');
   const invoice = paymentPendingKeyboard('ORDER-1', 'id').reply_markup.inline_keyboard.flat();
   assert.equal(invoice.find(b => b.callback_data.startsWith('pay_check_')).style, 'primary');
   assert.equal(invoice.find(b => b.callback_data.startsWith('pay_cancel_')).style, 'danger');
@@ -161,12 +161,9 @@ test('invoice saldo dan pagination history memakai warna yang diminta', () => {
     const saldo = topupNominalKeyboard(lang).reply_markup.inline_keyboard.flat();
     assert.ok(saldo.every(b => b.style === 'success'));
   }
-  const legacyHistory = historyKeyboard(2, 3, 'id').reply_markup.inline_keyboard[0];
-  assert.equal(legacyHistory.find(b => b.text.includes('«')).style, 'primary');
-  assert.equal(legacyHistory.find(b => b.text.includes('»')).style, 'primary');
-
   const keyboardSource = fs.readFileSync(path.join(__dirname, '../src/handlers/keyboard.js'), 'utf8');
-  assert.match(keyboardSource, /history_page_1', style: 'primary'/);
+  assert.doesNotMatch(keyboardSource, /bot\.action\(\/\^history_page_/);
+  assert.match(keyboardSource, /10 TRANSAKSI TERAKHIR/);
   assert.match(keyboardSource, /topup_confirm_[^\n]+style: 'success'/);
   assert.match(keyboardSource, /saldo_back_new', style: 'primary'/);
   assert.match(keyboardSource, /topup_check_[^\n]+style: 'success'/);

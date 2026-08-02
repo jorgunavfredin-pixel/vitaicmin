@@ -403,15 +403,15 @@ const registerKeyboardHandler = (bot) => {
         msg += `\n<blockquote>⟲ ${updated} ${dateStr} WIB</blockquote>`;
 
         const navRow = [];
-        if (page > 0) navRow.push(Markup.button.callback(lang === 'en' ? '‹ Previous' : '‹ Sebelumnya', `stock_page_${page - 1}`));
+        if (page > 0) navRow.push({ ...Markup.button.callback(lang === 'en' ? '‹ Previous' : '‹ Sebelumnya', `stock_page_${page - 1}`), style: 'success' });
         const refreshLabel = totalPages > 1 ? `⟲ Refresh (${page + 1}/${totalPages})` : '⟲ Refresh';
         navRow.push(Markup.button.callback(refreshLabel, `stock_refresh_${page}`));
-        if (page < totalPages - 1) navRow.push(Markup.button.callback(lang === 'en' ? 'Next ›' : 'Selanjutnya ›', `stock_page_${page + 1}`));
+        if (page < totalPages - 1) navRow.push({ ...Markup.button.callback(lang === 'en' ? 'Next ›' : 'Selanjutnya ›', `stock_page_${page + 1}`), style: 'success' });
 
         const backLabel = lang === 'en' ? '⌂ Back to Categories' : '⌂ Kembali ke Kategori';
         return {
             msg,
-            buttons: [navRow, [Markup.button.callback(backLabel, 'stock_back_categories')]],
+            buttons: [navRow, [{ ...Markup.button.callback(backLabel, 'stock_back_categories'), style: 'primary' }]],
             page,
             totalPages
         };
@@ -482,52 +482,50 @@ const registerKeyboardHandler = (bot) => {
         await replyWithBanner(ctx, msg, keyboard);
     });
 
-    // Riwayat Transaksi
-    const HISTORY_PER_PAGE = 3;
+    // Riwayat Transaksi — tampilkan langsung maksimal 10 transaksi terakhir.
     const MAX_HISTORY = 10;
 
-    const buildHistoryMsg = (orders, page, lang) => {
-        const totalPages = Math.ceil(orders.length / HISTORY_PER_PAGE);
-        const start = page * HISTORY_PER_PAGE;
-        const items = orders.slice(start, start + HISTORY_PER_PAGE);
+    const buildHistoryMsg = (orders, lang) => {
+        const statusMap = {
+            pending: '⏳ PENDING',
+            processing: '⚙️ PROCESSING',
+            processing_delivery: '📦 DELIVERING',
+            paid: '💰 PAID',
+            delivered: '✅ SUCCESS',
+            cancelled: '❌ CANCELLED',
+            expired: '⏰ EXPIRED'
+        };
+        const title = lang === 'en' ? 'LAST 10 TRANSACTIONS' : '10 TRANSAKSI TERAKHIR';
+        const labels = lang === 'en'
+            ? { status: 'Status', item: 'Item', total: 'Total', topup: 'Balance Top Up', unknown: 'Unknown' }
+            : { status: 'Status', item: 'Item', total: 'Total', topup: 'Topup Saldo', unknown: 'Unknown' };
+        let msg = `<blockquote><b>${title}</b></blockquote>\n`;
 
-        let msg = lang === 'en'
-            ? `📜 <b>Transaction History</b>\n\n`
-            : `📜 <b>Riwayat Transaksi</b>\n\n`;
-
-        items.forEach(order => {
-            const statusMap = {
-                pending: '⏳ PENDING',
-                processing: '⚙️ PROCESSING',
-                processing_delivery: '📦 DELIVERING',
-                paid: '💰 PAID',
-                delivered: '✅ SUCCESS',
-                cancelled: '❌ CANCELLED',
-                expired: '⏰ EXPIRED'
-            };
+        orders.slice(0, MAX_HISTORY).forEach((order, index) => {
             const statusText = statusMap[order.status] || '❓ UNKNOWN';
-
             let itemName;
             if (order.product_id === 'TOPUP') {
-                itemName = lang === 'en' ? 'Balance Top Up' : 'Topup Saldo';
+                itemName = labels.topup;
             } else {
                 const product = db.getProductById(order.product_id);
-                itemName = `${escapeHtml(lang === 'en' ? (product?.name_en || 'Unknown') : (product?.name_id || 'Unknown'))} ×${order.quantity}`;
+                const rawName = lang === 'en'
+                    ? (product?.name_en || product?.name_id || labels.unknown)
+                    : (product?.name_id || product?.name_en || labels.unknown);
+                itemName = `${escapeHtml(rawName)} ×${order.quantity}`;
             }
 
             const priceDisplay = (lang === 'en' && order.total_usd)
                 ? `$${formatUSD(order.total_usd)}`
                 : `Rp ${formatIDR(order.total_idr)}`;
-
-            msg += `╭─ <code>${escapeHtml(order.id)}</code>\n`;
-            msg += `│ Status : ${statusText}\n`;
-            msg += `│ Item   : ${itemName}\n`;
-            msg += `│ Total  : ${priceDisplay}\n`;
-            msg += `╰───────────────\n\n`;
+            const indent = '&#160;&#160;&#160;&#160;';
+            msg += `${index + 1}. <code>${escapeHtml(order.id)}</code>\n`;
+            msg += `${indent}<b>${labels.status}:</b> ${statusText}\n`;
+            msg += `${indent}<b>${labels.item}:</b> ${itemName}\n`;
+            msg += `${indent}<b>${labels.total}:</b> ${priceDisplay}`;
+            if (index < Math.min(orders.length, MAX_HISTORY) - 1) msg += '\n\n';
         });
 
-        msg += `📄 ${page + 1}/${totalPages}`;
-        return { msg, totalPages };
+        return msg;
     };
 
     bot.hears(['≡ Riwayat', '≡ History', '🧾 Riwayat', '🧾 History'], async (ctx) => {
@@ -535,7 +533,6 @@ const registerKeyboardHandler = (bot) => {
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
         const locale = require(`../locales/${lang}`);
-
         const orders = db.getOrdersByUser(userId).filter(o => o.status !== 'init').slice(0, MAX_HISTORY);
 
         if (orders.length === 0) {
@@ -543,39 +540,7 @@ const registerKeyboardHandler = (bot) => {
             return;
         }
 
-        const { msg, totalPages } = buildHistoryMsg(orders, 0, lang);
-        const buttons = [];
-        if (totalPages > 1) {
-            buttons.push([
-                { text: '→ Next', callback_data: 'history_page_1', style: 'primary' }
-            ]);
-        }
-
-        await ctx.reply(msg, {
-            parse_mode: 'HTML',
-            reply_markup: buttons.length ? { inline_keyboard: buttons } : undefined
-        });
-    });
-
-    // History pagination
-    bot.action(/^history_page_(\d+)$/, async (ctx) => {
-        const page = parseInt(ctx.match[1]);
-        const userId = ctx.from.id.toString();
-        const lang = db.getUserLanguage(userId);
-        const orders = db.getOrdersByUser(userId).filter(o => o.status !== 'init').slice(0, MAX_HISTORY);
-
-        const { msg, totalPages } = buildHistoryMsg(orders, page, lang);
-        const buttons = [];
-        const row = [];
-        if (page > 0) row.push({ text: '← Prev', callback_data: `history_page_${page - 1}`, style: 'primary' });
-        if (page < totalPages - 1) row.push({ text: '→ Next', callback_data: `history_page_${page + 1}`, style: 'primary' });
-        if (row.length) buttons.push(row);
-
-        await ctx.editMessageText(msg, {
-            parse_mode: 'HTML',
-            reply_markup: buttons.length ? { inline_keyboard: buttons } : undefined
-        });
-        await ctx.answerCbQuery();
+        await ctx.reply(buildHistoryMsg(orders, lang), { parse_mode: 'HTML' });
     });
 
     // Ganti Bahasa
