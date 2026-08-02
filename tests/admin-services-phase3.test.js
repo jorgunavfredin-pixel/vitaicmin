@@ -80,4 +80,7 @@ test('chat saldo meminta catatan dan web memakai shared adjustment',()=>{
  const users=fs.readFileSync(path.join(__dirname,'../src/web/routes/users.js'),'utf8');
  assert.match(panel,/case 'saldo_note'/); assert.match(panel,/Kirim catatan\/alasan/);
  assert.match(users,/adjustUserBalance/); assert.doesNotMatch(users,/Math\.max\(0, cur - amount\)/);
+ const ui=fs.readFileSync(path.join(__dirname,'../admin-web/src/pages/Users.jsx'),'utf8');
+ assert.match(ui,/Catatan \(wajib\)/); assert.match(ui,/if \(insufficient\)/);
+ assert.doesNotMatch(ui,/Catatan \(opsional\)|Math\.max\(0, user\.balance - amt\)/);
 });
