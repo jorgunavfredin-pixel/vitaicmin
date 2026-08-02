@@ -73,7 +73,7 @@ function registerUserHandlers(bot, { isAdmin, adminStates }) {
         if (!isAdmin(ctx.from.id)) return;
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'search_user' });
+        adminStates.setFor(ctx, { action: 'search_user' });
 
         await ctx.editMessageText('🔎 *Cari User*\n\nKirim username atau User ID:', {
             parse_mode: 'Markdown',

@@ -4,7 +4,7 @@
  */
 const { Markup } = require('telegraf');
 const db = require('../models/db');
-const { formatIDR, entitiesToHtml, safeHtmlSnk } = require('../utils/helpers');
+const { formatIDR, entitiesToHtml, safeHtmlSnk, escapeHtml } = require('../utils/helpers');
 const {
     categoryListKeyboard,
     categoryViewKeyboard,
@@ -28,6 +28,21 @@ function parseDiscountTiers(raw) {
     } catch (e) { }
     return [];
 }
+
+const sortByNameId = (items) => [...items].sort((a, b) =>
+    String(a.name_id || '').localeCompare(String(b.name_id || ''), 'id', { sensitivity: 'base', numeric: true })
+);
+
+const renderProductSummary = (prod) => {
+    const stock = db.getAvailableStockCount(prod.id);
+    const status = prod.active !== false ? '✅ Aktif' : '⏸ Nonaktif';
+    const typeLabels = { code: '🔑 Code', email_pass: '📧 Email|Pass', email_pass_key: '📧 Email|Pass|Key', vcc: '💳 VCC', custom: '✨ Custom' };
+    return `<blockquote>📦 <b>${escapeHtml(prod.name_id || '-')}</b></blockquote>\n` +
+        `<b>English:</b> ${escapeHtml(prod.name_en || '-')}\n` +
+        `<b>Harga:</b> Rp ${formatIDR(prod.price_idr)}\n` +
+        `<b>Stok:</b> ${stock}\n<b>Status:</b> ${status}\n` +
+        `<b>Tipe stok:</b> ${typeLabels[prod.stock_type] || escapeHtml(prod.stock_type || '-')}`;
+};
 
 function registerProductHandlers(bot, { isAdmin, adminStates }) {
 
@@ -56,16 +71,12 @@ function registerProductHandlers(bot, { isAdmin, adminStates }) {
         if (!cat) return;
 
         const products = db.getProductsByCategory(catId);
-        const emoji = cat.emoji || '📦';
-        const status = cat.active !== false ? '✅ Aktif' : '⏸ Nonaktif';
-
-        await ctx.editMessageText(`${emoji} *${cat.name_id}*
-🔗 EN: ${cat.name_en || '-'}
-📋 Status: ${status}
-📦 Produk: ${products.length}
+        await ctx.editMessageText(`<blockquote>📁 <b>${escapeHtml(cat.name_id || '-')}</b></blockquote>
+<b>English:</b> ${escapeHtml(cat.name_en || '-')}
+<b>Produk:</b> ${products.length}
 
 Pilih aksi:`, {
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             ...categoryViewKeyboard(catId)
         });
     });
@@ -75,7 +86,7 @@ Pilih aksi:`, {
         if (!isAdmin(ctx.from.id)) return;
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'add_category', step: 'name_id' });
+        adminStates.setFor(ctx, { action: 'add_category', step: 'name_id' });
 
         await ctx.editMessageText('➕ *Tambah Kategori*\n\nKirim nama kategori:', {
             parse_mode: 'Markdown',
@@ -89,7 +100,7 @@ Pilih aksi:`, {
         const catId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'edit_cat_name', catId, step: 'name_id' });
+        adminStates.setFor(ctx, { action: 'edit_cat_name', catId, step: 'name_id' });
 
         await ctx.editMessageText('✏️ *Edit Nama*\n\nKirim nama baru (Bahasa Indonesia):', {
             parse_mode: 'Markdown',
@@ -97,37 +108,6 @@ Pilih aksi:`, {
         });
     });
 
-    // Edit category emoji
-    bot.action(/^adm_cat_edit_emoji_(.+)$/, async (ctx) => {
-        if (!isAdmin(ctx.from.id)) return;
-        const catId = ctx.match[1];
-        await ctx.answerCbQuery();
-
-        adminStates.set(ctx.from.id.toString(), { action: 'edit_cat_emoji', catId });
-
-        await ctx.editMessageText('🎨 *Ganti Emoji*\n\nKirim emoji baru (contoh: 🎨) atau ketik "skip" untuk hapus:', {
-            parse_mode: 'Markdown',
-            reply_markup: { inline_keyboard: cancelButton() }
-        });
-    });
-
-    // Toggle category status
-    bot.action(/^adm_cat_toggle_(.+)$/, async (ctx) => {
-        if (!isAdmin(ctx.from.id)) return;
-        const catId = ctx.match[1];
-        await ctx.answerCbQuery();
-
-        const cat = db.getCategories().find(c => c.id === catId);
-        if (!cat) return;
-
-        const newStatus = cat.active === false ? true : false;
-        db.updateCategory(catId, { active: newStatus });
-
-        await ctx.answerCbQuery(newStatus ? '✅ Kategori diaktifkan' : '⏸ Kategori dinonaktifkan');
-
-        ctx.match[1] = catId;
-        await bot.handleUpdate({ callback_query: { ...ctx.callbackQuery, data: `adm_cat_view_${catId}` } });
-    });
 
     // Delete category - step 1
     bot.action(/^adm_cat_del_(.+)$/, async (ctx) => {
@@ -156,15 +136,12 @@ ${products.length > 0 ? `◼ Kategori ini punya ${products.length} produk.` : 'K
     // Delete category - confirm
     bot.action(/^adm_cat_fixdel_(.+)$/, async (ctx) => {
         if (!isAdmin(ctx.from.id)) return;
-        const catId = ctx.match[1].replace('all_', '');
-        const deleteAll = ctx.match[1].includes('all_');
-        await ctx.answerCbQuery();
-
-        if (deleteAll) {
-            const products = db.getProductsByCategory(catId);
-            products.forEach(p => db.deleteProduct(p.id));
+        const catId = ctx.match[1];
+        if (db.getProductsByCategory(catId).length > 0) {
+            await ctx.answerCbQuery('Pindahkan produk terlebih dahulu.', { show_alert: true });
+            return;
         }
-
+        await ctx.answerCbQuery();
         db.deleteCategory(catId);
 
         await ctx.editMessageText('✅ Kategori berhasil dihapus!', {
@@ -237,15 +214,17 @@ ${products.length > 0 ? `◼ Kategori ini punya ${products.length} produk.` : 'K
         }
 
         const cat = db.getCategories().find(c => c.id === catId);
-        const products = db.getProductsByCategory(catId).map(p => ({
+        const products = sortByNameId(db.getProductsByCategory(catId)).map(p => ({
             ...p,
             stockCount: db.getAvailableStockCount(p.id)
         }));
 
-        await ctx.editMessageText(`📦 *Produk di: ${cat?.emoji || '📦'} ${cat?.name_id || 'Kategori'}*
-
-Total: ${products.length} produk`, {
-            parse_mode: 'Markdown',
+        if (!cat) {
+            await ctx.editMessageText('❌ Kategori tidak ditemukan.', { reply_markup: { inline_keyboard: navButtons('adm_prod') } });
+            return;
+        }
+        await ctx.editMessageText(`<blockquote>📦 <b>Produk: ${escapeHtml(cat.name_id || '-')}</b></blockquote>\n<b>Total:</b> ${products.length} produk`, {
+            parse_mode: 'HTML',
             ...productListKeyboard(products, catId, page)
         });
     });
@@ -255,7 +234,7 @@ Total: ${products.length} produk`, {
         if (!isAdmin(ctx.from.id)) return;
         await ctx.answerCbQuery();
 
-        const categories = db.getCategories();
+        const categories = sortByNameId(db.getCategories());
         if (categories.length === 0) {
             await ctx.editMessageText('❌ Belum ada kategori. Tambah kategori dulu.', {
                 parse_mode: 'Markdown',
@@ -265,9 +244,8 @@ Total: ${products.length} produk`, {
         }
 
         const buttons = categories.map(cat => {
-            const emoji = cat.emoji || '📦';
             const prodCount = db.getProductsByCategory(cat.id).length;
-            return [Markup.button.callback(`${emoji} ${cat.name_id} (${prodCount})`, `adm_prod_cat_${cat.id}`)];
+            return [Markup.button.callback(`📁 ${cat.name_id} (${prodCount})`, `adm_prod_cat_${cat.id}`)];
         });
         buttons.push(...navButtons('admin_home'));
 
@@ -286,17 +264,7 @@ Total: ${products.length} produk`, {
         const prod = db.getProductById(prodId);
         if (!prod) return;
 
-        const stock = db.getAvailableStockCount(prodId);
-        const status = prod.active !== false ? '✅ Active' : '⏸ Pause';
-        const stockTypeLabels = {
-            'code': '🔑 Code',
-            'email_pass': '📧 Email|Pass',
-            'email_pass_key': '📧 Email|Pass|Key',
-            'vcc': '💳 VCC',
-            'custom': '✨ Custom'
-        };
-        const stockTypeLabel = stockTypeLabels[prod.stock_type] || prod.stock_type;
-        const h = (s) => require('../utils/helpers').escapeHtml(s || '-');
+        const h = (s) => escapeHtml(s || '-');
 
         // Flash sale info
         let flashInfo = '';
@@ -315,15 +283,9 @@ Total: ${products.length} produk`, {
             });
         }
 
-        await ctx.editMessageText(`⚙️ <b>${h(prod.name_id)}</b>
-🔗 EN: ${h(prod.name_en)}
-
-💰 Harga: Rp ${formatIDR(prod.price_idr)}
-📦 Stok: ${stock}
-📋 Status: ${status}
-📝 Tipe Stok: ${stockTypeLabel}${flashInfo}${discountInfo}
-📌 Deskripsi: ${h(prod.description_id)}
-📜 S&amp;K: ${safeHtmlSnk(prod.terms_id, prod.terms_format === 'html')}`, {
+        await ctx.editMessageText(`${renderProductSummary(prod)}${flashInfo}${discountInfo}
+<b>Deskripsi:</b> ${h(prod.description_id)}
+<b>Garansi &amp; S&amp;K:</b> ${safeHtmlSnk(prod.terms_id, prod.terms_format === 'html')}`, {
             parse_mode: 'HTML',
             ...productViewKeyboard(prodId, prod.category_id, prod)
         });
@@ -335,7 +297,7 @@ Total: ${products.length} produk`, {
         const catId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), {
+        adminStates.setFor(ctx, {
             action: 'add_product',
             catId,
             step: 'name_id',
@@ -354,7 +316,7 @@ Total: ${products.length} produk`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'edit_prod', prodId, field: 'name', step: 'name_id' });
+        adminStates.setFor(ctx, { action: 'edit_prod', prodId, field: 'name', step: 'name_id' });
 
         await ctx.editMessageText('📦 *Edit Nama*\n\nKirim nama baru (ID):', {
             parse_mode: 'Markdown',
@@ -367,7 +329,7 @@ Total: ${products.length} produk`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'edit_prod', prodId, field: 'price' });
+        adminStates.setFor(ctx, { action: 'edit_prod', prodId, field: 'price' });
 
         await ctx.editMessageText('💰 *Edit Harga*\n\nKirim harga baru (angka Rupiah):', {
             parse_mode: 'Markdown',
@@ -380,7 +342,7 @@ Total: ${products.length} produk`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'edit_prod', prodId, field: 'desc', step: 'desc_id' });
+        adminStates.setFor(ctx, { action: 'edit_prod', prodId, field: 'desc', step: 'desc_id' });
 
         await ctx.editMessageText('📌 *Edit Deskripsi*\n\nKirim deskripsi baru (ID):', {
             parse_mode: 'Markdown',
@@ -393,7 +355,7 @@ Total: ${products.length} produk`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'edit_prod', prodId, field: 'snk', step: 'snk_id' });
+        adminStates.setFor(ctx, { action: 'edit_prod', prodId, field: 'snk', step: 'snk_id' });
 
         await ctx.editMessageText('📜 *Edit S&K*\n\nKirim S&K baru (ID):', {
             parse_mode: 'Markdown',
@@ -419,7 +381,7 @@ Total: ${products.length} produk`, {
             reply_markup: { inline_keyboard: [[Markup.button.callback('❌ Cancel', `adm_prod_view_${prodId}`)]] }
         });
 
-        adminStates.set(ctx.from.id.toString(), { action: 'edit_prod', prodId, field: 'discount' });
+        adminStates.setFor(ctx, { action: 'edit_prod', prodId, field: 'discount' });
     });
 
     // Stock type selection
@@ -632,7 +594,7 @@ ${prod.terms_id || '-'}`;
                 '🔗 Link: url.com'
         };
 
-        adminStates.set(ctx.from.id.toString(), { action: 'add_stock', prodId });
+        adminStates.setFor(ctx, { action: 'add_stock', prodId });
 
         await ctx.editMessageText(`➕ Tambah Stok
 
@@ -714,7 +676,7 @@ Kirim data stok (bisa multi-line):`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'rm_stock_count', prodId });
+        adminStates.setFor(ctx, { action: 'rm_stock_count', prodId });
 
         await ctx.editMessageText('💳 *Remove by Count*\n\nKirim jumlah stok yang mau dihapus (dari yang terakhir):', {
             parse_mode: 'Markdown',
@@ -728,7 +690,7 @@ Kirim data stok (bisa multi-line):`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'rm_stock_search', prodId });
+        adminStates.setFor(ctx, { action: 'rm_stock_search', prodId });
 
         await ctx.editMessageText('🔎 *Remove by Search*\n\nKirim data stok yang mau dihapus (1 per baris).\nFormat sesuai stock type produk ini.\n\nContoh:\n`email@gmail.com|password123`\n`email2@gmail.com|password456`', {
             parse_mode: 'Markdown',
@@ -771,7 +733,7 @@ Kirim data stok (bisa multi-line):`, {
         const prodId = ctx.match[1];
         const prod = db.getProductById(prodId);
 
-        adminStates.set(ctx.from.id.toString(), { action: 'import_stock', prodId });
+        adminStates.setFor(ctx, { action: 'import_stock', prodId });
 
         await ctx.editMessageText(`📁 *Import Stock dari File*\n\n📦 Produk: ${prod.name_id}\n\nKirim file .txt dengan format:\n1 item per baris`, {
             parse_mode: 'Markdown',
@@ -808,7 +770,7 @@ Kirim data stok (bisa multi-line):`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'fs_set_price', prodId, type: 'fixed' });
+        adminStates.setFor(ctx, { action: 'fs_set_price', prodId, type: 'fixed' });
 
         await ctx.editMessageText('💰 *Ganti Harga Flash Sale*\n\nKetik harga baru (angka Rupiah):\n\nContoh: `30000`', {
             parse_mode: 'Markdown',
@@ -822,7 +784,7 @@ Kirim data stok (bisa multi-line):`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'fs_set_price', prodId, type: 'percent' });
+        adminStates.setFor(ctx, { action: 'fs_set_price', prodId, type: 'percent' });
 
         await ctx.editMessageText('📉 *Potong Persen*\n\nKetik persen diskon:\n\nContoh: `40` (untuk 40% off)', {
             parse_mode: 'Markdown',
@@ -836,7 +798,7 @@ Kirim data stok (bisa multi-line):`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        const state = adminStates.get(ctx.from.id.toString());
+        const state = adminStates.getFor(ctx);
         if (!state || !state.flashPrice) return;
 
         const prod = db.getProductById(prodId);
@@ -873,7 +835,7 @@ Kirim data stok (bisa multi-line):`, {
         const prodId = ctx.match[2];
         await ctx.answerCbQuery();
 
-        const state = adminStates.get(ctx.from.id.toString());
+        const state = adminStates.getFor(ctx);
         if (!state || !state.flashPrice) return;
 
         const now = new Date();
@@ -888,7 +850,7 @@ Kirim data stok (bisa multi-line):`, {
         state.flashStart = now.toISOString();
         state.flashEnd = end.toISOString();
         state.durationLabel = durationLabel;
-        adminStates.set(ctx.from.id.toString(), state);
+        adminStates.setFor(ctx, state);
 
         await ctx.editMessageText(`⚡ *Konfirmasi Flash Sale*\n\n📦 *${prod.name_id}*\n💰 Harga: ~Rp ${formatIDR(prod.price_idr)}~ → *Rp ${formatIDR(state.flashPrice)}* (-${discount}%)\n⏰ Durasi: ${durationLabel}\n📅 Mulai: ${startStr} WIB\n📅 Berakhir: ${endStr} WIB\n\nLanjutkan?`, {
             parse_mode: 'Markdown',
@@ -907,11 +869,11 @@ Kirim data stok (bisa multi-line):`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        const state = adminStates.get(ctx.from.id.toString());
+        const state = adminStates.getFor(ctx);
         if (!state || !state.flashPrice) return;
 
         state.action = 'fs_custom_duration';
-        adminStates.set(ctx.from.id.toString(), state);
+        adminStates.setFor(ctx, state);
 
         await ctx.editMessageText('✏️ *Custom Durasi*\n\nKetik durasi, contoh:\n• `5 jam`\n• `2 hari`', {
             parse_mode: 'Markdown',
@@ -925,7 +887,7 @@ Kirim data stok (bisa multi-line):`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery('⚡ Flash Sale Diaktifkan!');
 
-        const state = adminStates.get(ctx.from.id.toString());
+        const state = adminStates.getFor(ctx);
         if (!state || !state.flashPrice) return;
 
         db.setFlashSale(prodId, state.flashPrice, state.flashStart, state.flashEnd);
@@ -1061,6 +1023,10 @@ Kirim data stok (bisa multi-line):`, {
 
     // Helper function
     async function showProductView(ctx, prodId, prod) {
+        if (!prod) {
+            await ctx.editMessageText('❌ Produk tidak ditemukan.', { reply_markup: { inline_keyboard: navButtons('adm_prod') } });
+            return;
+        }
         const stock = db.getAvailableStockCount(prodId);
         const status = prod.active !== false ? '✅ Active' : '⏸ Pause';
         const stockTypeLabels = {
@@ -1095,16 +1061,11 @@ async function handleAddCategory(ctx, state, text, adminStates) {
     if (state.step === 'name_id') {
         state.name_id = text;
         state.step = 'name_en';
-        adminStates.set(ctx.from.id.toString(), state);
+        adminStates.setFor(ctx, state);
         await ctx.reply('Kirim nama kategori (English):');
     } else if (state.step === 'name_en') {
         state.name_en = text;
-        state.step = 'emoji';
-        adminStates.set(ctx.from.id.toString(), state);
-        await ctx.reply('Kirim emoji (contoh: 🎨) atau ketik "skip":');
-    } else if (state.step === 'emoji') {
-        const emoji = text.toLowerCase() === 'skip' ? null : text;
-        db.addCategory({ name_id: state.name_id, name_en: state.name_en, emoji, active: true });
+        db.addCategory({ name_id: state.name_id, name_en: state.name_en });
         adminStates.delete(ctx.from.id.toString());
         await ctx.reply('✅ Kategori berhasil dibuat!', {
             reply_markup: { inline_keyboard: navButtons('adm_cat') }
@@ -1116,7 +1077,7 @@ async function handleEditCatName(ctx, state, text, adminStates) {
     if (state.step === 'name_id') {
         state.name_id = text;
         state.step = 'name_en';
-        adminStates.set(ctx.from.id.toString(), state);
+        adminStates.setFor(ctx, state);
         await ctx.reply('Kirim nama (English):');
     } else {
         db.updateCategory(state.catId, { name_id: state.name_id, name_en: text });
@@ -1125,15 +1086,6 @@ async function handleEditCatName(ctx, state, text, adminStates) {
             reply_markup: { inline_keyboard: navButtons(`adm_cat_view_${state.catId}`) }
         });
     }
-}
-
-async function handleEditCatEmoji(ctx, state, text, adminStates) {
-    const emoji = text.toLowerCase() === 'skip' ? null : text;
-    db.updateCategory(state.catId, { emoji });
-    adminStates.delete(ctx.from.id.toString());
-    await ctx.reply('✅ Emoji diupdate!', {
-        reply_markup: { inline_keyboard: navButtons(`adm_cat_view_${state.catId}`) }
-    });
 }
 
 async function handleAddProduct(ctx, state, text, adminStates) {
@@ -1147,32 +1099,37 @@ async function handleAddProduct(ctx, state, text, adminStates) {
     const currentIdx = steps.indexOf(state.step);
 
     if (state.step === 'price') {
-        state.data.price_idr = parseInt(text.replace(/\D/g, ''));
+        const price = Number.parseInt(text.replace(/\D/g, ''), 10);
+        if (!Number.isInteger(price) || price < 0) {
+            await ctx.reply('❌ Harga tidak valid. Kirim angka Rupiah, contoh: <code>15000</code>', { parse_mode: 'HTML' });
+            return;
+        }
+        state.data.price_idr = price;
     } else if (state.step === 'stock_type') {
         const types = { '1': 'code', '2': 'email_pass', '3': 'email_pass_key', '4': 'vcc', '5': 'custom' };
-        state.data.stock_type = types[text] || 'email_pass';
+        const choice = text.trim();
+        if (!types[choice]) {
+            await ctx.reply('❌ Pilihan tidak valid. Kirim angka <code>1</code> sampai <code>5</code>.', { parse_mode: 'HTML' });
+            return;
+        }
+        state.data.stock_type = types[choice];
         state.data.active = true;
-        state.data.stock_mode = 'stocked';
-        state.data.delivery_type = 'account';
+        state.data.stock_mode = 'limited';
     } else {
         state.data[state.step] = text;
     }
 
     if (currentIdx === steps.length - 1) {
-        const prod = db.addProduct(state.data);
+        const created = db.addProduct(state.data);
+        const prod = db.getProductById(created.id);
         adminStates.delete(ctx.from.id.toString());
-
-        await ctx.reply(`✅ Produk "${state.data.name_id}" berhasil dibuat!\n\nTambah stok sekarang?`, {
-            reply_markup: {
-                inline_keyboard: [
-                    [Markup.button.callback('➕ Add Stock', `adm_stock_add_${prod.id}`)],
-                    navButtons(`adm_prod_cat_${state.catId}`)[0]
-                ]
-            }
+        await ctx.reply(`✅ Produk berhasil dibuat.\n\n${renderProductSummary(prod)}`, {
+            parse_mode: 'HTML',
+            ...productViewKeyboard(prod.id, prod.category_id, prod)
         });
     } else {
         state.step = steps[currentIdx + 1];
-        adminStates.set(ctx.from.id.toString(), state);
+        adminStates.setFor(ctx, state);
         await ctx.reply(prompts[state.step], { parse_mode: 'Markdown' });
     }
 }
@@ -1181,7 +1138,17 @@ async function handleEditProduct(ctx, state, text, adminStates) {
     const { prodId, field, step } = state;
 
     if (field === 'price') {
-        db.updateProduct(prodId, { price_idr: parseInt(text.replace(/\D/g, '')) });
+        const price = Number.parseInt(text.replace(/\D/g, ''), 10);
+        if (!Number.isInteger(price) || price < 0) {
+            await ctx.reply('❌ Harga tidak valid. Kirim angka Rupiah, contoh: <code>15000</code>', { parse_mode: 'HTML' });
+            return;
+        }
+        if (!db.getProductById(prodId)) {
+            adminStates.delete(ctx.from.id.toString());
+            await ctx.reply('❌ Produk tidak ditemukan.');
+            return;
+        }
+        db.updateProduct(prodId, { price_idr: price });
         adminStates.delete(ctx.from.id.toString());
         await ctx.reply('✅ Harga diupdate!', {
             reply_markup: { inline_keyboard: navButtons(`adm_prod_view_${prodId}`) }
@@ -1190,7 +1157,7 @@ async function handleEditProduct(ctx, state, text, adminStates) {
         if (step === 'name_id') {
             state.name_id = text;
             state.step = 'name_en';
-            adminStates.set(ctx.from.id.toString(), state);
+            adminStates.setFor(ctx, state);
             await ctx.reply('Kirim nama (EN):');
         } else {
             db.updateProduct(prodId, { name_id: state.name_id, name_en: text });
@@ -1203,7 +1170,7 @@ async function handleEditProduct(ctx, state, text, adminStates) {
         if (step === 'desc_id') {
             state.desc_id = text;
             state.step = 'desc_en';
-            adminStates.set(ctx.from.id.toString(), state);
+            adminStates.setFor(ctx, state);
             await ctx.reply('Kirim deskripsi (EN):');
         } else {
             db.updateProduct(prodId, { description_id: state.desc_id, description_en: text });
@@ -1218,7 +1185,7 @@ async function handleEditProduct(ctx, state, text, adminStates) {
             const htmlText = entitiesToHtml(text, ctx.message.entities);
             state.snk_id = htmlText;
             state.step = 'snk_en';
-            adminStates.set(ctx.from.id.toString(), state);
+            adminStates.setFor(ctx, state);
             await ctx.reply('Kirim S&K (EN):');
         } else {
             const htmlText = entitiesToHtml(text, ctx.message.entities);
@@ -1372,7 +1339,7 @@ async function handleFlashSaleInput(ctx, state, text, adminStates) {
 
         state.flashPrice = flashPrice;
         state.action = 'fs_wait_duration';
-        adminStates.set(ctx.from.id.toString(), state);
+        adminStates.setFor(ctx, state);
 
         // Trigger the duration selection menu by simulating the action
         const discount = Math.round((1 - flashPrice / prod.price_idr) * 100);
@@ -1430,7 +1397,7 @@ async function handleFlashSaleInput(ctx, state, text, adminStates) {
         state.flashStart = now.toISOString();
         state.flashEnd = end.toISOString();
         state.durationLabel = durationLabel;
-        adminStates.set(ctx.from.id.toString(), state);
+        adminStates.setFor(ctx, state);
 
         const { Markup } = require('telegraf');
 
@@ -1450,7 +1417,6 @@ module.exports = {
     registerProductHandlers,
     handleAddCategory,
     handleEditCatName,
-    handleEditCatEmoji,
     handleAddProduct,
     handleEditProduct,
     handleAddStock,

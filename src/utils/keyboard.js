@@ -63,15 +63,14 @@ const adminDashboardKeyboard = () => {
 
 const categoryListKeyboard = (categories, page = 1, perPage = 5) => {
     const buttons = [];
-    const totalPages = Math.ceil(categories.length / perPage);
+    const sortedCategories = [...categories].sort((a, b) => String(a.name_id || '').localeCompare(String(b.name_id || ''), 'id', { sensitivity: 'base', numeric: true }));
+    const totalPages = Math.ceil(sortedCategories.length / perPage);
     const start = (page - 1) * perPage;
-    const pageCategories = categories.slice(start, start + perPage);
+    const pageCategories = sortedCategories.slice(start, start + perPage);
 
-    // Category list
+    // Category list — nama saja; schema kategori tidak menyimpan emoji/status.
     pageCategories.forEach(cat => {
-        const emoji = cat.emoji || '📁';
-        const status = cat.active !== false ? '' : ' ⏸';
-        buttons.push([Markup.button.callback(`${emoji} ${cat.name_id}${status}`, `adm_cat_view_${cat.id}`)]);
+        buttons.push([Markup.button.callback(`📁 ${cat.name_id}`, `adm_cat_view_${cat.id}`)]);
     });
 
     // Pagination if needed
@@ -83,11 +82,7 @@ const categoryListKeyboard = (categories, page = 1, perPage = 5) => {
         buttons.push(navRow);
     }
 
-    // Action buttons
-    buttons.push([
-        Markup.button.callback('➕ Add Kategori', 'adm_cat_add'),
-        Markup.button.callback('🔎 Search', 'adm_cat_search')
-    ]);
+    buttons.push([Markup.button.callback('➕ Tambah Kategori', 'adm_cat_add')]);
 
     buttons.push(...navButtons('admin_home'));
     return Markup.inlineKeyboard(buttons);
@@ -96,14 +91,8 @@ const categoryListKeyboard = (categories, page = 1, perPage = 5) => {
 const categoryViewKeyboard = (categoryId) => {
     return Markup.inlineKeyboard([
         [Markup.button.callback('📦 Lihat Produk', `adm_prod_cat_${categoryId}`)],
-        [
-            Markup.button.callback('✏️ Edit Nama', `adm_cat_edit_name_${categoryId}`),
-            Markup.button.callback('🎭 Ganti Emoji', `adm_cat_edit_emoji_${categoryId}`)
-        ],
-        [
-            Markup.button.callback('📌 Toggle Status', `adm_cat_toggle_${categoryId}`),
-            Markup.button.callback('🗑 Delete', `adm_cat_del_${categoryId}`)
-        ],
+        [Markup.button.callback('✏️ Edit Nama', `adm_cat_edit_name_${categoryId}`)],
+        [Markup.button.callback('🗑 Hapus Kategori', `adm_cat_del_${categoryId}`)],
         ...navButtons('adm_cat')
     ]);
 };
@@ -112,10 +101,9 @@ const categoryDeleteConfirmKeyboard = (categoryId, hasProducts) => {
     const buttons = [];
 
     if (hasProducts) {
-        buttons.push([Markup.button.callback('🧹 Hapus + Produknya', `adm_cat_fixdel_all_${categoryId}`)]);
-        buttons.push([Markup.button.callback('📦 Pindah Produk Dulu', `adm_cat_move_products_${categoryId}`)]);
+        buttons.push([Markup.button.callback('📦 Pindahkan Produk', `adm_cat_move_products_${categoryId}`)]);
     } else {
-        buttons.push([Markup.button.callback('✅ Ya, Hapus', `adm_cat_fixdel_${categoryId}`)]);
+        buttons.push([Markup.button.callback('✅ Ya, Hapus Kategori', `adm_cat_fixdel_${categoryId}`)]);
     }
 
     buttons.push([Markup.button.callback('✘ Batal', `adm_cat_view_${categoryId}`)]);
@@ -126,9 +114,10 @@ const categoryDeleteConfirmKeyboard = (categoryId, hasProducts) => {
 
 const productListKeyboard = (products, categoryId, page = 1, perPage = 5) => {
     const buttons = [];
-    const totalPages = Math.ceil(products.length / perPage) || 1;
+    const sortedProducts = [...products].sort((a, b) => String(a.name_id || '').localeCompare(String(b.name_id || ''), 'id', { sensitivity: 'base', numeric: true }));
+    const totalPages = Math.ceil(sortedProducts.length / perPage) || 1;
     const start = (page - 1) * perPage;
-    const pageProducts = products.slice(start, start + perPage);
+    const pageProducts = sortedProducts.slice(start, start + perPage);
 
     // Product list with info
     pageProducts.forEach(prod => {
@@ -149,13 +138,9 @@ const productListKeyboard = (products, categoryId, page = 1, perPage = 5) => {
         buttons.push(navRow);
     }
 
-    // Actions
-    buttons.push([
-        Markup.button.callback('➕ Add Produk', `adm_prod_add_${categoryId}`),
-        Markup.button.callback('🔎 Search', `adm_prod_search_${categoryId}`)
-    ]);
+    buttons.push([Markup.button.callback('➕ Tambah Produk', `adm_prod_add_${categoryId}`)]);
 
-    buttons.push(...navButtons('adm_cat'));
+    buttons.push(...navButtons('adm_prod'));
     return Markup.inlineKeyboard(buttons);
 };
 

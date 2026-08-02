@@ -24,15 +24,16 @@ const { adminDashboardKeyboard, navButtons, cancelButton } = require('../utils/k
 
 // Sub-module imports
 const { registerVoucherHandlers, handleCreateVoucher } = require('./vouchers');
-const { registerProductHandlers, handleAddCategory, handleEditCatName, handleEditCatEmoji, handleAddProduct, handleEditProduct, handleAddStock, handleRemoveStockCount, handleRemoveStockSearch, handleFlashSaleInput } = require('./products');
+const { registerProductHandlers, handleAddCategory, handleEditCatName, handleAddProduct, handleEditProduct, handleAddStock, handleRemoveStockCount, handleRemoveStockSearch, handleFlashSaleInput } = require('./products');
 const { registerOrderHandlers } = require('./orders');
 const { registerUserHandlers, handleSearchUser } = require('./users');
 const { registerBroadcastHandlers, handleBroadcast, handleBroadcastCategory } = require('./broadcast');
 const { registerSettingsHandlers } = require('./settings');
 const { registerSaldoHandlers } = require('./saldo');
+const { AdminStateManager } = require('./state');
 
 const ADMIN_IDS = (process.env.ADMIN_ID || '').split(',').map(id => id.trim()).filter(Boolean);
-const adminStates = new Map();
+const adminStates = new AdminStateManager();
 
 const isAdmin = (userId) => ADMIN_IDS.includes(userId.toString());
 
@@ -90,6 +91,16 @@ const getDashboardStats = () => {
  * Register all admin handlers
  */
 const registerAdminHandler = (bot) => {
+
+    // Any admin callback is navigation. Clear stale text-wizard state unless the
+    // callback is an explicit continuation of the current flash-sale wizard.
+    bot.use(async (tgCtx, next) => {
+        if (!tgCtx.callbackQuery || !isAdmin(tgCtx.from?.id)) return next();
+        const data = String(tgCtx.callbackQuery.data || '');
+        const keepsWizard = /^adm_fs_(?:type|duration|dur|confirm)_/.test(data);
+        if (!keepsWizard) adminStates.clearFor(tgCtx);
+        return next();
+    });
 
     // Shared context for sub-modules
     const ctx = { isAdmin, adminStates, showDashboard, escMd };
@@ -150,7 +161,7 @@ const registerAdminHandler = (bot) => {
     bot.on('text', async (tgCtx, next) => {
         if (!isAdmin(tgCtx.from.id)) return next();
 
-        const state = adminStates.get(tgCtx.from.id.toString());
+        const state = adminStates.getFor(tgCtx);
         if (!state) return next();
 
         const text = tgCtx.message.text;
@@ -162,9 +173,6 @@ const registerAdminHandler = (bot) => {
                     break;
                 case 'edit_cat_name':
                     await handleEditCatName(tgCtx, state, text, adminStates);
-                    break;
-                case 'edit_cat_emoji':
-                    await handleEditCatEmoji(tgCtx, state, text, adminStates);
                     break;
                 case 'add_product':
                     await handleAddProduct(tgCtx, state, text, adminStates);
@@ -282,7 +290,7 @@ const registerAdminHandler = (bot) => {
     bot.on('photo', async (tgCtx, next) => {
         if (!isAdmin(tgCtx.from.id)) return next();
 
-        const state = adminStates.get(tgCtx.from.id.toString());
+        const state = adminStates.getFor(tgCtx);
         if (!state) return next();
 
         try {
@@ -303,7 +311,7 @@ const registerAdminHandler = (bot) => {
     bot.on('document', async (tgCtx, next) => {
         if (!isAdmin(tgCtx.from.id)) return next();
 
-        const state = adminStates.get(tgCtx.from.id.toString());
+        const state = adminStates.getFor(tgCtx);
         if (!state || state.action !== 'import_stock') return next();
 
         const doc = tgCtx.message.document;

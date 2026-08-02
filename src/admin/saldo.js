@@ -74,7 +74,7 @@ function registerSaldoHandlers(bot, { isAdmin, adminStates }) {
     bot.action('adm_saldo_search', async (ctx) => {
         if (!isAdmin(ctx.from.id.toString())) return;
         await ctx.answerCbQuery();
-        adminStates.set(ctx.from.id.toString(), { action: 'saldo_search' });
+        adminStates.setFor(ctx, { action: 'saldo_search' });
 
         await ctx.editMessageText('🔎 *Cari User*\n\nKetik User ID:', {
             parse_mode: 'Markdown',
@@ -134,7 +134,7 @@ function registerSaldoHandlers(bot, { isAdmin, adminStates }) {
         if (!isAdmin(ctx.from.id.toString())) return;
         await ctx.answerCbQuery();
         const targetUserId = ctx.match[1];
-        adminStates.set(ctx.from.id.toString(), { action: 'saldo_add', targetUserId });
+        adminStates.setFor(ctx, { action: 'saldo_add', targetUserId });
 
         await ctx.editMessageText(`➕ *Tambah Saldo*\n\n👤 User: \`${targetUserId}\`\n💵 Saldo saat ini: Rp ${formatIDR(getBalance(targetUserId))}\n\nKetik nominal yang ingin ditambahkan:`, {
             parse_mode: 'Markdown',
@@ -147,7 +147,7 @@ function registerSaldoHandlers(bot, { isAdmin, adminStates }) {
         if (!isAdmin(ctx.from.id.toString())) return;
         await ctx.answerCbQuery();
         const targetUserId = ctx.match[1];
-        adminStates.set(ctx.from.id.toString(), { action: 'saldo_deduct', targetUserId });
+        adminStates.setFor(ctx, { action: 'saldo_deduct', targetUserId });
 
         await ctx.editMessageText(`➖ *Kurangi Saldo*\n\n👤 User: \`${targetUserId}\`\n💵 Saldo saat ini: Rp ${formatIDR(getBalance(targetUserId))}\n\nKetik nominal yang ingin dikurangi:`, {
             parse_mode: 'Markdown',
@@ -160,7 +160,7 @@ function registerSaldoHandlers(bot, { isAdmin, adminStates }) {
         if (!isAdmin(ctx.from.id.toString())) return;
         await ctx.answerCbQuery();
         const targetUserId = ctx.match[1];
-        adminStates.set(ctx.from.id.toString(), { action: 'saldo_set', targetUserId });
+        adminStates.setFor(ctx, { action: 'saldo_set', targetUserId });
 
         await ctx.editMessageText(`🔧 *Set Saldo*\n\n👤 User: \`${targetUserId}\`\n💵 Saldo saat ini: Rp ${formatIDR(getBalance(targetUserId))}\n\nKetik nominal saldo baru:`, {
             parse_mode: 'Markdown',

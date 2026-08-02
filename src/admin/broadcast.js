@@ -24,7 +24,7 @@ function registerBroadcastHandlers(bot, { isAdmin, adminStates }) {
         if (!isAdmin(ctx.from.id)) return;
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), { action: 'broadcast' });
+        adminStates.setFor(ctx, { action: 'broadcast' });
 
         await ctx.editMessageText('🔔 *Broadcast ke Semua*\n\nKirim pesan yang mau di-broadcast:\n\n💡 *Tips:*\n• Support _teks_ dengan formatting (bold, italic, dll)\n• Atau kirim _foto_ dengan caption\n• Header `📢 BROADCAST MESSAGE` otomatis ditambahkan', {
             parse_mode: 'Markdown',
@@ -72,7 +72,7 @@ function registerBroadcastHandlers(bot, { isAdmin, adminStates }) {
         const orders = db.getOrders().filter(o => productIds.includes(o.product_id) && (o.status === 'delivered' || o.status === 'paid'));
         const uniqueUsers = [...new Set(orders.map(o => o.user_id))];
 
-        adminStates.set(ctx.from.id.toString(), { action: 'broadcast_category', catId, targetUsers: uniqueUsers });
+        adminStates.setFor(ctx, { action: 'broadcast_category', catId, targetUsers: uniqueUsers });
 
         await ctx.editMessageText(`📢 *Broadcast ke Kategori: ${cat.name_id}*\n\n👥 Target: ${uniqueUsers.length} user\n\nKirim pesan yang mau di-broadcast:\n\n💡 *Tips:*\n• Support _teks_ dengan formatting (bold, italic, dll)\n• Atau kirim _foto_ dengan caption\n• Header \`📢 BROADCAST MESSAGE\` otomatis ditambahkan`, {
             parse_mode: 'Markdown',

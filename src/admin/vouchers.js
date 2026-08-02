@@ -71,7 +71,7 @@ function registerVoucherHandlers(bot, { isAdmin, adminStates }) {
         const type = ctx.match[1];
         await ctx.answerCbQuery();
 
-        adminStates.set(ctx.from.id.toString(), {
+        adminStates.setFor(ctx, {
             action: 'create_voucher',
             step: 'code',
             type: type
