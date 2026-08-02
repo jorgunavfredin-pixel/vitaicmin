@@ -5,6 +5,7 @@
 const db = require('../models/db');
 const { formatIDR } = require('../utils/helpers');
 const { navButtons, cancelButton } = require('../utils/keyboard');
+const { createVoucher, deleteVoucherSafely } = require('../services/vouchers');
 
 function registerVoucherHandlers(bot, { isAdmin, adminStates }) {
     // ==================== VOUCHER MANAGEMENT ====================
@@ -14,25 +15,16 @@ function registerVoucherHandlers(bot, { isAdmin, adminStates }) {
         await ctx.answerCbQuery();
 
         const vouchers = db.getVouchers();
-        const active = vouchers.filter(v => !v.used);
-        const used = vouchers.filter(v => v.used);
+        const counts = db.getVoucherRedemptionCounts();
+        const totalRedemptions = Object.values(counts).reduce((sum, n) => sum + n, 0);
 
         let msg = `🎟️ *Voucher Management*\n\n`;
-        msg += `📋 Total: ${vouchers.length} | ✅ Aktif: ${active.length} | ❌ Terpakai: ${used.length}\n\n`;
-
-        if (active.length > 0) {
-            msg += `*Voucher Aktif:*\n`;
-            active.forEach(v => {
+        msg += `📋 Total kode: ${vouchers.length} | 👥 Total redemption: ${totalRedemptions}\n\n`;
+        if (vouchers.length > 0) {
+            msg += `*Voucher Tersedia:*\n`;
+            vouchers.forEach(v => {
                 const typeLabel = v.type === 'percent' ? `${v.value}%` : `Rp ${formatIDR(v.value)}`;
-                msg += `⬢ \`${v.code}\` → ${typeLabel}\n`;
-            });
-        }
-
-        if (used.length > 0) {
-            msg += `\n*Terpakai:*\n`;
-            used.slice(-5).forEach(v => {
-                const typeLabel = v.type === 'percent' ? `${v.value}%` : `Rp ${formatIDR(v.value)}`;
-                msg += `⬢ ~${v.code}~ → ${typeLabel} (by ${v.used_by})\n`;
+                msg += `⬢ \`${v.code}\` → ${typeLabel} · Dipakai ${counts[v.code.toUpperCase()] || 0} user\n`;
             });
         }
 
@@ -89,7 +81,7 @@ function registerVoucherHandlers(bot, { isAdmin, adminStates }) {
         if (!isAdmin(ctx.from.id)) return;
         await ctx.answerCbQuery();
 
-        const vouchers = db.getVouchers().filter(v => !v.used);
+        const vouchers = db.getVouchers();
         if (vouchers.length === 0) {
             await ctx.editMessageText('❌ Tidak ada voucher aktif untuk dihapus.', {
                 reply_markup: { inline_keyboard: navButtons('adm_vouchers') }
@@ -115,9 +107,10 @@ function registerVoucherHandlers(bot, { isAdmin, adminStates }) {
         const voucherId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        db.deleteVoucher(voucherId);
-
-        await ctx.editMessageText('✅ Voucher berhasil dihapus!', {
+        const result = deleteVoucherSafely(voucherId);
+        const message = result.ok ? '✅ Voucher berhasil dihapus!' : result.reason === 'in_use'
+            ? '❌ Voucher memiliki redemption/order aktif dan tidak dapat dihapus.' : '❌ Voucher tidak ditemukan.';
+        await ctx.editMessageText(message, {
             reply_markup: { inline_keyboard: navButtons('adm_vouchers') }
         });
     });
@@ -131,35 +124,15 @@ async function handleCreateVoucher(ctx, state, text, adminStates) {
         return;
     }
 
-    const code = parts[0].toUpperCase();
-    const value = parseInt(parts[1]);
-
-    if (isNaN(value) || value <= 0) {
-        await ctx.reply('❌ Nilai diskon harus berupa angka positif.');
-        return;
-    }
-
-    const existing = db.getVoucherByCode(code);
-    if (existing) {
-        await ctx.reply(`❌ Kode voucher \`${code}\` sudah ada!`, { parse_mode: 'Markdown' });
-        return;
-    }
-
-    if (state.type === 'percent' && value > 100) {
-        await ctx.reply('❌ Diskon persen tidak boleh lebih dari 100%.');
-        return;
-    }
-
-    const voucher = db.createVoucher({
-        code: code,
-        type: state.type,
-        value: value
-    });
+    let voucher;
+    try { voucher = createVoucher({ code: parts[0], type: state.type, value: parts[1] }); }
+    catch (e) { await ctx.reply(`❌ ${e.message}`); return; }
+    const { code, value } = voucher;
 
     adminStates.delete(ctx.from.id.toString());
 
     const typeLabel = state.type === 'percent' ? `${value}%` : `Rp ${formatIDR(value)}`;
-    await ctx.reply(`✅ *Voucher Berhasil Dibuat!*\n\n🎟️ Kode: \`${code}\`\n💰 Diskon: ${typeLabel}\n📝 Status: Aktif (1x pakai)`, {
+    await ctx.reply(`✅ *Voucher Berhasil Dibuat!*\n\n🎟️ Kode: \`${code}\`\n💰 Diskon: ${typeLabel}\n📝 Status: Tersedia — maksimal 1x per user`, {
         parse_mode: 'Markdown',
         reply_markup: { inline_keyboard: navButtons('adm_vouchers') }
     });

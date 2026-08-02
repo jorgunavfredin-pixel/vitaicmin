@@ -1,4 +1,5 @@
 const db = require('../../models/db');
+const { normalizeBulkTiers } = require('../../utils/bulkPricing');
 
 // Helper to format product data for admin web
 function formatProductForAdmin(p) {
@@ -49,7 +50,6 @@ const createCategory = (req, res) => {
     if (!name_id) return res.status(400).json({ error: 'Nama kategori (ID) wajib diisi' });
 
     const newCat = db.addCategory({ name_id: name_id.trim(), name_en: (name_en || name_id).trim() });
-    db.dbEvents?.emit('product_change', { type: 'category_created', category: newCat });
     res.json({ ok: true, message: 'Kategori berhasil dibuat', category: newCat });
 };
 
@@ -60,8 +60,6 @@ const updateCategory = (req, res) => {
 
     const updated = db.updateCategory(id, { name_id: name_id.trim(), name_en: (name_en || name_id).trim() });
     if (!updated) return res.status(404).json({ error: 'Kategori tidak ditemukan' });
-
-    db.dbEvents?.emit('product_change', { type: 'category_updated', category: updated });
     res.json({ ok: true, message: 'Kategori berhasil diperbarui', category: updated });
 };
 
@@ -71,9 +69,9 @@ const deleteCategory = (req, res) => {
     const cat = cats.find(c => c.id === id);
     if (!cat) return res.status(404).json({ error: 'Kategori tidak ditemukan' });
 
-    db.deleteCategory(id);
-    db.dbEvents?.emit('product_change', { type: 'category_deleted', categoryId: id });
-    res.json({ ok: true, message: 'Kategori dan produk terkait berhasil dihapus' });
+    const result = db.deleteCategory(id);
+    if (!result.ok) return res.status(result.reason === 'not_empty' ? 409 : 404).json({ error: result.reason === 'not_empty' ? 'Pindahkan produk sebelum menghapus kategori' : 'Kategori tidak ditemukan' });
+    res.json({ ok: true, message: 'Kategori kosong berhasil dihapus' });
 };
 
 // ---- PRODUCTS ----
@@ -196,11 +194,17 @@ const setFlashSale = (req, res) => {
     const prod = db.getProductById(id);
     if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
 
-    if (!flash_price || isNaN(flash_price) || flash_price <= 0) {
-        return res.status(400).json({ error: 'Harga flash sale harus berupa angka positif' });
+    if (!flash_price || isNaN(flash_price) || flash_price <= 0 || Number(flash_price) >= Number(prod.price_idr)) {
+        return res.status(400).json({ error: 'Harga flash sale harus positif dan di bawah harga normal' });
     }
     if (!flash_start || !flash_end) {
         return res.status(400).json({ error: 'Waktu mulai dan selesai flash sale wajib diisi' });
+    }
+
+    const startDate = new Date(flash_start);
+    const endDate = new Date(flash_end);
+    if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()) || endDate <= startDate) {
+        return res.status(400).json({ error: 'Periode flash sale tidak valid' });
     }
 
     let maxTransactions = null;
@@ -211,7 +215,7 @@ const setFlashSale = (req, res) => {
         }
     }
 
-    const updated = db.setFlashSale(id, parseInt(flash_price), new Date(flash_start).toISOString(), new Date(flash_end).toISOString(), maxTransactions);
+    const updated = db.setFlashSale(id, parseInt(flash_price), startDate.toISOString(), endDate.toISOString(), maxTransactions);
     db.dbEvents?.emit('product_change', { type: 'flash_sale_updated', product: updated });
     res.json({ ok: true, message: 'Flash sale berhasil dipasang', product: formatProductForAdmin(updated) });
 };
@@ -235,19 +239,7 @@ const setBulkDiscount = (req, res) => {
 
     let qtyDiscountsStr = '';
     if (Array.isArray(tiers) && tiers.length > 0) {
-        const validTiers = tiers.map(t => {
-            const minQty = parseInt(t.min_qty);
-            const type = t.type === 'fixed_price' ? 'fixed_price' : 'percent';
-            if (!Number.isInteger(minQty) || minQty < 2) return null;
-            if (type === 'fixed_price') {
-                const price = parseInt(t.price ?? t.value);
-                if (!Number.isInteger(price) || price <= 0 || price >= prod.price_idr) return null;
-                return { min_qty: minQty, type, price };
-            }
-            const percent = parseInt(t.percent ?? t.value);
-            if (!Number.isInteger(percent) || percent <= 0 || percent >= 100) return null;
-            return { min_qty: minQty, type, percent };
-        }).filter(Boolean).sort((a, b) => a.min_qty - b.min_qty);
+        const validTiers = normalizeBulkTiers(tiers, prod.price_idr);
 
         if (validTiers.length !== tiers.length) {
             return res.status(400).json({ error: 'Tier grosir tidak valid. Harga/pcs harus di bawah harga normal.' });
@@ -268,9 +260,9 @@ const deleteProduct = (req, res) => {
     const prod = db.getProductById(id);
     if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
 
-    db.deleteProduct(id);
-    db.dbEvents?.emit('product_change', { type: 'product_deleted', productId: id });
-    res.json({ ok: true, message: 'Produk dan stok terkait berhasil dihapus' });
+    const result = db.deleteProduct(id);
+    if (!result.ok) return res.status(409).json({ error: 'Produk masih digunakan order/reservasi aktif' });
+    res.json({ ok: true, archived: !!result.archived, message: result.archived ? 'Produk memiliki histori dan diarsipkan' : 'Produk berhasil dihapus' });
 };
 
 // ---- PRODUCT STATS (overview cards) ----

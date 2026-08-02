@@ -165,10 +165,7 @@ const productViewKeyboard = (productId, categoryId, product = null) => {
     // Flash Sale buttons
     const isFlashActive = product && product.flash_price && product.flash_end && new Date().toISOString() <= product.flash_end;
     if (isFlashActive) {
-        buttons.push([
-            Markup.button.callback('📣 Broadcast FS', `adm_fs_broadcast_${productId}`),
-            Markup.button.callback('✘ Stop Flash Sale', `adm_fs_stop_${productId}`)
-        ]);
+        buttons.push([Markup.button.callback('✘ Stop Flash Sale', `adm_fs_stop_${productId}`)]);
     } else {
         buttons.push([Markup.button.callback('⚡ Flash Sale', `adm_fs_start_${productId}`)]);
     }

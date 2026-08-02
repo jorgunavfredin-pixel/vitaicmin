@@ -51,6 +51,13 @@ dbEvents.on('product_change', (data) => {
     });
 });
 
+dbEvents.on('voucher_change', (data) => {
+    const payload = JSON.stringify({ type: 'voucher_change', data });
+    sseClients.forEach(res => {
+        try { res.write(`data: ${payload}\n\n`); } catch (e) { /* client disconnected */ }
+    });
+});
+
 const registerAdminApi = (app, bot) => {
     const api = express.Router();
 

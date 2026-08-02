@@ -44,6 +44,11 @@ export default function Vouchers() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const refresh = () => load();
+    window.addEventListener('voucher_updated', refresh);
+    return () => window.removeEventListener('voucher_updated', refresh);
+  }, [load]);
 
   const doDelete = async (v) => {
     try {

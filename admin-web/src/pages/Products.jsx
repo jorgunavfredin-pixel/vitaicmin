@@ -339,7 +339,7 @@ export default function Products() {
       {deleteModalProd && (
         <ConfirmDeleteModal
           title={`Hapus Produk ${deleteModalProd.name_id}?`}
-          message="Produk dan entri stok yang belum terjual akan dihapus permanen."
+          message="Produk dengan histori transaksi akan diarsipkan/nonaktif. Hard-delete hanya berlaku untuk produk baru tanpa histori atau reservasi."
           onClose={() => setDeleteModalProd(null)}
           onConfirm={async () => {
             try { const r = await deleteProduct(deleteModalProd.id); showToast(r.message); setDeleteModalProd(null); loadData(); }
@@ -354,7 +354,9 @@ export default function Products() {
       {deleteCatModal && (
         <ConfirmDeleteModal
           title={`Hapus Kategori ${deleteCatModal.name_id}?`}
-          message={`Kategori ini memiliki ${deleteCatModal.product_count} produk. Semua produk di dalamnya juga akan ikut terhapus!`}
+          message={deleteCatModal.product_count > 0
+            ? `Kategori masih memiliki ${deleteCatModal.product_count} produk. Pindahkan produknya terlebih dahulu; kategori tidak akan dihapus.`
+            : 'Kategori kosong ini akan dihapus permanen.'}
           onClose={() => setDeleteCatModal(null)}
           onConfirm={async () => {
             try { const r = await deleteCategory(deleteCatModal.id); showToast(r.message); setDeleteCatModal(null); loadData(); }

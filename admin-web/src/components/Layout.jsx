@@ -79,6 +79,8 @@ export default function Layout() {
           }
         } else if (payload.type === 'product_change') {
           window.dispatchEvent(new CustomEvent('product_updated', { detail: payload.data }));
+        } else if (payload.type === 'voucher_change') {
+          window.dispatchEvent(new CustomEvent('voucher_updated', { detail: payload.data }));
         }
       } catch (err) {
         console.error('Error handling SSE live update:', err);

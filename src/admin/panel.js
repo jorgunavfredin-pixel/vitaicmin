@@ -98,7 +98,7 @@ const registerAdminHandler = (bot) => {
     bot.use(async (tgCtx, next) => {
         if (!tgCtx.callbackQuery || !isAdmin(tgCtx.from?.id)) return next();
         const data = String(tgCtx.callbackQuery.data || '');
-        const keepsWizard = /^adm_fs_(?:type|duration|dur|confirm)_/.test(data);
+        const keepsWizard = /^adm_fs_(?:type|duration|dur|limit|confirm)_/.test(data);
         if (!keepsWizard) adminStates.clearFor(tgCtx);
         return next();
     });
@@ -202,6 +202,7 @@ const registerAdminHandler = (bot) => {
                     break;
                 case 'fs_set_price':
                 case 'fs_custom_duration':
+                case 'fs_set_max_transactions':
                     await handleFlashSaleInput(tgCtx, state, text, adminStates);
                     break;
                 case 'saldo_search': {

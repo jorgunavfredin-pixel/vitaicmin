@@ -58,9 +58,9 @@ const {adjustUserBalance}=require('./src/services/adminBalance');
 const add=adjustUserBalance({userId:'U',action:'add',amount:100,note:'bonus',actorId:'A',channel:'telegram'}); let overdraft='',empty='';
 try{adjustUserBalance({userId:'U',action:'deduct',amount:101,note:'x',actorId:'A',channel:'web'})}catch(e){overdraft=e.message}
 const emptyResult=adjustUserBalance({userId:'U',action:'set',amount:0,note:'',actorId:'A',channel:'web'});
-const h=require('./src/payments/balance').getBalanceHistory('U',1)[0]; console.log(JSON.stringify({balance:add.balance,overdraft,emptyBalance:emptyResult.balance,note:h.note}));`);
+const notes=require('./src/payments/balance').getBalanceHistory('U',10).map(h=>h.note); console.log(JSON.stringify({balance:add.balance,overdraft,emptyBalance:emptyResult.balance,notes}));`);
   assert.equal(r.balance,100); assert.equal(r.overdraft,'Saldo tidak cukup'); assert.equal(r.emptyBalance,0);
-  assert.equal(r.note,'[admin]');
+  assert.ok(r.notes.includes('[admin]')); assert.ok(r.notes.includes('[admin] bonus'));
 });
 
 test('chat/web memakai shared order service, hard delete chat hilang, CSV aman', () => {

@@ -446,7 +446,9 @@ const addCategory = (category) => {
   const id = `cat_${Date.now()}`;
   const created_at = new Date().toISOString();
   db.prepare('INSERT INTO categories (id, name_id, name_en, created_at) VALUES (?, ?, ?, ?)').run(id, category.name_id, category.name_en, created_at);
-  return { id, name_id: category.name_id, name_en: category.name_en, created_at };
+  const created = { id, name_id: category.name_id, name_en: category.name_en, created_at };
+  dbEvents.emit('product_change', { type: 'category_created', category: created });
+  return created;
 };
 
 const updateCategory = (categoryId, updates) => {
@@ -454,13 +456,33 @@ const updateCategory = (categoryId, updates) => {
   if (!cat) return null;
   const updated = { ...cat, ...updates };
   db.prepare('UPDATE categories SET name_id = ?, name_en = ? WHERE id = ?').run(updated.name_id, updated.name_en, categoryId);
+  dbEvents.emit('product_change', { type: 'category_updated', category: updated });
   return updated;
 };
 
 const deleteCategory = (categoryId) => {
+  const cat = db.prepare('SELECT * FROM categories WHERE id = ?').get(categoryId);
+  if (!cat) return { ok: false, reason: 'not_found' };
+  const productCount = db.prepare('SELECT COUNT(*) AS n FROM products WHERE category_id = ?').get(categoryId).n;
+  if (productCount) return { ok: false, reason: 'not_empty', productCount };
   db.prepare('DELETE FROM categories WHERE id = ?').run(categoryId);
-  db.prepare('DELETE FROM products WHERE category_id = ?').run(categoryId);
-  return true;
+  dbEvents.emit('product_change', { type: 'category_deleted', categoryId });
+  return { ok: true, deleted: true };
+};
+
+const moveProductsAndDeleteCategoryTx = db.transaction((sourceId, targetId) => {
+  if (sourceId === targetId) return { ok: false, reason: 'same_category' };
+  const source = db.prepare('SELECT id FROM categories WHERE id = ?').get(sourceId);
+  const target = db.prepare('SELECT id FROM categories WHERE id = ?').get(targetId);
+  if (!source || !target) return { ok: false, reason: 'not_found' };
+  const moved = db.prepare('UPDATE products SET category_id = ? WHERE category_id = ?').run(targetId, sourceId).changes;
+  db.prepare('DELETE FROM categories WHERE id = ?').run(sourceId);
+  return { ok: true, moved };
+});
+const moveProductsAndDeleteCategory = (sourceId, targetId) => {
+  const result = moveProductsAndDeleteCategoryTx(sourceId, targetId);
+  if (result.ok) dbEvents.emit('product_change', { type: 'category_moved_deleted', sourceId, targetId, moved: result.moved });
+  return result;
 };
 
 // ==================== PRODUCTS ====================
@@ -481,7 +503,9 @@ const addProduct = (product) => {
   const id = `prod_${Date.now()}`;
   const created_at = new Date().toISOString();
   db.prepare(`INSERT INTO products (id, category_id, name_id, name_en, description_id, description_en, price_idr, warranty_id, warranty_en, terms_id, terms_en, stock_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, product.category_id, product.name_id, product.name_en, product.description_id || '', product.description_en || '', product.price_idr, product.warranty_id || '', product.warranty_en || '', product.terms_id || '', product.terms_en || '', product.stock_type || 'email_pass', created_at);
-  return { id, ...product, created_at };
+  const created = { id, ...product, created_at };
+  dbEvents.emit('product_change', { type: 'product_created', product: created });
+  return created;
 };
 
 const updateProduct = (productId, updates) => {
@@ -489,13 +513,30 @@ const updateProduct = (productId, updates) => {
   if (!prod) return null;
   const merged = { ...prod, ...updates };
   db.prepare(`UPDATE products SET category_id=?, name_id=?, name_en=?, description_id=?, description_en=?, price_idr=?, warranty_id=?, warranty_en=?, terms_id=?, terms_en=?, stock_type=?, stock_mode=?, terms_format=?, qty_discounts=?, active=? WHERE id=?`).run(merged.category_id, merged.name_id, merged.name_en, merged.description_id, merged.description_en, merged.price_idr, merged.warranty_id, merged.warranty_en, merged.terms_id, merged.terms_en, merged.stock_type, merged.stock_mode || 'limited', merged.terms_format || '', merged.qty_discounts || '', merged.active === false ? 0 : 1, productId);
+  dbEvents.emit('product_change', { type: 'product_updated', product: merged });
   return merged;
 };
 
 const deleteProduct = (productId) => {
-  db.prepare('DELETE FROM products WHERE id = ?').run(productId);
-  db.prepare('DELETE FROM stock WHERE product_id = ?').run(productId);
-  return true;
+  const prod = getProductById(productId);
+  if (!prod) return { ok: false, reason: 'not_found' };
+  const active = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE product_id = ? AND status IN ('init','pending','processing','processing_delivery','paid')").get(productId).n;
+  const reserved = db.prepare('SELECT COUNT(*) AS n FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NOT NULL').get(productId).n;
+  if (active || reserved) return { ok: false, reason: 'in_use', activeOrders: active, reserved };
+  const history = db.prepare('SELECT COUNT(*) AS n FROM orders WHERE product_id = ?').get(productId).n;
+  const sold = db.prepare('SELECT COUNT(*) AS n FROM stock WHERE product_id = ? AND sold = 1').get(productId).n;
+  if (history || sold) {
+    updateProduct(productId, { active: false });
+    clearFlashSale(productId);
+    return { ok: true, archived: true };
+  }
+  const remove = db.transaction(() => {
+    db.prepare('DELETE FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NULL').run(productId);
+    db.prepare('DELETE FROM products WHERE id = ?').run(productId);
+  });
+  remove();
+  dbEvents.emit('product_change', { type: 'product_deleted', productId });
+  return { ok: true, deleted: true };
 };
 
 // ==================== STOCK ====================
@@ -1004,11 +1045,18 @@ const getVoucherByCode = (code) => {
   return v ? { ...v, used: v.used === 1 } : null;
 };
 
+const getVoucherRedemptionCounts = () => Object.fromEntries(
+  db.prepare('SELECT UPPER(voucher_code) AS code, COUNT(*) AS count FROM voucher_redemptions GROUP BY UPPER(voucher_code)').all()
+    .map(row => [row.code, row.count])
+);
+
 const createVoucher = (voucherData) => {
   const id = `VCH-${Date.now()}`;
   const created_at = new Date().toISOString();
   db.prepare('INSERT INTO vouchers (id, code, type, value, used, created_at) VALUES (?, ?, ?, ?, 0, ?)').run(id, voucherData.code.toUpperCase(), voucherData.type, voucherData.value, created_at);
-  return { id, code: voucherData.code.toUpperCase(), type: voucherData.type, value: voucherData.value, used: false, created_at };
+  const created = { id, code: voucherData.code.toUpperCase(), type: voucherData.type, value: voucherData.value, used: false, created_at };
+  dbEvents.emit('voucher_change', { type: 'created', voucher: created });
+  return created;
 };
 
 const useVoucher = (code, userId) => {
@@ -1019,8 +1067,21 @@ const useVoucher = (code, userId) => {
   return { ...v, used: true, used_by: userId, used_at: now };
 };
 
-const deleteVoucher = (voucherId) => {
+const deleteVoucherSafely = db.transaction((voucherId) => {
+  const voucher = db.prepare('SELECT * FROM vouchers WHERE id = ?').get(voucherId);
+  if (!voucher) return { ok: false, reason: 'not_found' };
+  const redemptions = db.prepare('SELECT COUNT(*) AS n FROM voucher_redemptions WHERE UPPER(voucher_code) = UPPER(?)').get(voucher.code).n;
+  const holds = db.prepare('SELECT COUNT(*) AS n FROM voucher_holds WHERE UPPER(voucher_code) = UPPER(?)').get(voucher.code).n;
+  const activeOrders = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE UPPER(voucher_code) = UPPER(?) AND status IN ('init','pending','processing','processing_delivery','paid')").get(voucher.code).n;
+  if (redemptions || holds || activeOrders) return { ok: false, reason: 'in_use', redemptions, holds, activeOrders };
   db.prepare('DELETE FROM vouchers WHERE id = ?').run(voucherId);
+  return { ok: true, deleted: true, voucher };
+});
+
+const deleteVoucher = (voucherId) => {
+  const result = deleteVoucherSafely(voucherId);
+  if (result.ok) dbEvents.emit('voucher_change', { type: 'deleted', voucherId, code: result.voucher.code });
+  return result;
 };
 
 const calculateDiscount = (totalIDR, voucher) => {
@@ -1072,6 +1133,7 @@ const redeemVoucher = (code, userId, orderId) => {
     const id = `VRD-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     db.prepare('INSERT INTO voucher_redemptions (id, voucher_code, user_id, order_id, redeemed_at) VALUES (?, UPPER(?), ?, ?, ?)')
       .run(id, code, userId, orderId, new Date().toISOString());
+    dbEvents.emit('voucher_change', { type: 'redeemed', code: String(code).toUpperCase(), userId, orderId });
     return true;
   } catch (e) {
     // UNIQUE(voucher_code, user_id) violation → already redeemed by this user
@@ -1342,13 +1404,17 @@ const setFlashSale = (productId, flashPrice, flashStart, flashEnd, maxTransactio
   const max = Number.isInteger(Number(maxTransactions)) && Number(maxTransactions) > 0 ? Number(maxTransactions) : null;
   db.prepare('UPDATE products SET flash_price = ?, flash_start = ?, flash_end = ?, flash_max_transactions = ? WHERE id = ?')
     .run(flashPrice, flashStart, flashEnd, max, productId);
-  return getProductById(productId);
+  const updated = getProductById(productId);
+  dbEvents.emit('product_change', { type: 'flash_sale_updated', product: updated });
+  return updated;
 };
 
 const clearFlashSale = (productId) => {
   db.prepare('UPDATE products SET flash_price = NULL, flash_start = NULL, flash_end = NULL, flash_max_transactions = NULL WHERE id = ?')
     .run(productId);
-  return getProductById(productId);
+  const updated = getProductById(productId);
+  dbEvents.emit('product_change', { type: 'flash_sale_cleared', product: updated });
+  return updated;
 };
 
 const getActiveFlashSales = () => {
@@ -1385,7 +1451,7 @@ module.exports = {
   // Raw db instance (for balance.js to reuse)
   _db: db,
   // Categories
-  getCategories, addCategory, updateCategory, deleteCategory,
+  getCategories, addCategory, updateCategory, deleteCategory, moveProductsAndDeleteCategory,
   // Products
   getProducts, getProductsByCategory, getProductById, addProduct, updateProduct, deleteProduct, mergeLegacyWarrantyTerms,
   // Stock
@@ -1397,7 +1463,7 @@ module.exports = {
   // Stats
   getStats, getDetailedStats, getTopSpenders, getSoldQtyByProduct, getSoldQtyByProducts,
   // Vouchers
-  getVouchers, getVoucherByCode, createVoucher, useVoucher, deleteVoucher, calculateDiscount, hasUserRedeemedVoucher, redeemVoucher, claimVoucherHold, releaseVoucherHold, refreshVoucherHold, purgeExpiredVoucherHolds,
+  getVouchers, getVoucherByCode, getVoucherRedemptionCounts, createVoucher, useVoucher, deleteVoucher, deleteVoucherSafely, calculateDiscount, hasUserRedeemedVoucher, redeemVoucher, claimVoucherHold, releaseVoucherHold, refreshVoucherHold, purgeExpiredVoucherHolds,
   // Settings
   getSettings, updateSettings, getConfig, backupDatabase,
   // Payment Gateways

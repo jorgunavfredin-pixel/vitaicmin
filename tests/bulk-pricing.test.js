@@ -38,8 +38,8 @@ test('admin dan buyer memakai schema percent/fixed price yang sama', () => {
   const api = fs.readFileSync(path.join(root, 'src/web/routes/products.js'), 'utf8');
   const admin = fs.readFileSync(path.join(root, 'admin-web/src/pages/Products.jsx'), 'utf8');
   const menu = fs.readFileSync(path.join(root, 'src/handlers/menu.js'), 'utf8');
-  assert.match(api, /type === 'fixed_price'/);
-  assert.match(api, /price >= prod\.price_idr/);
+  assert.match(api, /normalizeBulkTiers\(tiers, prod\.price_idr\)/);
+  assert.match(api, /validTiers\.length !== tiers\.length/);
   assert.match(admin, /Harga\/pcs/);
   assert.match(admin, /value="fixed_price"/);
   assert.match(admin, /bulk-discount-modal/);

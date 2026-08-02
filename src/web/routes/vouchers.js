@@ -10,16 +10,10 @@
  */
 const db = require('../../models/db');
 const { formatIDR } = require('../../utils/helpers');
+const vouchersService = require('../../services/vouchers');
 
 // Hitung jumlah redemption per kode (akurat, per-user) dari voucher_redemptions.
-const buildRedemptionMap = () => {
-    const rows = db._db.prepare(
-        'SELECT UPPER(voucher_code) AS code, COUNT(*) AS n FROM voucher_redemptions GROUP BY UPPER(voucher_code)'
-    ).all();
-    const map = {};
-    for (const r of rows) map[r.code] = r.n;
-    return map;
-};
+const buildRedemptionMap = () => db.getVoucherRedemptionCounts();
 
 const typeLabel = (v) => v.type === 'percent' ? `${v.value}%` : `Rp ${formatIDR(v.value)}`;
 
@@ -62,30 +56,9 @@ const listVouchers = (req, res) => {
 // ---- POST /vouchers ----  { code, type: 'percent'|'fixed', value }
 const createVoucher = (req, res) => {
     try {
-        const code = String(req.body.code || '').trim().toUpperCase();
-        const type = String(req.body.type || '').trim().toLowerCase();
-        const value = parseInt(req.body.value);
-
-        // Validasi (mirror aturan chat-admin)
-        if (!code) return res.status(400).json({ error: 'Kode voucher wajib diisi' });
-        if (!/^[A-Z0-9_-]+$/.test(code)) return res.status(400).json({ error: 'Kode hanya boleh huruf, angka, - dan _' });
-        if (!['percent', 'fixed'].includes(type)) return res.status(400).json({ error: 'Tipe harus percent atau fixed' });
-        if (isNaN(value) || value <= 0) return res.status(400).json({ error: 'Nilai diskon harus angka positif' });
-        if (type === 'percent' && value > 100) return res.status(400).json({ error: 'Diskon persen tidak boleh lebih dari 100%' });
-
-        if (db.getVoucherByCode(code)) {
-            return res.status(409).json({ error: `Kode voucher "${code}" sudah ada` });
-        }
-
-        const voucher = db.createVoucher({ code, type, value });
-        res.json({
-            ok: true,
-            voucher: { ...voucher, label: typeLabel(voucher) },
-            message: `Voucher ${code} (${typeLabel(voucher)}) berhasil dibuat`
-        });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+        const voucher = vouchersService.createVoucher(req.body);
+        res.json({ ok: true, voucher: { ...voucher, label: typeLabel(voucher) }, message: `Voucher ${voucher.code} (${typeLabel(voucher)}) berhasil dibuat` });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 
 // ---- DELETE /vouchers/:id ----
@@ -95,7 +68,8 @@ const deleteVoucher = (req, res) => {
         const exists = db.getVouchers().find(v => v.id === id);
         if (!exists) return res.status(404).json({ error: 'Voucher tidak ditemukan' });
 
-        db.deleteVoucher(id);
+        const result = vouchersService.deleteVoucherSafely(id);
+        if (!result.ok) return res.status(result.reason === 'not_found' ? 404 : 409).json({ error: result.reason === 'in_use' ? 'Voucher memiliki histori/order aktif' : 'Voucher tidak ditemukan' });
         res.json({ ok: true, message: `Voucher ${exists.code} dihapus` });
     } catch (e) {
         res.status(500).json({ error: e.message });

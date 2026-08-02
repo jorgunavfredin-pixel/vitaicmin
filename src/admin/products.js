@@ -5,6 +5,7 @@
 const { Markup } = require('telegraf');
 const db = require('../models/db');
 const { formatIDR, entitiesToHtml, safeHtmlSnk, escapeHtml } = require('../utils/helpers');
+const { normalizeBulkTiers } = require('../utils/bulkPricing');
 const {
     categoryListKeyboard,
     categoryViewKeyboard,
@@ -20,13 +21,8 @@ const {
 } = require('../utils/keyboard');
 
 // Helper to parse qty discount tiers from JSON string
-function parseDiscountTiers(raw) {
-    if (!raw) return [];
-    try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed.sort((a, b) => a.min_qty - b.min_qty);
-    } catch (e) { }
-    return [];
+function parseDiscountTiers(raw, basePrice = 0) {
+    return normalizeBulkTiers(raw, basePrice);
 }
 
 const sortByNameId = (items) => [...items].sort((a, b) =>
@@ -37,14 +33,26 @@ const stockBackContext = new Map();
 const stockContextKey = (ctx, prodId) => `${ctx.from.id}:${ctx.chat?.id ?? ''}:${prodId}`;
 
 const renderProductSummary = (prod) => {
-    const stock = db.getAvailableStockCount(prod.id);
+    const stock = db.getStockSummary(prod.id);
     const status = prod.active !== false ? '✅ Aktif' : '⏸ Nonaktif';
+    const category = db.getCategories().find(c => c.id === prod.category_id);
     const typeLabels = { code: '🔑 Code', email_pass: '📧 Email|Pass', email_pass_key: '📧 Email|Pass|Key', vcc: '💳 VCC', custom: '✨ Custom' };
-    return `<blockquote>📦 <b>${escapeHtml(prod.name_id || '-')}</b></blockquote>\n` +
+    const tiers = parseDiscountTiers(prod.qty_discounts, prod.price_idr);
+    let text = `<blockquote>📦 <b>${escapeHtml(prod.name_id || '-')}</b></blockquote>\n` +
         `<b>English:</b> ${escapeHtml(prod.name_en || '-')}\n` +
+        `<b>Kategori:</b> ${escapeHtml(category?.name_id || '-')} / ${escapeHtml(category?.name_en || '-')}\n` +
         `<b>Harga:</b> Rp ${formatIDR(prod.price_idr)}\n` +
-        `<b>Stok:</b> ${stock}\n<b>Status:</b> ${status}\n` +
-        `<b>Tipe stok:</b> ${typeLabels[prod.stock_type] || escapeHtml(prod.stock_type || '-')}`;
+        `<b>Stok:</b> ${stock.ready} ready · ${stock.reserved} reserved · ${stock.sold} terjual\n` +
+        `<b>Status:</b> ${status}\n<b>Tipe stok:</b> ${typeLabels[prod.stock_type] || escapeHtml(prod.stock_type || '-')}\n` +
+        `<b>Format S&amp;K:</b> ${escapeHtml(prod.terms_format || 'markdown')}`;
+    text += `\n<b>Grosir:</b> ${tiers.length ? '✅' : '❌'}`;
+    tiers.forEach(t => { text += t.type === 'fixed_price' ? `\n  ↳ ${t.min_qty}+ pcs: Rp ${formatIDR(t.price)}/pcs` : `\n  ↳ ${t.min_qty}+ pcs: ${t.percent}%`; });
+    if (prod.flash_price && prod.flash_end) {
+        const slots = db.getFlashSaleSlotStats(prod);
+        text += `\n<b>Flash:</b> Rp ${formatIDR(prod.flash_price)} · sampai ${escapeHtml(prod.flash_end)}`;
+        if (slots.limited) text += `\n  ↳ Slot: ${slots.used}/${slots.max} dipakai · ${slots.held} ditahan · ${slots.remaining} tersisa`;
+    }
+    return text;
 };
 
 function registerProductHandlers(bot, { isAdmin, adminStates }) {
@@ -186,13 +194,9 @@ ${products.length > 0 ? `◼ Kategori ini punya ${products.length} produk.` : 'K
         const targetCatId = ctx.match[2];
         await ctx.answerCbQuery();
 
-        const products = db.getProductsByCategory(sourceCatId);
-        products.forEach(p => {
-            db.updateProduct(p.id, { category_id: targetCatId });
-        });
-
-        db.deleteCategory(sourceCatId);
-
+        const result = db.moveProductsAndDeleteCategory(sourceCatId, targetCatId);
+        if (!result.ok) return ctx.answerCbQuery('Gagal memindahkan kategori', { show_alert: true });
+        const products = { length: result.moved };
         const targetCat = db.getCategories().find(c => c.id === targetCatId);
 
         await ctx.editMessageText(`✅ ${products.length} produk dipindahkan ke "${targetCat?.name_id || 'Target'}"\n✅ Kategori lama dihapus.`, {
@@ -268,27 +272,11 @@ ${products.length > 0 ? `◼ Kategori ini punya ${products.length} produk.` : 'K
         if (!prod) return;
 
         const h = (s) => escapeHtml(s || '-');
-
-        // Flash sale info
-        let flashInfo = '';
-        if (db.isFlashSaleActive(prod)) {
-            const endDate = new Date(prod.flash_end).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            const discount = Math.round((1 - prod.flash_price / prod.price_idr) * 100);
-            flashInfo = `\n⚡ <b>FLASH SALE AKTIF</b>\n💵 Flash Price: Rp ${formatIDR(prod.flash_price)} (-${discount}%)\n⏰ Berakhir: ${endDate} WIB\n`;
-        }
-
-        let discountInfo = '\n💰 Disc. Bulk: ❌ OFF';
-        const discTiers = parseDiscountTiers(prod.qty_discounts);
-        if (discTiers.length > 0) {
-            discountInfo = '\n💰 Disc. Bulk: ✅ ON';
-            discTiers.forEach(t => {
-                discountInfo += `\n   ↳ ${t.min_qty}+ pcs: ${t.percent}%`;
-            });
-        }
-
-        await ctx.editMessageText(`${renderProductSummary(prod)}${flashInfo}${discountInfo}
-<b>Deskripsi:</b> ${h(prod.description_id)}
-<b>Garansi &amp; S&amp;K:</b> ${safeHtmlSnk(prod.terms_id, prod.terms_format === 'html')}`, {
+        await ctx.editMessageText(`${renderProductSummary(prod)}
+<b>Deskripsi ID:</b> ${h(prod.description_id)}
+<b>Deskripsi EN:</b> ${h(prod.description_en)}
+<b>S&amp;K ID:</b> ${safeHtmlSnk(prod.terms_id, prod.terms_format === 'html')}
+<b>S&amp;K EN:</b> ${safeHtmlSnk(prod.terms_en, prod.terms_format === 'html')}`, {
             parse_mode: 'HTML',
             ...productViewKeyboard(prodId, prod.category_id, prod)
         });
@@ -438,7 +426,9 @@ ${products.length > 0 ? `◼ Kategori ini punya ${products.length} produk.` : 'K
 
         const prod = db.getProductById(prodId);
 
-        await ctx.editMessageText(`⚠️ *Hapus Produk "${prod.name_id}"?*\n\nAksi ini tidak bisa dibatalkan.`, {
+        if (!prod) return ctx.answerCbQuery('Produk tidak ditemukan', { show_alert: true });
+
+        await ctx.editMessageText(`⚠️ *Hapus/Arsip Produk "${prod.name_id}"?*\n\nProduk dengan histori akan dinonaktifkan. Hard-delete hanya untuk produk baru tanpa histori.`, {
             parse_mode: 'Markdown',
             reply_markup: {
                 inline_keyboard: [
@@ -456,10 +446,11 @@ ${products.length > 0 ? `◼ Kategori ini punya ${products.length} produk.` : 'K
         const prod = db.getProductById(prodId);
         const catId = prod?.category_id;
 
-        db.deleteProduct(prodId);
-        await ctx.answerCbQuery('✅ Produk dihapus');
-
-        await ctx.editMessageText('✅ Produk berhasil dihapus!', {
+        const result = db.deleteProduct(prodId);
+        const message = !result.ok ? '❌ Produk masih dipakai order/reservasi aktif.'
+            : result.archived ? '✅ Produk memiliki histori dan berhasil diarsipkan.' : '✅ Produk baru berhasil dihapus permanen.';
+        await ctx.answerCbQuery(result.ok ? '✅ Selesai' : '❌ Ditolak');
+        await ctx.editMessageText(message, {
             parse_mode: 'Markdown',
             reply_markup: { inline_keyboard: navButtons(`adm_prod_cat_${catId}`) }
         });
@@ -855,7 +846,7 @@ Kirim data stok (bisa multi-line):`, {
             parse_mode: 'Markdown',
             reply_markup: {
                 inline_keyboard: [
-                    [Markup.button.callback('✅ Aktifkan Flash Sale', `adm_fs_confirm_${prodId}`)],
+                    [Markup.button.callback('∞ Tanpa Batas', `adm_fs_limit_none_${prodId}`), Markup.button.callback('🔢 Batasi Transaksi', `adm_fs_limit_set_${prodId}`)],
                     [Markup.button.callback('❌ Batal', `adm_prod_view_${prodId}`)]
                 ]
             }
@@ -880,6 +871,17 @@ Kirim data stok (bisa multi-line):`, {
         });
     });
 
+    bot.action(/^adm_fs_limit_none_(.+)$/, async (ctx) => {
+        const state = adminStates.getFor(ctx); if (!isAdmin(ctx.from.id) || !state) return;
+        state.flashMaxTransactions = null; adminStates.setFor(ctx, state);
+        await ctx.answerCbQuery(); await ctx.editMessageReplyMarkup({ inline_keyboard: [[Markup.button.callback('✅ Aktifkan Flash Sale', `adm_fs_confirm_${ctx.match[1]}`)], [Markup.button.callback('❌ Batal', `adm_prod_view_${ctx.match[1]}`)]] });
+    });
+    bot.action(/^adm_fs_limit_set_(.+)$/, async (ctx) => {
+        const state = adminStates.getFor(ctx); if (!isAdmin(ctx.from.id) || !state) return;
+        state.action = 'fs_set_max_transactions'; adminStates.setFor(ctx, state);
+        await ctx.answerCbQuery(); await ctx.editMessageText('🔢 Kirim maksimal transaksi flash sale (minimal 1):', { reply_markup: { inline_keyboard: [[Markup.button.callback('❌ Batal', `adm_prod_view_${ctx.match[1]}`)]] } });
+    });
+
     // Flash sale — confirm & activate
     bot.action(/^adm_fs_confirm_(?!stop_)(.+)$/, async (ctx) => {
         if (!isAdmin(ctx.from.id)) return;
@@ -889,7 +891,7 @@ Kirim data stok (bisa multi-line):`, {
         const state = adminStates.getFor(ctx);
         if (!state || !state.flashPrice) return;
 
-        db.setFlashSale(prodId, state.flashPrice, state.flashStart, state.flashEnd);
+        db.setFlashSale(prodId, state.flashPrice, state.flashStart, state.flashEnd, state.flashMaxTransactions ?? null);
         adminStates.delete(ctx.from.id.toString());
 
         const prod = db.getProductById(prodId);
@@ -923,40 +925,6 @@ Kirim data stok (bisa multi-line):`, {
         db.clearFlashSale(prodId);
         const prod = db.getProductById(prodId);
         await showProductView(ctx, prodId, prod);
-    });
-
-    // Flash sale — broadcast
-    bot.action(/^adm_fs_broadcast_(.+)$/, async (ctx) => {
-        if (!isAdmin(ctx.from.id)) return;
-        const prodId = ctx.match[1];
-        await ctx.answerCbQuery('📣 Broadcasting...');
-
-        const prod = db.getProductById(prodId);
-        if (!prod || !db.isFlashSaleActive(prod)) {
-            await ctx.answerCbQuery('❌ Flash sale tidak aktif', { show_alert: true });
-            return;
-        }
-
-        const discount = Math.round((1 - prod.flash_price / prod.price_idr) * 100);
-        const startStr = new Date(prod.flash_start).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const endStr = new Date(prod.flash_end).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-        const bcMsg = `⚡🔥 <b>FLASH SALE!</b> 🔥⚡\n\n🏷 <b>${prod.name_id}</b>\n💵 <s>Rp ${formatIDR(prod.price_idr)}</s> → <b>Rp ${formatIDR(prod.flash_price)}</b> (-${discount}%)\n\n📅 Mulai: ${startStr} WIB\n⏰ Berakhir: ${endStr} WIB\n\n🛒 Yuk order sekarang sebelum harga balik normal!\nKlik 🛒 List Produk di menu 👇`;
-
-        const users = db.getUsers();
-        const userIds = Object.keys(users);
-        let sent = 0;
-
-        for (const userId of userIds) {
-            try {
-                await ctx.telegram.sendMessage(userId, bcMsg, { parse_mode: 'HTML' });
-                sent++;
-            } catch (e) { }
-        }
-
-        await ctx.reply(`✅ Broadcast Flash Sale terkirim ke ${sent} user.`, {
-            reply_markup: { inline_keyboard: navButtons(`adm_prod_view_${prodId}`) }
-        });
     });
 
     // ==================== PRODUCT STATS ====================
@@ -1020,36 +988,19 @@ Kirim data stok (bisa multi-line):`, {
         });
     });
 
-    // Helper function
+    // Shared renderer: tampilan tetap identik setelah toggle/edit/flash.
     async function showProductView(ctx, prodId, prod) {
         if (!prod) {
             await ctx.editMessageText('❌ Produk tidak ditemukan.', { reply_markup: { inline_keyboard: navButtons('adm_prod') } });
             return;
         }
-        const stock = db.getAvailableStockCount(prodId);
-        const status = prod.active !== false ? '✅ Active' : '⏸ Pause';
-        const stockTypeLabels = {
-            'code': '🔑 Code',
-            'email_pass': '📧 Email|Pass',
-            'email_pass_key': '📧 Email|Pass|Key',
-            'vcc': '💳 VCC',
-            'custom': '✨ Custom'
-        };
-        const stockTypeLabel = stockTypeLabels[prod.stock_type] || prod.stock_type;
-
-        let flashInfo = '';
-        if (db.isFlashSaleActive(prod)) {
-            const endDate = new Date(prod.flash_end).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            const discount = Math.round((1 - prod.flash_price / prod.price_idr) * 100);
-            flashInfo = `\n⚡ *FLASH SALE AKTIF*\n💵 Flash Price: Rp ${formatIDR(prod.flash_price)} (-${discount}%)\n⏰ Berakhir: ${endDate} WIB`;
-        }
-
-        await ctx.editMessageText(`⚙️ *${prod.name_id}*
-💰 Harga: Rp ${formatIDR(prod.price_idr)}
-📦 Stok: ${stock}
-📋 Status: ${status}
-📝 Tipe Stok: ${stockTypeLabel}${flashInfo}`, {
-            parse_mode: 'Markdown',
+        const h = (s) => escapeHtml(s || '-');
+        await ctx.editMessageText(`${renderProductSummary(prod)}
+<b>Deskripsi ID:</b> ${h(prod.description_id)}
+<b>Deskripsi EN:</b> ${h(prod.description_en)}
+<b>S&amp;K ID:</b> ${safeHtmlSnk(prod.terms_id, prod.terms_format === 'html')}
+<b>S&amp;K EN:</b> ${safeHtmlSnk(prod.terms_en, prod.terms_format === 'html')}`, {
+            parse_mode: 'HTML',
             ...productViewKeyboard(prodId, prod.category_id, prod)
         });
     }
@@ -1206,30 +1157,26 @@ async function handleEditProduct(ctx, state, text, adminStates) {
             return;
         }
 
+        const prod = db.getProductById(prodId);
         const lines = text.split('\n').filter(l => l.trim());
-        const tiers = [];
-        for (const line of lines) {
+        const rawTiers = lines.map(line => {
             const parts = line.split(':').map(s => s.trim());
-            if (parts.length !== 2) {
-                await ctx.reply('❌ Format salah! Gunakan format `min_qty:persen` per baris.\nContoh:\n2:10\n5:20\n\nKirim `0` untuk matikan.', { parse_mode: 'Markdown' });
-                return;
-            }
-            const minQty = parseInt(parts[0]);
-            const percent = parseInt(parts[1]);
-            if (isNaN(minQty) || isNaN(percent) || minQty < 2 || percent < 1 || percent > 90) {
-                await ctx.reply('❌ Invalid! Min qty harus ≥ 2, persen harus 1-90.\nContoh: `2:10`', { parse_mode: 'Markdown' });
-                return;
-            }
-            tiers.push({ min_qty: minQty, percent });
+            if (parts.length === 2) return { min_qty: parts[0], type: 'percent', percent: parts[1] };
+            if (parts.length === 3 && parts[1] === 'fixed_price') return { min_qty: parts[0], type: 'fixed_price', price: parts[2] };
+            if (parts.length === 3 && parts[1] === 'percent') return { min_qty: parts[0], type: 'percent', percent: parts[2] };
+            return null;
+        });
+        const tiers = normalizeBulkTiers(rawTiers, prod?.price_idr || 0);
+        if (rawTiers.some(x => !x) || tiers.length !== rawTiers.length || new Set(tiers.map(t => t.min_qty)).size !== tiers.length) {
+            await ctx.reply('❌ Tier tidak valid. Gunakan `2:percent:10` atau `5:fixed_price:8000`; minimal qty harus unik.', { parse_mode: 'Markdown' });
+            return;
         }
-
-        tiers.sort((a, b) => a.min_qty - b.min_qty);
         db.updateProduct(prodId, { qty_discounts: JSON.stringify(tiers) });
         adminStates.delete(ctx.from.id.toString());
 
-        let msg = '✅ Diskon Bulk Order diset:\n';
+        let msg = '✅ Harga Grosir diset:\n';
         tiers.forEach(t => {
-            msg += `• ${t.min_qty}+ pcs: ${t.percent}%\n`;
+            msg += t.type === 'fixed_price' ? `• ${t.min_qty}+ pcs: Rp ${formatIDR(t.price)}/pcs\n` : `• ${t.min_qty}+ pcs: ${t.percent}%\n`;
         });
 
         await ctx.reply(msg, {
@@ -1354,6 +1301,12 @@ async function handleFlashSaleInput(ctx, state, text, adminStates) {
             }
         });
 
+    } else if (state.action === 'fs_set_max_transactions') {
+        const max = Number(text.trim());
+        if (!Number.isInteger(max) || max < 1) { await ctx.reply('❌ Maksimal transaksi minimal 1.'); return; }
+        state.flashMaxTransactions = max; state.action = 'fs_wait_confirm'; adminStates.setFor(ctx, state);
+        await ctx.reply(`✅ Batas ${max} transaksi.`, { reply_markup: { inline_keyboard: [[Markup.button.callback('✅ Aktifkan Flash Sale', `adm_fs_confirm_${state.prodId}`)], [Markup.button.callback('❌ Batal', `adm_prod_view_${state.prodId}`)]] } });
+
     } else if (state.action === 'fs_custom_duration') {
         // Parse custom duration: "5 jam" or "2 hari"
         const match = text.toLowerCase().match(/^(\d+)\s*(jam|hari)$/);
@@ -1390,7 +1343,7 @@ async function handleFlashSaleInput(ctx, state, text, adminStates) {
             parse_mode: 'Markdown',
             reply_markup: {
                 inline_keyboard: [
-                    [Markup.button.callback('✅ Aktifkan Flash Sale', `adm_fs_confirm_${state.prodId}`)],
+                    [Markup.button.callback('∞ Tanpa Batas', `adm_fs_limit_none_${state.prodId}`), Markup.button.callback('🔢 Batasi Transaksi', `adm_fs_limit_set_${state.prodId}`)],
                     [Markup.button.callback('❌ Batal', `adm_prod_view_${state.prodId}`)]
                 ]
             }
