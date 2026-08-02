@@ -119,7 +119,11 @@ test('daftar kategori A-Z sinkron dengan tombol dan label multibahasa', () => {
   assert.ok(middlePage.reply_markup.inline_keyboard.at(-1).every(b => b.style === 'success'));
 
   const { mainMenuKeyboard } = require('../src/utils/keyboard');
+  const previousRentFlag = process.env.RENT_BOT_ENABLED;
+  process.env.RENT_BOT_ENABLED = 'true';
   const menuRows = mainMenuKeyboard('id').reply_markup.keyboard;
+  if (previousRentFlag === undefined) delete process.env.RENT_BOT_ENABLED;
+  else process.env.RENT_BOT_ENABLED = previousRentFlag;
   assert.deepEqual(menuRows.map(row => row.map(b => b.style)), [
     ['primary', 'primary'], ['success'], ['primary', 'primary'], ['danger', 'danger']
   ]);
@@ -186,7 +190,11 @@ test('flash sale banner memakai quote dan progress opsional multibahasa', () => 
 
 test('simbol buyer unicode konsisten dan keyboard lama tetap kompatibel', () => {
   const { mainMenuKeyboard, quantityKeyboard, paymentMethodKeyboard, paymentPendingKeyboard } = require('../src/utils/keyboard');
+  const previousRentFlag = process.env.RENT_BOT_ENABLED;
+  process.env.RENT_BOT_ENABLED = 'true';
   const menu = mainMenuKeyboard('id').reply_markup.keyboard.flat().map(b => b.text);
+  if (previousRentFlag === undefined) delete process.env.RENT_BOT_ENABLED;
+  else process.env.RENT_BOT_ENABLED = previousRentFlag;
   assert.deepEqual(menu.map(t => t.split(' ')[0]), ['▦', '▤', '●', '≡', '◎', '◇', '?']);
 
   const qty = quantityKeyboard(20, 'P', 2, 'C', 'id').reply_markup.inline_keyboard.flat().map(b => b.text);

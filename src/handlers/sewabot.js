@@ -1,6 +1,8 @@
 const { Markup } = require('telegraf');
 const path = require('path');
 const fs = require('fs');
+const { isRentBotEnabled } = require('../utils/features');
+const { mainMenuKeyboard } = require('../utils/keyboard');
 
 /**
  * Register Sewa Bot handler
@@ -74,6 +76,10 @@ Capek balesin chat satu-satu? Pake bot kita, jualan jalan terus walau kamu tidur
 
     // Handler: button "🤖 Sewa Bot" from reply keyboard
     bot.hears(['◇ Sewa Bot', '🤖 Sewa Bot'], async (ctx) => {
+        if (!isRentBotEnabled()) {
+            await ctx.reply('Fitur Sewa Bot sedang tidak tersedia.', mainMenuKeyboard('id', ctx.from?.id?.toString()));
+            return;
+        }
         try {
             if (fs.existsSync(bannerPath)) {
                 await ctx.replyWithPhoto(

@@ -364,6 +364,7 @@ const languageKeyboard = () => {
 };
 
 const mainMenuKeyboard = (lang = 'id', userId = null) => {
+    const { isRentBotEnabled } = require('./features');
     // Get balance for display on button
     let balanceText = '';
     if (userId) {
@@ -416,7 +417,7 @@ const mainMenuKeyboard = (lang = 'id', userId = null) => {
         [styled(t.history, 'primary'), styled(t.language, 'primary')]
     ];
 
-    if (lang === 'id') {
+    if (lang === 'id' && isRentBotEnabled()) {
         rows.push([styled(t.sewaBot, 'danger'), styled(t.support, 'danger')]);
     } else {
         rows.push([styled(t.support, 'danger')]);
