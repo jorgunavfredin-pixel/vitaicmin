@@ -57,8 +57,16 @@ const getSettings = (req, res) => {
             // Info toko & pesan — nilai EFEKTIF (settings DB > env > default), editable dari panel.
             store: {
                 store_name: db.getConfig('store_name', 'STORE_NAME', ''),
-                support_username: db.getConfig('support_username', 'SUPPORT_USERNAME', ''),
-                support_hours: db.getConfig('support_hours', 'SUPPORT_HOURS', '09:00 - 22:00 WIB'),
+                support_text: db.getConfig('support_text', 'SUPPORT_TEXT', ''),
+                support_whatsapp_url: db.getConfig('support_whatsapp_url', 'SUPPORT_WHATSAPP_URL', ''),
+                support_telegram_url: db.getConfig(
+                    'support_telegram_url', 'SUPPORT_TELEGRAM_URL',
+                    db.getConfig('support_username', 'SUPPORT_USERNAME', '')
+                        ? `https://t.me/${String(db.getConfig('support_username', 'SUPPORT_USERNAME', '')).replace(/^@+/, '')}`
+                        : ''
+                ),
+                support_group_url: db.getConfig('support_group_url', 'SUPPORT_GROUP_URL', ''),
+                support_channel_url: db.getConfig('support_channel_url', 'SUPPORT_CHANNEL_URL', ''),
                 order_prefix: db.getConfig('order_prefix', 'ORDER_PREFIX', 'ORD'),
                 payment_timeout_minutes: parseInt(db.getConfig('payment_timeout_minutes', null, 15)) || 15
             },
@@ -141,6 +149,19 @@ const backupDb = async (req, res) => {
     }
 };
 
+const normalizeSupportUrl = (value, label) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    let parsed;
+    try { parsed = new URL(raw); } catch (_) {
+        const error = new Error(`${label} harus berupa URL lengkap`); error.validation = true; throw error;
+    }
+    if (parsed.protocol !== 'https:') {
+        const error = new Error(`${label} wajib memakai https://`); error.validation = true; throw error;
+    }
+    return parsed.toString().replace(/\/$/, '');
+};
+
 // ---- PUT /settings/store ----  info toko & pesan
 const updateStore = (req, res) => {
     try {
@@ -150,11 +171,18 @@ const updateStore = (req, res) => {
         // Validasi ringan tiap field (semua opsional; kosong = pakai fallback env/default).
         if (b.store_name !== undefined) updates.store_name = String(b.store_name).trim().slice(0, 80);
 
-        if (b.support_username !== undefined) {
-            // Buang '@' & whitespace; simpan username bersih.
-            updates.support_username = String(b.support_username).trim().replace(/^@+/, '').slice(0, 60);
-        }
-        if (b.support_hours !== undefined) updates.support_hours = String(b.support_hours).trim().slice(0, 60);
+        if (b.support_text !== undefined) updates.support_text = String(b.support_text).trim().slice(0, 500);
+        if (b.support_whatsapp_url !== undefined) updates.support_whatsapp_url = normalizeSupportUrl(b.support_whatsapp_url, 'URL WhatsApp');
+        if (b.support_telegram_url !== undefined) updates.support_telegram_url = normalizeSupportUrl(b.support_telegram_url, 'URL Telegram Admin');
+        if (b.support_group_url !== undefined) updates.support_group_url = normalizeSupportUrl(b.support_group_url, 'URL Telegram Group');
+        if (b.support_channel_url !== undefined) updates.support_channel_url = normalizeSupportUrl(b.support_channel_url, 'URL Telegram Channel');
+
+        const effectiveTelegram = (b.support_telegram_url === undefined
+            ? db.getConfig('support_telegram_url', 'SUPPORT_TELEGRAM_URL', '')
+            : updates.support_telegram_url)
+            || process.env.SUPPORT_TELEGRAM_URL
+            || db.getConfig('support_username', 'SUPPORT_USERNAME', '');
+        if (!effectiveTelegram) return res.status(400).json({ error: 'URL Telegram Admin wajib diisi' });
 
         if (b.order_prefix !== undefined) {
             const prefix = String(b.order_prefix).trim().toUpperCase();
@@ -175,7 +203,7 @@ const updateStore = (req, res) => {
         db.updateSettings(updates);
         res.json({ ok: true, message: 'Info toko berhasil disimpan', store: updates });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(e.validation ? 400 : 500).json({ error: e.message });
     }
 };
 

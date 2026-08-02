@@ -35,6 +35,7 @@ const actionFor = (data) => {
 
 const stockHears = hears.find(item => Array.isArray(item.trigger) && item.trigger.includes('▤ Cek Stok')).handler;
 const historyHears = hears.find(item => Array.isArray(item.trigger) && item.trigger.includes('≡ Riwayat')).handler;
+const supportHears = hears.find(item => Array.isArray(item.trigger) && item.trigger.includes('? Customer Service')).handler;
 const originals = {};
 const mockDb = (readyCount) => {
   for (const key of ['getUserLanguage', 'getCategories', 'getProductsByCategory', 'getAvailableStockCount', 'getConfig', 'getActiveFlashSales', 'getOrdersByUser', 'getProductById']) {
@@ -132,6 +133,47 @@ test('riwayat menampilkan maksimal 10 transaksi sekaligus tanpa pagination dan l
     assert.equal(extra.parse_mode, 'HTML');
     assert.equal(extra.reply_markup, undefined);
     assert.equal(actions.some(item => item.trigger instanceof RegExp && 'history_page_1'.match(item.trigger)), false);
+  } finally { restoreDb(); }
+});
+
+test('customer support memakai banner, teks aman, dan hanya tombol URL yang terisi', async () => {
+  mockDb(1);
+  bannerCalls.length = 0;
+  try {
+    const values = {
+      support_username: 'legacy_admin',
+      support_text: 'Bantuan A&B <Order>',
+      support_whatsapp_url: 'https://wa.me/628123',
+      support_telegram_url: 'https://t.me/adminbaru',
+      support_group_url: '',
+      support_channel_url: 'https://t.me/channelbaru'
+    };
+    db.getConfig = (key, env, fallback = '') => key in values ? values[key] : fallback;
+    const ctx = makeCtx();
+    await supportHears(ctx);
+    assert.equal(bannerCalls.length, 1);
+    const [, message, extra] = bannerCalls[0];
+    assert.equal(message, '<blockquote>💬 <b>Customer Support</b></blockquote>\n\nBantuan A&amp;B &lt;Order&gt;\nPilih layanan bantuan di bawah ini.');
+    assert.deepEqual(extra.reply_markup.inline_keyboard.map(row => row.map(b => b.text)), [
+      ['WhatsApp', 'Telegram'], ['Telegram Channel']
+    ]);
+    assert.deepEqual(extra.reply_markup.inline_keyboard.flat().map(b => b.url), [
+      'https://wa.me/628123', 'https://t.me/adminbaru', 'https://t.me/channelbaru'
+    ]);
+  } finally { restoreDb(); }
+});
+
+test('customer support fallback ke SUPPORT_USERNAME lama dan menghilangkan baris opsional kosong', async () => {
+  mockDb(1);
+  bannerCalls.length = 0;
+  try {
+    db.getConfig = (key, env, fallback = '') => key === 'support_username' ? 'adminlama' : fallback;
+    const ctx = makeCtx();
+    await supportHears(ctx);
+    const [, message, extra] = bannerCalls[0];
+    assert.equal(message, '<blockquote>💬 <b>Customer Support</b></blockquote>\n\nPilih layanan bantuan di bawah ini.');
+    assert.deepEqual(extra.reply_markup.inline_keyboard.map(row => row.map(b => b.text)), [['Telegram']]);
+    assert.equal(extra.reply_markup.inline_keyboard[0][0].url, 'https://t.me/adminlama');
   } finally { restoreDb(); }
 });
 

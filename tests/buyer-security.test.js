@@ -75,8 +75,9 @@ test('buyer UX memakai live settings, HTML aman, WIB, statistik produk, dan fee 
   assert.match(keyboard, /buyerFee = Math\.max\(0, totalPayment - amount\)/);
   assert.match(order, /buyerFee = Math\.max\(0, totalAmount - order\.total_idr\)/);
   assert.match(order, /caption: message, parse_mode: 'HTML'/);
-  assert.match(support, /db\.getConfig\('support_username'/);
-  assert.match(support, /escapeHtml\(supportHours\)/);
+  assert.match(support, /db\.getConfig\(\s*'support_telegram_url', 'SUPPORT_TELEGRAM_URL'/);
+  assert.match(support, /db\.getConfig\('support_text', 'SUPPORT_TEXT'/);
+  assert.match(support, /editBannerCaption\(ctx, message, keyboard\)/);
   assert.match(security, /settings\.maintenance/);
   assert.match(security, /user\?\.banned/);
 });

@@ -8,6 +8,7 @@ const gateway = require('../payments/gateway');
 const { cancelOrder } = require('../services/reminder');
 const { getOwnedOrder, rejectOrderAccess, assertCanStartTransaction } = require('../utils/buyerSecurity');
 const { handlePaymentSuccess } = require('../services/delivery');
+const { buildSupportContent } = require('./support');
 const {
     mainMenuKeyboard,
     languageKeyboard,
@@ -553,17 +554,12 @@ const registerKeyboardHandler = (bot) => {
         });
     });
 
-    // Customer Service
+    // Customer Support — shared live builder, banner-aware.
     bot.hears(['? CS', '? Customer Service', '📞 CS', '📞 Customer Service'], async (ctx) => {
         clearTopupState(ctx);
-        const userId = ctx.from.id.toString();
-        const lang = db.getUserLanguage(userId);
-        const supportUser = String(db.getConfig('support_username', 'SUPPORT_USERNAME', 'admin')).replace(/^@/, '');
-        const supportHours = db.getConfig('support_hours', 'SUPPORT_HOURS', '09:00 - 22:00 WIB');
-        const msg = lang === 'en'
-            ? `💬 <b>Customer Support</b>\n\nFor assistance, contact admin:\n\n👤 @${escapeHtml(supportUser)}\n🕐 ${escapeHtml(supportHours)}`
-            : `💬 <b>Customer Support</b>\n\nUntuk bantuan, hubungi admin:\n\n👤 @${escapeHtml(supportUser)}\n🕐 ${escapeHtml(supportHours)}`;
-        await ctx.reply(msg, { parse_mode: 'HTML' });
+        const lang = db.getUserLanguage(ctx.from.id.toString());
+        const { message, keyboard } = buildSupportContent(lang);
+        await replyWithBanner(ctx, message, keyboard);
     });
 
     // ==================== SALDO / BALANCE ====================

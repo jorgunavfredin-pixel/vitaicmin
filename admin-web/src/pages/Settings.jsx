@@ -176,8 +176,11 @@ function BannerManager({ banner, showToast, onChanged }) {
 function StoreTab({ store, banner, showToast, onChanged }) {
   const [form, setForm] = useState({
     store_name: store.store_name || '',
-    support_username: store.support_username || '',
-    support_hours: store.support_hours || '',
+    support_text: store.support_text || '',
+    support_whatsapp_url: store.support_whatsapp_url || '',
+    support_telegram_url: store.support_telegram_url || '',
+    support_group_url: store.support_group_url || '',
+    support_channel_url: store.support_channel_url || '',
     order_prefix: store.order_prefix || '',
     payment_timeout_minutes: store.payment_timeout_minutes || 15
   });
@@ -188,6 +191,17 @@ function StoreTab({ store, banner, showToast, onChanged }) {
   const submit = async () => {
     const prefix = String(form.order_prefix).trim().toUpperCase();
     if (prefix && !/^[A-Z0-9]{1,10}$/.test(prefix)) return showToast('Prefix order hanya huruf/angka, maks 10 karakter', 'err');
+    const telegramUrl = String(form.support_telegram_url).trim();
+    if (!telegramUrl) return showToast('URL Telegram Admin wajib diisi', 'err');
+    const supportUrls = [
+      ['URL WhatsApp', form.support_whatsapp_url],
+      ['URL Telegram Admin', telegramUrl],
+      ['URL Telegram Group', form.support_group_url],
+      ['URL Telegram Channel', form.support_channel_url]
+    ];
+    for (const [label, value] of supportUrls) {
+      if (value && !/^https:\/\//i.test(String(value).trim())) return showToast(`${label} wajib memakai https://`, 'err');
+    }
     const mins = parseInt(form.payment_timeout_minutes);
     if (isNaN(mins) || mins < 1 || mins > 1440) return showToast('Timeout pembayaran harus 1–1440 menit', 'err');
     setBusy(true);
@@ -214,17 +228,28 @@ function StoreTab({ store, banner, showToast, onChanged }) {
           value={form.store_name} onChange={(e) => set('store_name', e.target.value)} />
         <div className="bc-hint">Muncul di pesan sambutan bot, banner QRIS, dll.</div>
 
-        <label className="field-label" style={{ marginTop: 14 }}>Username Support (Telegram)</label>
-        <div className="input-prefix">
-          <span className="input-prefix-at">@</span>
-          <input type="text" className="qty-field" placeholder="username_admin" style={{ paddingLeft: 30 }}
-            value={form.support_username} onChange={(e) => set('support_username', e.target.value.replace(/^@+/, ''))} />
-        </div>
-        <div className="bc-hint">Ditampilkan di menu "Hubungi Support". Tanpa tanda @.</div>
+        <label className="field-label" style={{ marginTop: 14 }}>Teks Customer Support (opsional)</label>
+        <textarea className="qty-field" rows="3" maxLength="500"
+          placeholder="Pesan tambahan sebelum instruksi memilih layanan"
+          value={form.support_text} onChange={(e) => set('support_text', e.target.value)} />
+        <div className="bc-hint">Ditampilkan sebelum tulisan “Pilih layanan bantuan di bawah ini.”</div>
 
-        <label className="field-label" style={{ marginTop: 14 }}>Jam Operasional Support</label>
-        <input type="text" className="qty-field" placeholder="09:00 - 22:00 WIB"
-          value={form.support_hours} onChange={(e) => set('support_hours', e.target.value)} />
+        <label className="field-label" style={{ marginTop: 14 }}>URL Telegram Admin <span style={{ color: 'var(--red)' }}>*</span></label>
+        <input type="url" className="qty-field" placeholder="https://t.me/username_admin"
+          value={form.support_telegram_url} onChange={(e) => set('support_telegram_url', e.target.value)} />
+        <div className="bc-hint">Wajib. Perubahan langsung aktif tanpa restart.</div>
+
+        <label className="field-label" style={{ marginTop: 14 }}>URL WhatsApp (opsional)</label>
+        <input type="url" className="qty-field" placeholder="https://wa.me/6281234567890"
+          value={form.support_whatsapp_url} onChange={(e) => set('support_whatsapp_url', e.target.value)} />
+
+        <label className="field-label" style={{ marginTop: 14 }}>URL Telegram Group (opsional)</label>
+        <input type="url" className="qty-field" placeholder="https://t.me/nama_group"
+          value={form.support_group_url} onChange={(e) => set('support_group_url', e.target.value)} />
+
+        <label className="field-label" style={{ marginTop: 14 }}>URL Telegram Channel (opsional)</label>
+        <input type="url" className="qty-field" placeholder="https://t.me/nama_channel"
+          value={form.support_channel_url} onChange={(e) => set('support_channel_url', e.target.value)} />
 
         <label className="field-label" style={{ marginTop: 14 }}>Prefix Order ID</label>
         <input type="text" className="qty-field" placeholder="ORD" style={{ textTransform: 'uppercase', maxWidth: 200 }}
