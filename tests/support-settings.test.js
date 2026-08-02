@@ -16,6 +16,15 @@ test('settings backend mengekspos live support DB-env fields dan validasi URL', 
   assert.match(source, /db\.updateSettings\(updates\)/);
 });
 
+test('.env.example mendokumentasikan empat URL support dan teks opsional', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../.env.example'), 'utf8');
+  for (const key of [
+    'SUPPORT_TELEGRAM_URL=', 'SUPPORT_WHATSAPP_URL=', 'SUPPORT_GROUP_URL=',
+    'SUPPORT_CHANNEL_URL=', 'SUPPORT_TEXT='
+  ]) assert.match(source, new RegExp(`^${key}`, 'm'));
+  assert.match(source, /Telegram Admin wajib diisi saat deployment awal/);
+});
+
 test('Info Toko menyediakan teks bebas dan empat URL dengan Telegram wajib', () => {
   const source = fs.readFileSync(path.join(__dirname, '../admin-web/src/pages/Settings.jsx'), 'utf8');
   for (const field of [
