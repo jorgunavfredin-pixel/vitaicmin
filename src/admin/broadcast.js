@@ -4,7 +4,9 @@
  */
 const { Markup } = require('telegraf');
 const db = require('../models/db');
+const { escapeHtml } = require('../utils/helpers');
 const { broadcastKeyboard, navButtons, cancelButton } = require('../utils/keyboard');
+const { resolveTargets, startBroadcastJob, getBroadcastJob } = require('../services/broadcast');
 
 const BROADCAST_DELAY_MS = 50; // 20 msg/sec, safe dari rate limit
 
@@ -78,6 +80,47 @@ function registerBroadcastHandlers(bot, { isAdmin, adminStates }) {
             parse_mode: 'Markdown',
             reply_markup: { inline_keyboard: cancelButton() }
         });
+    });
+
+    bot.action('adm_bc_flash_active', async (ctx) => {
+        if (!isAdmin(ctx.from.id)) return;
+        await ctx.answerCbQuery();
+        const products = db.getActiveFlashSales().filter(p => !p.flash_slots?.limited || p.flash_slots.remaining > 0);
+        if (!products.length) return ctx.editMessageText('❌ Tidak ada Flash Sale aktif.', { reply_markup: { inline_keyboard: navButtons('adm_broadcast') } });
+        const buttons = products.map(p => [Markup.button.callback(`⚡ ${p.name_id}`, `adm_bc_flash_pick_${p.id}`)]);
+        buttons.push(...navButtons('adm_broadcast'));
+        await ctx.editMessageText('⚡ *Flash Sale Aktif*\n\nPilih produk untuk dibuatkan template broadcast:', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
+    });
+
+    bot.action(/^adm_bc_flash_pick_(.+)$/, async (ctx) => {
+        if (!isAdmin(ctx.from.id)) return;
+        const prod = db.getProductById(ctx.match[1]);
+        if (!prod || !db.isFlashSaleActive(prod)) return ctx.answerCbQuery('Flash Sale tidak aktif', { show_alert: true });
+        const slots = db.getFlashSaleSlotStats(prod);
+        const end = new Date(prod.flash_end).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const text = `⚡🔥 <b>FLASH SALE!</b>\n\n📦 <b>${escapeHtml(prod.name_id)}</b>\n💵 <s>Rp ${prod.price_idr.toLocaleString('id-ID')}</s> → <b>Rp ${prod.flash_price.toLocaleString('id-ID')}</b>\n⏰ Berakhir: ${end} WIB${slots.limited ? `\n🎯 Sisa ${slots.remaining} slot` : ''}\n\n🛒 Order sekarang sebelum promo berakhir!`;
+        const targets = resolveTargets('all');
+        adminStates.setFor(ctx, { action: 'broadcast_flash_confirm', productId: prod.id, text, targetUsers: targets.users });
+        await ctx.answerCbQuery();
+        await ctx.editMessageText(`<blockquote>Preview Broadcast</blockquote>\n${text}\n\nTarget: <b>${targets.users.length} user</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: [[Markup.button.callback('✅ Kirim Sekarang', `adm_bc_flash_send_${prod.id}`)], ...navButtons('adm_broadcast')] } });
+    });
+
+    bot.action(/^adm_bc_flash_send_(.+)$/, async (ctx) => {
+        if (!isAdmin(ctx.from.id)) return;
+        const state = adminStates.getFor(ctx);
+        if (!state || state.action !== 'broadcast_flash_confirm' || state.productId !== ctx.match[1]) return ctx.answerCbQuery('Preview kedaluwarsa', { show_alert: true });
+        const job = startBroadcastJob({ telegram: ctx.telegram, users: state.targetUsers, label: 'Flash Sale', send: (telegram, uid) => telegram.sendMessage(uid, state.text, { parse_mode: 'HTML' }) });
+        adminStates.delete(ctx.from.id.toString());
+        await ctx.answerCbQuery('Broadcast dimulai');
+        await ctx.editMessageText(`📤 Broadcast Flash Sale dimulai.\n\nJob: ${job.id}\nTarget: ${job.total} user`, { reply_markup: { inline_keyboard: [[Markup.button.callback('⟲ Cek Progress', `adm_bc_job_${job.id}`)], ...navButtons('adm_broadcast')] } });
+    });
+
+    bot.action(/^adm_bc_job_(.+)$/, async (ctx) => {
+        if (!isAdmin(ctx.from.id)) return;
+        const job = getBroadcastJob(ctx.match[1]);
+        if (!job) return ctx.answerCbQuery('Job selesai/kedaluwarsa', { show_alert: true });
+        await ctx.answerCbQuery();
+        await ctx.editMessageText(`📊 *Progress Broadcast*\n\nStatus: ${job.status}\nProgress: ${job.processed}/${job.total}\n✅ Terkirim: ${job.sent}\n❌ Gagal: ${job.failed}`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[Markup.button.callback('⟲ Refresh', `adm_bc_job_${job.id}`)], ...navButtons('adm_broadcast')] } });
     });
 }
 

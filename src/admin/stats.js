@@ -10,7 +10,8 @@ const statsKeyboard = () => {
         [Markup.button.callback('📅 Income Stats', 'adm_stats_income')],
         [Markup.button.callback('👥 User Stats', 'adm_stats_users')],
         [Markup.button.callback('📉 Transaction Stats', 'adm_stats_tx')],
-        [Markup.button.callback('⬅️ Back to Admin', 'admin_home')]
+        [Markup.button.callback('📦 Product Stats', 'adm_product_stats')],
+        [Markup.button.callback('‹ Kembali ke Admin', 'admin_home')]
     ]);
 };
 

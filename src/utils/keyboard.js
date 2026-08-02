@@ -27,37 +27,13 @@ const confirmButtons = (yesCallback, noCallback = 'admin_cancel') => {
 
 // ==================== DASHBOARD ====================
 
-const adminDashboardKeyboard = () => {
-    return Markup.inlineKeyboard([
-        [
-            Markup.button.callback('📁 Kategori', 'adm_cat'),
-            Markup.button.callback('📦 Produk', 'adm_prod')
-        ],
-        [
-            Markup.button.callback('🧰 Stok', 'adm_stock'),
-            Markup.button.callback('👥 Users', 'adm_users')
-        ],
-        [
-            Markup.button.callback('📊 Statistik Detail', 'adm_stats_menu'),
-            Markup.button.callback('🧾 Orders', 'adm_orders')
-        ],
-        [
-            Markup.button.callback('🎟️ Vouchers', 'adm_vouchers'),
-            Markup.button.callback('📣 Broadcast', 'adm_broadcast')
-        ],
-        [
-            Markup.button.callback('📊 Product Stats', 'adm_product_stats'),
-            Markup.button.callback('⚙️ Settings', 'adm_settings')
-        ],
-        [
-            Markup.button.callback('💰 Manajemen Saldo', 'adm_saldo'),
-            Markup.button.callback('💾 Backup DB', 'adm_backup')
-        ],
-        [
-            Markup.button.callback('⟲ Refresh', 'adm_refresh')
-        ]
-    ]);
-};
+const adminDashboardKeyboard = () => Markup.inlineKeyboard([
+    [Markup.button.callback('📦 Produk & Kategori', 'adm_catalog'), Markup.button.callback('🧰 Stok', 'adm_stock')],
+    [Markup.button.callback('🧾 Orders', 'adm_orders'), Markup.button.callback('👥 Users & Saldo', 'adm_users_balance')],
+    [Markup.button.callback('🎟️ Voucher', 'adm_vouchers'), Markup.button.callback('📣 Broadcast', 'adm_broadcast')],
+    [Markup.button.callback('📊 Statistik', 'adm_stats_menu'), Markup.button.callback('⚙️ Sistem', 'adm_settings')],
+    [Markup.button.callback('💾 Backup DB', 'adm_backup'), Markup.button.callback('⟲ Refresh', 'adm_refresh')]
+]);
 
 // ==================== KATEGORI ====================
 
@@ -306,13 +282,12 @@ const usersKeyboard = () => {
 
 // ==================== BROADCAST ====================
 
-const broadcastKeyboard = () => {
-    return Markup.inlineKeyboard([
-        [Markup.button.callback('📢 Broadcast ke Semua', 'adm_bc_all')],
-        [Markup.button.callback('📢 Broadcast per Kategori', 'adm_bc_category')],
-        ...navButtons('admin_home')
-    ]);
-};
+const broadcastKeyboard = () => Markup.inlineKeyboard([
+    [Markup.button.callback('📢 Semua User', 'adm_bc_all')],
+    [Markup.button.callback('▦ Pembeli per Kategori', 'adm_bc_category')],
+    [Markup.button.callback('⚡ Flash Sale Aktif', 'adm_bc_flash_active')],
+    ...navButtons('admin_home')
+]);
 
 // ==================== SETTINGS ====================
 

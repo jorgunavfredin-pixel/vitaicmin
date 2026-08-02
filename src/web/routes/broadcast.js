@@ -11,6 +11,7 @@
  *  sederhana + endpoint GET status lebih reliable & gampang di-render jadi bar.
  */
 const db = require('../../models/db');
+const { resolveTargets: sharedResolveTargets, startBroadcastJob, getBroadcastJob } = require('../../services/broadcast');
 
 const BROADCAST_DELAY_MS = 50;      // ~20 msg/sec, aman dari rate limit Telegram
 const DEFAULT_HEADER = '📢 BROADCAST MESSAGE';
@@ -96,7 +97,7 @@ const getTargets = (req, res) => {
             .map(c => ({ id: c.id, name: c.name_id, emoji: c.emoji || '📢' }));
         res.json({ allUsers, categories });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(e.status || 500).json({ error: e.message });
     }
 };
 
@@ -104,11 +105,11 @@ const getTargets = (req, res) => {
 const previewTargets = (req, res) => {
     try {
         const { target, categoryId } = req.body;
-        const r = resolveTargets(target, categoryId);
+        const r = sharedResolveTargets(target, categoryId);
         if (r.error) return res.status(400).json({ error: r.error });
         res.json({ count: r.users.length, label: r.label });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(e.status || 500).json({ error: e.message });
     }
 };
 
@@ -117,7 +118,7 @@ const startBroadcast = (bot) => (req, res) => {
     try {
         const { target, categoryId, header, body, photo } = req.body;
 
-        const r = resolveTargets(target, categoryId);
+        const r = sharedResolveTargets(target, categoryId);
         if (r.error) return res.status(400).json({ error: r.error });
 
         const photoBuffer = photo ? dataUrlToBuffer(photo) : null;
@@ -127,41 +128,33 @@ const startBroadcast = (bot) => (req, res) => {
         }
         if (r.users.length === 0) return res.status(400).json({ error: 'Tidak ada user target' });
 
-        const jobId = `BC-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        jobs.set(jobId, {
-            id: jobId,
-            total: r.users.length,
-            processed: 0,
-            sent: 0,
-            failed: 0,
-            status: 'queued',
-            label: r.label,
-            startedAt: Date.now(),
-            finishedAt: null
-        });
+        const headerText = (header && header.trim()) ? header.trim() : DEFAULT_HEADER;
+        const fullText = `<b>${escapeHtmlText(headerText)}</b>
 
-        // Non-blocking: jalan di background, response balik langsung.
-        runBroadcast(bot, jobId, r.users, { header, body, photoBuffer })
-            .catch(err => {
-                const j = jobs.get(jobId);
-                if (j) { j.status = 'error'; j.error = err.message; }
-            });
+${body || ''}`.trim();
+        const job = startBroadcastJob({
+            telegram: bot.telegram, users: r.users, label: r.label,
+            send: (telegram, uid) => photoBuffer
+                ? telegram.sendPhoto(uid, { source: photoBuffer }, { caption: fullText || undefined, parse_mode: 'HTML' })
+                : telegram.sendMessage(uid, fullText, { parse_mode: 'HTML' })
+        });
+        const jobId = job.id;
 
         res.json({ ok: true, jobId, total: r.users.length, label: r.label });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(e.status || 500).json({ error: e.message });
     }
 };
 
 // ---- GET /broadcast/status/:jobId ----
 const getStatus = (req, res) => {
     try {
-        const job = jobs.get(req.params.jobId);
+        const job = getBroadcastJob(req.params.jobId);
         if (!job) return res.status(404).json({ error: 'Job tidak ditemukan / sudah kedaluwarsa' });
         const pct = job.total > 0 ? Math.round((job.processed / job.total) * 100) : 100;
         res.json({ ...job, pct });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(e.status || 500).json({ error: e.message });
     }
 };
 

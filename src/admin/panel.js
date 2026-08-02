@@ -48,18 +48,18 @@ const getDashboardStats = () => {
     const settings = db.getSettings();
     const today = getWIBToday();
 
-    const pending = orders.filter(o => o.status === 'pending').length;
+    const detailed = db.getDetailedStats();
+    const pending = detailed.transactions.pending;
     const delivered = orders.filter(o => o.status === 'delivered').length;
-    const totalOrders = orders.length;
+    const totalOrders = detailed.transactions.total;
 
     const { todayStart } = getWIBDateRange();
-    const todayOrders = orders.filter(o => o.created_at && o.created_at >= todayStart);
-    const todayDelivered = todayOrders.filter(o => o.status === 'delivered');
-    const todayRevenue = todayDelivered.reduce((sum, o) => sum + (o.total_idr || 0), 0);
+    const todayOrders = orders.filter(o => o.created_at && o.created_at >= todayStart && !['init', 'processing'].includes(o.status));
+    const todayRevenue = detailed.income.today.total;
     const todayOrderCount = todayOrders.length;
     const todayNewUsers = Object.values(users).filter(u => u.created_at && u.created_at >= todayStart).length;
 
-    const totalRevenue = orders.filter(o => o.status === 'delivered').reduce((sum, o) => sum + (o.total_idr || 0), 0);
+    const totalRevenue = detailed.income.all_time.total;
     const totalUsers = Object.keys(users).length;
 
     const activeProducts = products.filter(p => p.active !== false);
@@ -98,7 +98,8 @@ const registerAdminHandler = (bot) => {
     bot.use(async (tgCtx, next) => {
         if (!tgCtx.callbackQuery || !isAdmin(tgCtx.from?.id)) return next();
         const data = String(tgCtx.callbackQuery.data || '');
-        const keepsWizard = /^adm_fs_(?:type|duration|dur|limit|confirm)_/.test(data);
+        const keepsWizard = /^adm_fs_(?:type|duration|dur|limit|confirm)_/.test(data)
+            || /^adm_bc_flash_send_/.test(data);
         if (!keepsWizard) adminStates.clearFor(tgCtx);
         return next();
     });
@@ -122,6 +123,18 @@ const registerAdminHandler = (bot) => {
         if (!isAdmin(tgCtx.from.id)) return;
         await tgCtx.answerCbQuery('🔄 Refreshed!');
         await showDashboard(tgCtx, true);
+    });
+
+    // ==================== COMPACT HUBS ====================
+    bot.action('adm_catalog', async (tgCtx) => {
+        if (!isAdmin(tgCtx.from.id)) return;
+        await tgCtx.answerCbQuery();
+        await tgCtx.editMessageText('📦 *Produk & Kategori*\n\nPilih area yang ingin dikelola:', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[Markup.button.callback('📁 Kategori', 'adm_cat'), Markup.button.callback('📦 Produk', 'adm_prod')], ...navButtons('admin_home')] } });
+    });
+    bot.action('adm_users_balance', async (tgCtx) => {
+        if (!isAdmin(tgCtx.from.id)) return;
+        await tgCtx.answerCbQuery();
+        await tgCtx.editMessageText('👥 *Users & Saldo*\n\nPilih area yang ingin dikelola:', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[Markup.button.callback('👥 Users', 'adm_users'), Markup.button.callback('💰 Saldo', 'adm_saldo')], ...navButtons('admin_home')] } });
     });
 
     // ==================== STATS MODULE ====================
