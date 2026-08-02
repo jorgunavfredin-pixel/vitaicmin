@@ -48,7 +48,7 @@ Total: Rp ${formatIDR(inc.today.total)}
 • QRIS: Rp ${formatIDR(inc.today.qris)}
 • Saldo: Rp ${formatIDR(inc.today.saldo)}
 
-🗓 *MINGGU INI*
+🗓 *7 HARI TERAKHIR*
 Total: Rp ${formatIDR(inc.week.total)}
 • QRIS: Rp ${formatIDR(inc.week.qris)}
 • Saldo: Rp ${formatIDR(inc.week.saldo)}

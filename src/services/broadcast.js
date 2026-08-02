@@ -30,7 +30,11 @@ const startBroadcastJob = ({ telegram, users, label, send }) => {
     job.status='done'; job.finishedAt=Date.now();
     const cleanup = setTimeout(() => jobs.delete(id), TTL_MS);
     cleanup.unref?.();
-  })().catch(e=>{job.status='error';job.error=e.message;});
+  })().catch(e => {
+    job.status = 'error'; job.error = e.message; job.finishedAt = Date.now();
+    const cleanup = setTimeout(() => jobs.delete(id), TTL_MS);
+    cleanup.unref?.();
+  });
   return job;
 };
 const getBroadcastJob = id => jobs.get(id) || null;

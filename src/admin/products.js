@@ -933,7 +933,7 @@ Kirim data stok (bisa multi-line):`, {
         if (!isAdmin(ctx.from.id)) return;
         await ctx.answerCbQuery();
 
-        const orders = db.getOrders().filter(o => o.status === 'delivered');
+        const orders = db.getOrders().filter(o => ['paid', 'delivered'].includes(o.status) && o.product_id !== 'TOPUP');
         const products = db.getProducts();
 
         const salesMap = {};
@@ -962,7 +962,8 @@ Kirim data stok (bisa multi-line):`, {
 
         const lowStock = products.filter(p => {
             if (p.active === false) return false;
-            const available = db.getStockByProduct(p.id).length;
+            if (p.stock_mode === 'unlimited') return false;
+            const available = db.getAvailableStockCount(p.id);
             return available < 3;
         });
 
@@ -972,7 +973,7 @@ Kirim data stok (bisa multi-line):`, {
             msg += `  ✅ Semua produk stok aman\n`;
         } else {
             lowStock.forEach(p => {
-                const available = db.getStockByProduct(p.id).length;
+                const available = db.getAvailableStockCount(p.id);
                 const icon = available === 0 ? '🔴' : '🟡';
                 msg += `${icon} ${p.name_id} — ${available} tersisa\n`;
             });

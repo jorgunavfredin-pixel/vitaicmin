@@ -40,11 +40,15 @@ const resolveTargets = (target, categoryId) => {
 };
 
 // Decode "data:image/...;base64,XXXX" -> Buffer, atau null kalau bukan data URL valid.
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const dataUrlToBuffer = (dataUrl) => {
     if (!dataUrl || typeof dataUrl !== 'string') return null;
-    const m = dataUrl.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+    const m = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
     if (!m) return null;
-    try { return Buffer.from(m[1], 'base64'); } catch (e) { return null; }
+    try {
+        const buffer = Buffer.from(m[2], 'base64');
+        return buffer.length > 0 && buffer.length <= MAX_PHOTO_BYTES ? buffer : null;
+    } catch (e) { return null; }
 };
 
 // Jalankan broadcast di background (non-blocking).
