@@ -512,6 +512,18 @@ const getAvailableStockCount = (productId) => {
   return r.cnt;
 };
 
+const getStockSummary = (productId) => {
+  const row = db.prepare(`SELECT
+    SUM(CASE WHEN sold = 0 AND reserved_by IS NULL THEN 1 ELSE 0 END) AS ready,
+    SUM(CASE WHEN sold = 0 AND reserved_by IS NOT NULL THEN 1 ELSE 0 END) AS reserved,
+    SUM(CASE WHEN sold = 1 THEN 1 ELSE 0 END) AS sold
+    FROM stock WHERE product_id = ?`).get(productId);
+  return { ready: Number(row?.ready) || 0, reserved: Number(row?.reserved) || 0, sold: Number(row?.sold) || 0 };
+};
+
+const emitStockChange = (productId, reason, count = 0) =>
+  dbEvents.emit('product_change', { productId, reason, count });
+
 // Deliverable stock for fallback path (saldo/unlimited): unsold AND not reserved by any pending order
 const getUnsoldUnreservedStock = (productId) => {
   return db.prepare('SELECT * FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NULL').all(productId);
@@ -559,6 +571,7 @@ const addStock = (productId, stockData) => {
   const id = `stk_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
   const added_at = new Date().toISOString();
   db.prepare('INSERT INTO stock (id, product_id, data, sold, added_at) VALUES (?, ?, ?, 0, ?)').run(id, productId, stockData, added_at);
+  emitStockChange(productId, 'stock_add', 1);
   return { id, product_id: productId, data: stockData, sold: false, sold_to: null, sold_at: null, order_id: null, added_at };
 };
 
@@ -574,6 +587,7 @@ const addBulkStock = (productId, stockDataArray) => {
     });
   });
   bulk();
+  if (items.length) emitStockChange(productId, 'stock_add_bulk', items.length);
   return items;
 };
 
@@ -595,21 +609,27 @@ const restoreStock = (stockIds) => {
 };
 
 const deleteStock = (stockId) => {
-  db.prepare('DELETE FROM stock WHERE id = ?').run(stockId);
-  return true;
+  const item = db.prepare('SELECT product_id FROM stock WHERE id = ? AND sold = 0 AND reserved_by IS NULL').get(stockId);
+  if (!item) return false;
+  const result = db.prepare('DELETE FROM stock WHERE id = ? AND sold = 0 AND reserved_by IS NULL').run(stockId);
+  if (result.changes) emitStockChange(item.product_id, 'stock_delete', result.changes);
+  return result.changes === 1;
 };
 
 const clearProductStock = (productId) => {
-  db.prepare('DELETE FROM stock WHERE product_id = ? AND sold = 0').run(productId);
-  return true;
+  const before = getStockSummary(productId);
+  const result = db.prepare('DELETE FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NULL').run(productId);
+  if (result.changes) emitStockChange(productId, 'stock_clear_ready', result.changes);
+  return { removed: result.changes, reserved: before.reserved };
 };
 
 const removeLastStock = (productId, count) => {
-  const items = db.prepare('SELECT id FROM stock WHERE product_id = ? AND sold = 0 ORDER BY added_at DESC LIMIT ?').all(productId, count);
+  const items = db.prepare('SELECT id FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NULL ORDER BY added_at DESC LIMIT ?').all(productId, count);
   if (items.length === 0) return 0;
   const ids = items.map(i => i.id);
   const placeholders = ids.map(() => '?').join(',');
   db.prepare(`DELETE FROM stock WHERE id IN (${placeholders})`).run(...ids);
+  emitStockChange(productId, 'stock_remove_last', ids.length);
   return ids.length;
 };
 
@@ -1357,7 +1377,7 @@ module.exports = {
   // Products
   getProducts, getProductsByCategory, getProductById, addProduct, updateProduct, deleteProduct, mergeLegacyWarrantyTerms,
   // Stock
-  getStock, getStockByProduct, getAvailableStockCount, getUnsoldUnreservedStock, addStock, addBulkStock, markStockAsSold, restoreStock, deleteStock, clearProductStock, removeLastStock, reserveStock, releaseReservedStock, getReservedStock,
+  getStock, getStockByProduct, getAvailableStockCount, getStockSummary, getUnsoldUnreservedStock, addStock, addBulkStock, markStockAsSold, restoreStock, deleteStock, clearProductStock, removeLastStock, reserveStock, releaseReservedStock, getReservedStock,
   // Orders
   getOrders, getOrderById, getOrdersByUser, getPendingOrders, getPendingQRISOrders, getActiveTopupOrderByUser, recoverStaleQrisProcessing, generateOrderId, createOrder, updateOrder, deleteOrder, claimOrderForPayment, claimOrderForDelivery, releaseOrderDeliveryClaim, claimOrderForExpiry, releaseOrderExpiryClaim, recoverPaymentClaims, completeTopupOrder, completeProductOrder,
   // Users

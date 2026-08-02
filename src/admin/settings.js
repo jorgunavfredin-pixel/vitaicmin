@@ -74,25 +74,21 @@ function registerSettingsHandlers(bot, { isAdmin }) {
 
         try {
             const dbDir = path.join(__dirname, '..', 'database');
-            const dbFile = path.join(dbDir, 'store.db');
             const timestamp = getWIBToday();
             const backupName = `backup_${timestamp}.db`;
-            const backupPath = path.join(dbDir, backupName);
+            const backupPath = path.join(dbDir, `chatbackup_${Date.now()}.db`);
 
-            // Flush WAL data to main DB file before copying
-            const Database = require('better-sqlite3');
-            const liveDb = new Database(dbFile);
-            liveDb.pragma('wal_checkpoint(TRUNCATE)');
-            liveDb.close();
-
-            fs.copyFileSync(dbFile, backupPath);
-
-            await ctx.replyWithDocument(
-                { source: backupPath, filename: backupName },
-                { caption: `💾 *Database Backup*\n📅 ${timestamp}\n📦 SQLite (store.db)`, parse_mode: 'Markdown' }
-            );
-
-            try { fs.unlinkSync(backupPath); } catch (e) { /* ignore */ }
+            // Gunakan SQLite online backup yang sama dengan admin web agar snapshot
+            // konsisten tanpa checkpoint/TRUNCATE pada database yang sedang aktif.
+            await db.backupDatabase(backupPath);
+            try {
+                await ctx.replyWithDocument(
+                    { source: backupPath, filename: backupName },
+                    { caption: `💾 *Database Backup*\n📅 ${timestamp}\n📦 SQLite snapshot`, parse_mode: 'Markdown' }
+                );
+            } finally {
+                try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch (e) { /* ignore */ }
+            }
 
         } catch (error) {
             console.error('Backup error:', error);

@@ -376,7 +376,6 @@ const addStockRoute = (req, res) => {
 
     const added = db.addBulkStock(id, lines);
     const total = db.getAvailableStockCount(id);
-    db.dbEvents?.emit('product_change', { type: 'stock_added', productId: id, added: added.length, total });
     res.json({ ok: true, message: `${added.length} item stok ditambahkan`, added: added.length, total });
 };
 
@@ -389,10 +388,10 @@ const deleteStockRoute = (req, res) => {
     const item = db.getStock().find(s => s.id === stockId && s.product_id === id);
     if (!item) return res.status(404).json({ error: 'Item stok tidak ditemukan' });
     if (item.sold) return res.status(400).json({ error: 'Tidak bisa hapus stok yang sudah terjual' });
+    if (item.reserved_by) return res.status(409).json({ error: 'Stok sedang direservasi order aktif dan tidak dapat dihapus' });
 
-    db.deleteStock(stockId);
+    if (!db.deleteStock(stockId)) return res.status(409).json({ error: 'Stok tidak lagi tersedia untuk dihapus' });
     const total = db.getAvailableStockCount(id);
-    db.dbEvents?.emit('product_change', { type: 'stock_deleted', productId: id, total });
     res.json({ ok: true, message: 'Item stok dihapus', total });
 };
 
@@ -407,7 +406,6 @@ const removeLastStockRoute = (req, res) => {
 
     const removed = db.removeLastStock(id, count);
     const total = db.getAvailableStockCount(id);
-    db.dbEvents?.emit('product_change', { type: 'stock_removed', productId: id, removed, total });
     res.json({ ok: true, message: `${removed} item stok terakhir dihapus`, removed, total });
 };
 
@@ -424,21 +422,22 @@ const removeStockByDataRoute = (req, res) => {
     lines = lines.map(l => String(l).trim()).filter(Boolean);
     if (lines.length === 0) return res.status(400).json({ error: 'Tidak ada data untuk dihapus' });
 
-    const stock = db.getStock().filter(s => s.product_id === id && !s.sold);
+    const stock = db.getUnsoldUnreservedStock(id);
     let deleted = 0;
     const notFound = [];
     for (const line of lines) {
         const match = stock.find(s => s.data === line);
         if (match) {
-            db.deleteStock(match.id);
-            deleted++;
-            stock.splice(stock.indexOf(match), 1);
+            if (db.deleteStock(match.id)) {
+                deleted++;
+                stock.splice(stock.indexOf(match), 1);
+            }
         } else {
             notFound.push(line);
         }
     }
     const total = db.getAvailableStockCount(id);
-    db.dbEvents?.emit('product_change', { type: 'stock_removed', productId: id, removed: deleted, total });
+
     res.json({
         ok: true,
         message: `${deleted} dari ${lines.length} item dihapus`,
@@ -454,10 +453,14 @@ const clearStockRoute = (req, res) => {
     const prod = db.getProductById(id);
     if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
 
-    const before = db.getAvailableStockCount(id);
-    db.clearProductStock(id);
-    db.dbEvents?.emit('product_change', { type: 'stock_cleared', productId: id, total: 0 });
-    res.json({ ok: true, message: `Semua stok tersedia dihapus (${before} item)`, total: 0 });
+    const result = db.clearProductStock(id);
+    res.json({
+        ok: true,
+        message: `${result.removed} stok ready dihapus; ${result.reserved} reserved dilindungi`,
+        removed: result.removed,
+        reserved: result.reserved,
+        total: db.getAvailableStockCount(id)
+    });
 };
 
 const registerProductRoutes = (api) => {

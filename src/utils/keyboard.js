@@ -146,7 +146,7 @@ const productListKeyboard = (products, categoryId, page = 1, perPage = 5) => {
 
 const productViewKeyboard = (productId, categoryId, product = null) => {
     const buttons = [
-        [Markup.button.callback('🧰 Kelola Stok', `adm_stock_prod_${productId}`)],
+        [Markup.button.callback('🧰 Kelola Stok', `adm_stock_prod_${productId}_pv`)],
         [
             Markup.button.callback('📝 Edit Nama', `adm_prod_edit_name_${productId}`),
             Markup.button.callback('💸 Edit Harga', `adm_prod_edit_price_${productId}`)
@@ -191,7 +191,7 @@ const productStockTypeKeyboard = (productId) => {
 
 // ==================== STOK ====================
 
-const stockManageKeyboard = (productId) => {
+const stockManageKeyboard = (productId, backCallback = `adm_prod_view_${productId}`) => {
     return Markup.inlineKeyboard([
         [Markup.button.callback('➕ Add Stock', `adm_stock_add_${productId}`)],
         [Markup.button.callback('📁 Import File (.txt)', `adm_stock_import_${productId}`)],
@@ -199,15 +199,14 @@ const stockManageKeyboard = (productId) => {
             Markup.button.callback('📋 Lihat Stock', `adm_stock_view_${productId}`),
             Markup.button.callback('🗑 Remove', `adm_stock_remove_${productId}`)
         ],
-        [Markup.button.callback('🧹 Clear All', `adm_stock_clear_${productId}`)],
-        ...navButtons(`adm_prod_view_${productId}`)
+        [Markup.button.callback('🧹 Clear All Ready', `adm_stock_clear_${productId}`)],
+        ...navButtons(backCallback)
     ]);
 };
 
 const stockRemoveKeyboard = (productId) => {
     return Markup.inlineKeyboard([
-        [Markup.button.callback('🔢 By Count (hapus X terakhir)', `adm_stock_rm_count_${productId}`)],
-        [Markup.button.callback('🔎 By Search (cari & hapus)', `adm_stock_rm_search_${productId}`)],
+        [Markup.button.callback('⌕ Hapus Berdasarkan Data', `adm_stock_rm_search_${productId}`)],
         ...navButtons(`adm_stock_prod_${productId}`)
     ]);
 };

@@ -24,7 +24,7 @@ const { adminDashboardKeyboard, navButtons, cancelButton } = require('../utils/k
 
 // Sub-module imports
 const { registerVoucherHandlers, handleCreateVoucher } = require('./vouchers');
-const { registerProductHandlers, handleAddCategory, handleEditCatName, handleAddProduct, handleEditProduct, handleAddStock, handleRemoveStockCount, handleRemoveStockSearch, handleFlashSaleInput } = require('./products');
+const { registerProductHandlers, handleAddCategory, handleEditCatName, handleAddProduct, handleEditProduct, handleAddStock, handleRemoveStockSearch, handleFlashSaleInput } = require('./products');
 const { registerOrderHandlers } = require('./orders');
 const { registerUserHandlers, handleSearchUser } = require('./users');
 const { registerBroadcastHandlers, handleBroadcast, handleBroadcastCategory } = require('./broadcast');
@@ -183,9 +183,6 @@ const registerAdminHandler = (bot) => {
                 case 'add_stock':
                 case 'import_stock':
                     await handleAddStock(tgCtx, state, text, adminStates);
-                    break;
-                case 'rm_stock_count':
-                    await handleRemoveStockCount(tgCtx, state, text, adminStates);
                     break;
                 case 'rm_stock_search':
                     await handleRemoveStockSearch(tgCtx, state, text, adminStates);

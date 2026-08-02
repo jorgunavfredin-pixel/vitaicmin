@@ -33,6 +33,9 @@ const sortByNameId = (items) => [...items].sort((a, b) =>
     String(a.name_id || '').localeCompare(String(b.name_id || ''), 'id', { sensitivity: 'base', numeric: true })
 );
 
+const stockBackContext = new Map();
+const stockContextKey = (ctx, prodId) => `${ctx.from.id}:${ctx.chat?.id ?? ''}:${prodId}`;
+
 const renderProductSummary = (prod) => {
     const stock = db.getAvailableStockCount(prod.id);
     const status = prod.active !== false ? '✅ Aktif' : '⏸ Nonaktif';
@@ -495,12 +498,11 @@ ${prod.terms_id || '-'}`;
         if (!isAdmin(ctx.from.id)) return;
         await ctx.answerCbQuery();
 
-        const categories = db.getCategories();
+        const categories = sortByNameId(db.getCategories());
         const buttons = categories.map(cat => {
-            const emoji = cat.emoji || '📦';
             const products = db.getProductsByCategory(cat.id);
             const totalStock = products.reduce((sum, p) => sum + db.getAvailableStockCount(p.id), 0);
-            return [Markup.button.callback(`${emoji} ${cat.name_id} [${totalStock} stok]`, `adm_stock_cat_${cat.id}`)];
+            return [Markup.button.callback(`📁 ${cat.name_id} [${totalStock} ready]`, `adm_stock_cat_${cat.id}`)];
         });
         buttons.push(...navButtons('admin_home'));
 
@@ -516,12 +518,15 @@ ${prod.terms_id || '-'}`;
         await ctx.answerCbQuery();
 
         const cat = db.getCategories().find(c => c.id === catId);
-        const products = db.getProductsByCategory(catId);
+        if (!cat) {
+            await ctx.editMessageText('❌ Kategori tidak ditemukan.', { reply_markup: { inline_keyboard: navButtons('adm_stock') } });
+            return;
+        }
+        const products = sortByNameId(db.getProductsByCategory(catId));
 
         const buttons = products.map(p => {
-            const stock = db.getAvailableStockCount(p.id);
-            const mode = p.stock_mode === 'unlimited' ? '♾' : stock;
-            return [Markup.button.callback(`${p.name_id} [${mode}]`, `adm_stock_prod_${p.id}`)];
+            const summary = db.getStockSummary(p.id);
+            return [Markup.button.callback(`${p.name_id} [${summary.ready} ready]`, `adm_stock_prod_${p.id}_sc`)];
         });
         buttons.push(...navButtons('adm_stock'));
 
@@ -531,22 +536,29 @@ ${prod.terms_id || '-'}`;
         });
     });
 
-    bot.action(/^adm_stock_prod_(.+)$/, async (ctx) => {
+    bot.action(/^adm_stock_prod_(.+?)(?:_(sc|pv))?$/, async (ctx) => {
         if (!isAdmin(ctx.from.id)) return;
         const prodId = ctx.match[1];
+        const origin = ctx.match[2];
         await ctx.answerCbQuery();
 
         const prod = db.getProductById(prodId);
-        const stock = db.getAvailableStockCount(prodId);
-        const soldToday = db.getStockSoldToday ? db.getStockSoldToday(prodId) : 0;
+        if (!prod) {
+            await ctx.editMessageText('❌ Produk tidak ditemukan.', { reply_markup: { inline_keyboard: navButtons('adm_stock') } });
+            return;
+        }
+        const summary = db.getStockSummary(prodId);
+        const contextKey = stockContextKey(ctx, prodId);
+        if (origin === 'sc') stockBackContext.set(contextKey, `adm_stock_cat_${prod.category_id}`);
+        else if (origin === 'pv') stockBackContext.set(contextKey, `adm_prod_view_${prodId}`);
+        const backCallback = stockBackContext.get(contextKey) || `adm_prod_view_${prodId}`;
 
-        await ctx.editMessageText(`🧾 *Stok: ${prod.name_id}*
-
-📦 Stock tersedia: ${prod.stock_mode === 'unlimited' ? '♾ Unlimited' : stock}
-📦 Terjual hari ini: ${soldToday}
-📝 Mode: ${prod.stock_mode || 'stocked'}`, {
-            parse_mode: 'Markdown',
-            ...stockManageKeyboard(prodId)
+        await ctx.editMessageText(`<blockquote>🧰 <b>Stok: ${escapeHtml(prod.name_id)}</b></blockquote>
+📦 <b>Ready:</b> ${summary.ready}
+⏳ <b>Reserved:</b> ${summary.reserved}
+✅ <b>Terjual:</b> ${summary.sold}`, {
+            parse_mode: 'HTML',
+            ...stockManageKeyboard(prodId, backCallback)
         });
     });
 
@@ -612,7 +624,7 @@ Kirim data stok (bisa multi-line):`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        const stock = db.getStockByProduct(prodId);
+        const stock = db.getUnsoldUnreservedStock(prodId);
 
         if (stock.length === 0) {
             await ctx.editMessageText('📦 Tidak ada stok tersedia.', {
@@ -670,19 +682,6 @@ Kirim data stok (bisa multi-line):`, {
         });
     });
 
-    // Remove by count
-    bot.action(/^adm_stock_rm_count_(.+)$/, async (ctx) => {
-        if (!isAdmin(ctx.from.id)) return;
-        const prodId = ctx.match[1];
-        await ctx.answerCbQuery();
-
-        adminStates.setFor(ctx, { action: 'rm_stock_count', prodId });
-
-        await ctx.editMessageText('💳 *Remove by Count*\n\nKirim jumlah stok yang mau dihapus (dari yang terakhir):', {
-            parse_mode: 'Markdown',
-            reply_markup: { inline_keyboard: cancelButton() }
-        });
-    });
 
     // Remove by search
     bot.action(/^adm_stock_rm_search_(.+)$/, async (ctx) => {
@@ -704,10 +703,10 @@ Kirim data stok (bisa multi-line):`, {
         const prodId = ctx.match[1];
         await ctx.answerCbQuery();
 
-        const stock = db.getStockByProduct(prodId);
+        const summary = db.getStockSummary(prodId);
 
-        await ctx.editMessageText(`⚠️ *Hapus SEMUA stok?*\n\nTotal: ${stock.length} item\n\nAksi ini tidak bisa dibatalkan!`, {
-            parse_mode: 'Markdown',
+        await ctx.editMessageText(`<blockquote>⚠️ <b>Clear All Ready?</b></blockquote>\nStok ready yang akan dihapus: <b>${summary.ready}</b>\nStok reserved yang dilindungi: <b>${summary.reserved}</b>\n\nAksi ini tidak bisa dibatalkan.`, {
+            parse_mode: 'HTML',
             ...stockClearConfirmKeyboard(prodId)
         });
     });
@@ -716,11 +715,11 @@ Kirim data stok (bisa multi-line):`, {
         if (!isAdmin(ctx.from.id)) return;
         const prodId = ctx.match[1];
 
-        db.clearProductStock(prodId);
-        await ctx.answerCbQuery('✅ Semua stok dihapus');
+        const result = db.clearProductStock(prodId);
+        await ctx.answerCbQuery(`✅ ${result.removed} stok ready dihapus`);
 
-        await ctx.editMessageText('✅ Semua stok berhasil dihapus!', {
-            parse_mode: 'Markdown',
+        await ctx.editMessageText(`<blockquote>✅ <b>Clear All Ready selesai</b></blockquote>\nStok ready dihapus: <b>${result.removed}</b>\nStok reserved dilindungi: <b>${result.reserved}</b>`, {
+            parse_mode: 'HTML',
             reply_markup: { inline_keyboard: navButtons(`adm_stock_prod_${prodId}`) }
         });
     });
@@ -1250,20 +1249,6 @@ async function handleAddStock(ctx, state, text, adminStates) {
     });
 }
 
-async function handleRemoveStockCount(ctx, state, text, adminStates) {
-    const count = parseInt(text);
-    if (isNaN(count) || count < 1) {
-        await ctx.reply('❌ Kirim angka yang valid.');
-        return;
-    }
-
-    const removed = db.removeLastStock(state.prodId, count);
-    adminStates.delete(ctx.from.id.toString());
-
-    await ctx.reply(`✅ ${removed} item dihapus!`, {
-        reply_markup: { inline_keyboard: navButtons(`adm_stock_prod_${state.prodId}`) }
-    });
-}
 
 async function handleRemoveStockSearch(ctx, state, text, adminStates) {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l);
@@ -1272,7 +1257,7 @@ async function handleRemoveStockSearch(ctx, state, text, adminStates) {
         return;
     }
 
-    const stock = db.getStockByProduct(state.prodId);
+    const stock = db.getUnsoldUnreservedStock(state.prodId);
     let deleted = 0;
     const notFound = [];
 
@@ -1420,7 +1405,7 @@ module.exports = {
     handleAddProduct,
     handleEditProduct,
     handleAddStock,
-    handleRemoveStockCount,
+
     handleRemoveStockSearch,
     handleFlashSaleInput
 };
