@@ -57,10 +57,10 @@ test('shared saldo mewajibkan note dan menolak overdraft untuk web/chat', () => 
 const {adjustUserBalance}=require('./src/services/adminBalance');
 const add=adjustUserBalance({userId:'U',action:'add',amount:100,note:'bonus',actorId:'A',channel:'telegram'}); let overdraft='',empty='';
 try{adjustUserBalance({userId:'U',action:'deduct',amount:101,note:'x',actorId:'A',channel:'web'})}catch(e){overdraft=e.message}
-try{adjustUserBalance({userId:'U',action:'set',amount:0,note:'',actorId:'A',channel:'web'})}catch(e){empty=e.message}
-const h=require('./src/payments/balance').getBalanceHistory('U',1)[0]; console.log(JSON.stringify({balance:add.balance,overdraft,empty,note:h.note}));`);
-  assert.equal(r.balance,100); assert.equal(r.overdraft,'Saldo tidak cukup'); assert.equal(r.empty,'Catatan wajib diisi');
-  assert.equal(r.note,'[telegram:A] bonus');
+const emptyResult=adjustUserBalance({userId:'U',action:'set',amount:0,note:'',actorId:'A',channel:'web'});
+const h=require('./src/payments/balance').getBalanceHistory('U',1)[0]; console.log(JSON.stringify({balance:add.balance,overdraft,emptyBalance:emptyResult.balance,note:h.note}));`);
+  assert.equal(r.balance,100); assert.equal(r.overdraft,'Saldo tidak cukup'); assert.equal(r.emptyBalance,0);
+  assert.equal(r.note,'[admin]');
 });
 
 test('chat/web memakai shared order service, hard delete chat hilang, CSV aman', () => {
@@ -78,9 +78,12 @@ test('chat/web memakai shared order service, hard delete chat hilang, CSV aman',
 test('chat saldo meminta catatan dan web memakai shared adjustment',()=>{
  const panel=fs.readFileSync(path.join(__dirname,'../src/admin/panel.js'),'utf8');
  const users=fs.readFileSync(path.join(__dirname,'../src/web/routes/users.js'),'utf8');
- assert.match(panel,/case 'saldo_note'/); assert.match(panel,/Kirim catatan\/alasan/);
+ assert.match(panel,/case 'saldo_note'/); assert.match(panel,/catatan penyesuaian saldo \(opsional\)/);
  assert.match(users,/adjustUserBalance/); assert.doesNotMatch(users,/Math\.max\(0, cur - amount\)/);
  const ui=fs.readFileSync(path.join(__dirname,'../admin-web/src/pages/Users.jsx'),'utf8');
- assert.match(ui,/Catatan \(wajib\)/); assert.match(ui,/if \(insufficient\)/);
- assert.doesNotMatch(ui,/Catatan \(opsional\)|Math\.max\(0, user\.balance - amt\)/);
+ assert.match(ui,/Catatan \(opsional\)/); assert.match(ui,/if \(insufficient\)/);
+ assert.doesNotMatch(ui,/Catatan \(wajib\)|Math\.max\(0, user\.balance - amt\)/);
+ const buyer=fs.readFileSync(path.join(__dirname,'../src/handlers/keyboard.js'),'utf8');
+ assert.match(buyer,/if \(isAdminAdjustment\)[^\n]*\[admin\]/);
+ assert.match(buyer,/telegram:\|web:/);
 });

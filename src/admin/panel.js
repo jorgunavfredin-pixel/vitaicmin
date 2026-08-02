@@ -237,15 +237,14 @@ const registerAdminHandler = (bot) => {
                     state.balanceAction = state.action.replace('saldo_', '');
                     state.action = 'saldo_note';
                     adminStates.setFor(tgCtx, state);
-                    await tgCtx.reply('📝 Kirim catatan/alasan penyesuaian saldo:');
+                    await tgCtx.reply('📝 Kirim catatan penyesuaian saldo (opsional).\nKirim <code>-</code> untuk lewati.', { parse_mode: 'HTML' });
                     break;
                 }
                 case 'saldo_note': {
-                    const note = text.trim();
-                    if (!note) { await tgCtx.reply('❌ Catatan wajib diisi.'); break; }
+                    const note = text.trim() === '-' ? '' : text.trim();
                     const result = adjustUserBalance({ userId: state.targetUserId, action: state.balanceAction, amount: state.amount, note, actorId: tgCtx.from.id, channel: 'telegram' });
                     adminStates.delete(tgCtx.from.id.toString());
-                    await tgCtx.reply(`✅ Saldo berhasil diperbarui!\n\n👤 User: \`${state.targetUserId}\`\n💵 Saldo baru: Rp ${formatIDR(result.balance)}\n📝 ${note}`, {
+                    await tgCtx.reply(`✅ Saldo berhasil diperbarui!\n\n👤 User: \`${state.targetUserId}\`\n💵 Saldo baru: Rp ${formatIDR(result.balance)}${note ? `\n📝 ${note}` : ''}`, {
                         parse_mode: 'Markdown',
                         reply_markup: { inline_keyboard: [[Markup.button.callback('👤 Lihat User', `adm_saldo_user_${state.targetUserId}`)], ...navButtons('adm_saldo')] }
                     });

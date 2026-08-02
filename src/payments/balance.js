@@ -50,6 +50,8 @@ migrateBalancesFromJSON();
 
 // ==================== BALANCE OPERATIONS ====================
 
+const newBalanceHistoryId = () => `bal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
 /**
  * Get user balance
  * @param {string} userId
@@ -81,7 +83,7 @@ const addBalance = (userId, amount, method = 'qris', note = '', orderId = null) 
         db.prepare('UPDATE balances SET balance = balance + ? WHERE user_id = ?').run(amount, userId);
 
         const newBalance = getBalance(userId);
-        const id = `bal_${Date.now()}`;
+        const id = newBalanceHistoryId();
         db.prepare('INSERT INTO balance_history (id, user_id, type, amount, method, order_id, note, balance_after, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, 'topup', amount, method, orderId, note || `Topup via ${method.toUpperCase()}`, newBalance, new Date().toISOString());
 
         return { balance: newBalance, history: getBalanceData(userId).history };
@@ -99,7 +101,7 @@ const deductBalance = (userId, amount, orderId = '', note = '') => {
     const deduct = db.transaction(() => {
         db.prepare('UPDATE balances SET balance = balance - ? WHERE user_id = ?').run(amount, userId);
         const newBalance = getBalance(userId);
-        const id = `bal_${Date.now()}`;
+        const id = newBalanceHistoryId();
         db.prepare('INSERT INTO balance_history (id, user_id, type, amount, method, order_id, note, balance_after, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, 'deduct', -amount, null, orderId, note || `Pembelian #${orderId}`, newBalance, new Date().toISOString());
 
         return { balance: newBalance, history: getBalanceData(userId).history };
@@ -117,7 +119,7 @@ const setBalance = (userId, newBalance, note = 'Admin adjustment') => {
         const diff = newBalance - oldBalance;
         db.prepare('UPDATE balances SET balance = ? WHERE user_id = ?').run(newBalance, userId);
 
-        const id = `bal_${Date.now()}`;
+        const id = newBalanceHistoryId();
         db.prepare('INSERT INTO balance_history (id, user_id, type, amount, method, order_id, note, balance_after, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, diff >= 0 ? 'admin_add' : 'admin_deduct', diff, 'admin', null, note, newBalance, new Date().toISOString());
 
         return { balance: newBalance, history: getBalanceData(userId).history };

@@ -356,7 +356,7 @@ function BalanceModal({ user, onClose, toast, onDone }) {
   const submit = async () => {
     if (amt < 0 || (action !== 'set' && amt <= 0)) return toast('Nominal tidak valid', 'err');
     if (insufficient) return toast('Saldo tidak cukup', 'err');
-    if (!note.trim()) return toast('Catatan wajib diisi', 'err');
+
     setBusy(true);
     try {
       const r = await adjustUserBalance(user.id, action, amt, note);
@@ -391,8 +391,8 @@ function BalanceModal({ user, onClose, toast, onDone }) {
         <label className="field-label">Nominal (IDR)</label>
         <input type="number" min="0" className="qty-field" placeholder="cth: 50000" value={amount} onChange={(e) => setAmount(e.target.value)} />
 
-        <label className="field-label" style={{ marginTop: 12 }}>Catatan (wajib)</label>
-        <input type="text" className="qty-field" required placeholder="cth: bonus event / koreksi" value={note} onChange={(e) => setNote(e.target.value)} />
+        <label className="field-label" style={{ marginTop: 12 }}>Catatan (opsional)</label>
+        <input type="text" className="qty-field" placeholder="cth: bonus event / koreksi" value={note} onChange={(e) => setNote(e.target.value)} />
 
         <div className="balance-preview">
           Saldo setelah perubahan: <b style={{ color: insufficient ? '#ff6b6b' : '#37d399' }}>{rupiah(preview)}</b>

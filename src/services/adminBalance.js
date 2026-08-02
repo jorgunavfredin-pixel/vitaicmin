@@ -7,10 +7,11 @@ const adjustUserBalance = ({ userId, action, amount, note, actorId = 'admin', ch
     const value = Number.parseInt(amount, 10);
     if (!Number.isInteger(value) || value < 0) throw Object.assign(new Error('Nominal tidak valid'), { status: 400 });
     const reason = String(note || '').trim();
-    if (!reason) throw Object.assign(new Error('Catatan wajib diisi'), { status: 400 });
     if (!['add', 'deduct', 'set'].includes(action)) throw Object.assign(new Error('Action tidak valid'), { status: 400 });
 
-    const auditNote = `[${channel}:${actorId}] ${reason}`;
+    // Identitas publik selalu generik [admin]; note opsional tetap tersedia untuk
+    // kebutuhan internal admin, tanpa membocorkan Telegram ID atau kanal asal.
+    const auditNote = `[admin]${reason ? ` ${reason}` : ''}`;
     let result;
     if (action === 'add') result = balance.addBalance(String(userId), value, 'admin', auditNote);
     else if (action === 'deduct') {

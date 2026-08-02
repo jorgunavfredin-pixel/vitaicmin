@@ -830,7 +830,12 @@ const registerKeyboardHandler = (bot) => {
             const absAmount = Math.abs(h.amount);
             const date = new Date(h.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
             msg += `\n${icon} Rp ${formatIDR(absAmount)} — ${date}`;
-            if (h.note) msg += `\n    <i>${escapeHtml(h.note)}</i>`;
+            // Jangan bocorkan kanal, Telegram ID, maupun alasan internal admin ke buyer.
+            const isAdminAdjustment = h.method === 'admin'
+                || String(h.type || '').startsWith('admin_')
+                || /^\[(?:admin|telegram:|web:)/i.test(String(h.note || ''));
+            if (isAdminAdjustment) msg += `\n    <i>[admin]</i>`;
+            else if (h.note) msg += `\n    <i>${escapeHtml(h.note)}</i>`;
         });
 
         msg += `\n\n💰 ${lang === 'en' ? 'Balance' : 'Saldo'}: ${balanceDisplay}`;
