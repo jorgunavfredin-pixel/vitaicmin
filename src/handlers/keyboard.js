@@ -340,88 +340,88 @@ const registerKeyboardHandler = (bot) => {
         await editBannerCaption(ctx, msg, keyboard);
     });
 
-    // Cek Stok — paginated (5 categories per page)
-    const STOCK_PER_PAGE = 5;
+    // Cek Stok — maksimal 10 kategori ready per halaman
+    const STOCK_PER_PAGE = 10;
 
-    /**
-     * Build stock data: returns array of category objects with their ready products
-     */
-    const buildStockData = () => {
-        const categories = db.getCategories().filter(c => c.active !== false);
+    /** Build stock data once: active products with available stock > 0, sorted A-Z. */
+    const buildStockData = (lang = 'id') => {
+        const categories = sortCategoriesAZ(db.getCategories().filter(c => c.active !== false), lang);
         const stockCategories = [];
         let totalProd = 0;
 
         for (const cat of categories) {
-            const products = db.getProductsByCategory(cat.id).filter(p => p.active !== false);
+            const products = db.getProductsByCategory(cat.id)
+                .filter(p => p.active !== false)
+                .map(product => ({ product, stock: db.getAvailableStockCount(product.id) }))
+                .filter(item => item.stock > 0)
+                .sort((a, b) => {
+                    const aName = String(lang === 'en'
+                        ? (a.product.name_en || a.product.name_id || '')
+                        : (a.product.name_id || a.product.name_en || ''));
+                    const bName = String(lang === 'en'
+                        ? (b.product.name_en || b.product.name_id || '')
+                        : (b.product.name_id || b.product.name_en || ''));
+                    return aName.localeCompare(bName, lang === 'en' ? 'en' : 'id', { sensitivity: 'base', numeric: true });
+                });
+
             if (products.length === 0) continue;
-
-            const readyProducts = products.filter(p => {
-                if (p.stock_mode === 'unlimited') return true;
-                return db.getAvailableStockCount(p.id) > 0;
-            });
-
-            if (readyProducts.length === 0) continue;
-
-            stockCategories.push({ cat, readyProducts });
-            totalProd += readyProducts.length;
+            stockCategories.push({ cat, products });
+            totalProd += products.length;
         }
 
         return { stockCategories, totalCat: stockCategories.length, totalProd };
     };
 
-    /**
-     * Build stock message for a specific page
-     */
-    const buildStockMsg = (stockCategories, totalCat, totalProd, page, lang) => {
+    /** Build stock message and conditional navigation for a specific page. */
+    const buildStockMsg = (stockCategories, totalCat, totalProd, requestedPage, lang, now = new Date()) => {
         const totalPages = Math.max(1, Math.ceil(stockCategories.length / STOCK_PER_PAGE));
-        const start = page * STOCK_PER_PAGE;
-        const pageItems = stockCategories.slice(start, start + STOCK_PER_PAGE);
+        const page = Math.min(Math.max(Number(requestedPage) || 0, 0), totalPages - 1);
+        const pageItems = stockCategories.slice(page * STOCK_PER_PAGE, (page + 1) * STOCK_PER_PAGE);
+        const dateStr = now.toLocaleString('id-ID', {
+            timeZone: 'Asia/Jakarta', day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', hour12: false
+        }).replace(',', ' •').replace(':', '.');
 
-        const now = new Date();
-        const dateStr = now.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const title = lang === 'en' ? 'Stock Status' : 'Status Stok';
+        const summary = lang === 'en'
+            ? `${totalCat} Categories • ${totalProd} Products Ready`
+            : `${totalCat} Kategori • ${totalProd} Produk Ready`;
+        let msg = `<blockquote>📦 <b>${title}</b>\n${summary}</blockquote>\n`;
 
-        const header = lang === 'en' ? '📦 <b>Stock Status</b>' : '📦 <b>Status Stok</b>';
-        const timeLabel = 'Update';
-        const summaryLabel = lang === 'en'
-            ? `📊 <b>Total: ${totalCat} Category • ${totalProd} Products Ready</b>`
-            : `📊 <b>Total: ${totalCat} Kategori • ${totalProd} Produk Ready</b>`;
-
-        let msg = `${header}\n🕐 <i>${timeLabel}: ${dateStr}</i>\n`;
-
-        for (const { cat, readyProducts } of pageItems) {
-            const catName = escapeHtml(lang === 'en' ? cat.name_en : cat.name_id);
-            msg += `\n<b>${catName}</b>\n`;
-            for (const prod of readyProducts) {
-                const stock = prod.stock_mode === 'unlimited' ? '♾' : db.getAvailableStockCount(prod.id);
-                const name = escapeHtml(lang === 'en' ? prod.name_en : prod.name_id);
-                const unit = stock === '♾' ? '' : ' pcs';
-                msg += `↳  ${name}: ${stock}${unit}\n`;
+        for (const { cat, products } of pageItems) {
+            const rawCatName = lang === 'en' ? (cat.name_en || cat.name_id || '-') : (cat.name_id || cat.name_en || '-');
+            msg += `\n<b>${escapeHtml(rawCatName)}</b>\n`;
+            for (const { product, stock } of products) {
+                const rawName = lang === 'en'
+                    ? (product.name_en || product.name_id || '-')
+                    : (product.name_id || product.name_en || '-');
+                msg += `└ ${escapeHtml(rawName)} · ${formatIDR(stock)} pcs\n`;
             }
         }
 
-        msg += `━━━━━━━━━━━━━\n${summaryLabel}`;
-        if (totalPages > 1) {
-            const dots = Array.from({ length: totalPages }, (_, i) => i === page ? '●' : '○').join(' ');
-            msg += `\n${dots}`;
-        }
+        const updated = lang === 'en' ? 'Updated' : 'Diperbarui';
+        msg += `\n<blockquote>⟲ ${updated} ${dateStr} WIB</blockquote>`;
 
-        // Buttons
         const navRow = [];
-        if (page > 0) navRow.push(Markup.button.callback('👈 Prev', `stock_page_${page - 1}`));
-        navRow.push(Markup.button.callback('⟳ Refresh', 'stock_refresh'));
-        if (page < totalPages - 1) navRow.push(Markup.button.callback('Next 👉', `stock_page_${page + 1}`));
+        if (page > 0) navRow.push(Markup.button.callback(lang === 'en' ? '‹ Previous' : '‹ Sebelumnya', `stock_page_${page - 1}`));
+        const refreshLabel = totalPages > 1 ? `⟲ Refresh (${page + 1}/${totalPages})` : '⟲ Refresh';
+        navRow.push(Markup.button.callback(refreshLabel, `stock_refresh_${page}`));
+        if (page < totalPages - 1) navRow.push(Markup.button.callback(lang === 'en' ? 'Next ›' : 'Selanjutnya ›', `stock_page_${page + 1}`));
 
-        const buttons = [navRow, [Markup.button.callback(lang === 'en' ? '✘ Close' : '✘ Tutup', 'stock_close')]];
-
-        return { msg, buttons };
+        const backLabel = lang === 'en' ? '⌂ Back to Categories' : '⌂ Kembali ke Kategori';
+        return {
+            msg,
+            buttons: [navRow, [Markup.button.callback(backLabel, 'stock_back_categories')]],
+            page,
+            totalPages
+        };
     };
 
     bot.hears(['▤ Cek Stok', '▤ Check Stock', '📦 Cek Stok', '📦 Check Stock'], async (ctx) => {
         clearTopupState(ctx);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
-
-        const { stockCategories, totalCat, totalProd } = buildStockData();
+        const { stockCategories, totalCat, totalProd } = buildStockData(lang);
 
         if (totalProd === 0) {
             const empty = lang === 'en' ? '📦 All products are currently out of stock.' : '📦 Semua produk sedang kosong.';
@@ -433,37 +433,53 @@ const registerKeyboardHandler = (bot) => {
         await ctx.reply(msg, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
     });
 
-    // Stock page navigation
     bot.action(/^stock_page_(\d+)$/, async (ctx) => {
-        const page = parseInt(ctx.match[1]);
+        const requestedPage = Number(ctx.match[1]);
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
-
-        const { stockCategories, totalCat, totalProd } = buildStockData();
-        const { msg, buttons } = buildStockMsg(stockCategories, totalCat, totalProd, page, lang);
+        const { stockCategories, totalCat, totalProd } = buildStockData(lang);
+        const { msg, buttons } = buildStockMsg(stockCategories, totalCat, totalProd, requestedPage, lang);
 
         await ctx.answerCbQuery();
         await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
     });
 
-    // Stock refresh
-    bot.action('stock_refresh', async (ctx) => {
+    const refreshStockPage = async (ctx, requestedPage) => {
         const userId = ctx.from.id.toString();
         const lang = db.getUserLanguage(userId);
+        const { stockCategories, totalCat, totalProd } = buildStockData(lang);
+        const { msg, buttons } = buildStockMsg(stockCategories, totalCat, totalProd, requestedPage, lang);
 
-        const { stockCategories, totalCat, totalProd } = buildStockData();
-        const { msg, buttons } = buildStockMsg(stockCategories, totalCat, totalProd, 0, lang);
-
-        await ctx.answerCbQuery('⟳ Refresh');
+        await ctx.answerCbQuery('⟲ Refresh');
         try {
             await ctx.editMessageText(msg, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
         } catch (e) { /* message unchanged */ }
+    };
+
+    bot.action(/^stock_refresh_(\d+)$/, async (ctx) => {
+        await refreshStockPage(ctx, Number(ctx.match[1]));
     });
 
-    // Stock close
-    bot.action('stock_close', async (ctx) => {
+    // Compatibility for stock messages sent by the previous renderer.
+    bot.action('stock_refresh', async (ctx) => {
+        await refreshStockPage(ctx, 0);
+    });
+
+    // Keep the stock message; send the normal category builder as a new chat (banner-aware).
+    bot.action('stock_back_categories', async (ctx) => {
+        const userId = ctx.from.id.toString();
+        const lang = db.getUserLanguage(userId);
+        const categories = db.getCategories().filter(c => c.active !== false);
+
         await ctx.answerCbQuery();
-        try { await ctx.deleteMessage(); } catch (e) { }
+        if (categories.length === 0) {
+            await ctx.reply(lang === 'en' ? 'No categories available.' : 'Belum ada kategori.');
+            return;
+        }
+
+        const msg = generateCategoryListMsg(categories, 0, lang);
+        const keyboard = generateCategoryButtons(categories, 0, lang);
+        await replyWithBanner(ctx, msg, keyboard);
     });
 
     // Riwayat Transaksi
