@@ -307,10 +307,11 @@ const entitiesToHtml = (text, entities) => {
         const start = entity.offset;
         const end = entity.offset + entity.length;
         if (entity.type === 'text_link') {
-            entityList.push({ start, end, open: `<a href="${entity.url}">`, close: '</a>' });
-        } else if (entity.type === 'custom_emoji') {
+            const url = require('./telegramHtml').safeUrl(entity.url);
+            if (url) entityList.push({ start, end, open: `<a href="${escapeHtml(url).replace(/&quot;/g, '&quot;')}">`, close: '</a>' });
+        } else if (entity.type === 'custom_emoji' && /^\d+$/.test(String(entity.custom_emoji_id || ''))) {
             entityList.push({ start, end, open: `<tg-emoji emoji-id="${entity.custom_emoji_id}">`, close: '</tg-emoji>' });
-        } else if (entity.type === 'pre' && entity.language) {
+        } else if (entity.type === 'pre' && /^[a-z0-9_+-]+$/i.test(String(entity.language || ''))) {
             entityList.push({ start, end, open: `<pre><code class="language-${entity.language}">`, close: '</code></pre>' });
         } else if (tagMap[entity.type]) {
             entityList.push({ start, end, open: tagMap[entity.type][0], close: tagMap[entity.type][1] });
@@ -353,11 +354,9 @@ const entitiesToHtml = (text, entities) => {
  */
 const safeHtmlSnk = (text, isHtml) => {
     if (!text) return '-';
-    // Explicitly marked as HTML (saved via entitiesToHtml)
-    if (isHtml) return text;
-    // Auto-detect HTML tags from legacy data (old products without terms_format)
-    if (/<(b|i|u|s|a|code|pre)>/.test(text)) return text;
-    // Plain text — escape for HTML mode
+    if (isHtml || /<(b|i|u|s|a|code|pre|blockquote)\b/i.test(text)) {
+        return require('./telegramHtml').sanitizeTelegramHtml(text);
+    }
     return escapeHtml(text);
 };
 

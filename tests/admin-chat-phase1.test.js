@@ -46,7 +46,7 @@ test('kategori dan produk diurutkan A-Z dengan back hierarchy yang benar', () =>
   const prodRows = productListKeyboard(products, 'cat1').reply_markup.inline_keyboard;
   assert.deepEqual(prodRows.filter(row => row[0]?.callback_data?.startsWith('adm_prod_view_')).map(row => row[0].text), ['✅ Apple | 2 stok', '✅ Zulu | 1 stok']);
   assert.equal(prodRows.flat().some(b => b.callback_data?.startsWith('adm_prod_search_')), false);
-  assert.equal(prodRows.at(-1)[0].callback_data, 'adm_prod');
+  assert.equal(prodRows.at(-1)[0].callback_data, 'adm_prod_cat_cat1');
 });
 
 test('kategori tidak lagi menawarkan emoji, toggle, search, atau hapus beserta produk', () => {

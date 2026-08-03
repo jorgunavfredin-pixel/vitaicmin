@@ -17,15 +17,7 @@ const cancelButton = () => {
     return [[Markup.button.callback('✘ Batal', 'admin_cancel')]];
 };
 
-// Confirmation buttons
-const confirmButtons = (yesCallback, noCallback = 'admin_cancel') => {
-    return [[
-        Markup.button.callback('✅ Ya, Lanjut', yesCallback),
-        Markup.button.callback('✘ Batal', noCallback)
-    ]];
-};
 
-// ==================== DASHBOARD ====================
 
 const adminDashboardKeyboard = () => Markup.inlineKeyboard([
     [Markup.button.callback('📦 Produk & Kategori', 'adm_catalog'), Markup.button.callback('🧰 Stok', 'adm_stock')],
@@ -60,7 +52,7 @@ const categoryListKeyboard = (categories, page = 1, perPage = 5) => {
 
     buttons.push([Markup.button.callback('➕ Tambah Kategori', 'adm_cat_add')]);
 
-    buttons.push(...navButtons('admin_home'));
+    buttons.push(...navButtons('adm_catalog'));
     return Markup.inlineKeyboard(buttons);
 };
 
@@ -116,7 +108,7 @@ const productListKeyboard = (products, categoryId, page = 1, perPage = 5) => {
 
     buttons.push([Markup.button.callback('➕ Tambah Produk', `adm_prod_add_${categoryId}`)]);
 
-    buttons.push(...navButtons('adm_prod'));
+    buttons.push(...navButtons(`adm_prod_cat_${categoryId}`));
     return Markup.inlineKeyboard(buttons);
 };
 
@@ -270,7 +262,7 @@ const usersKeyboard = () => {
         [Markup.button.callback('📊 Statistik User', 'adm_users_stats')],
         [Markup.button.callback('🔎 Cari User', 'adm_users_search')],
         [Markup.button.callback('🚫 Banned Users', 'adm_users_banned')],
-        ...navButtons('admin_home')
+        ...navButtons('adm_users_balance')
     ]);
 };
 
@@ -606,7 +598,6 @@ module.exports = {
     settingsKeyboard,
     navButtons,
     cancelButton,
-    confirmButtons,
     // User
     languageKeyboard,
     mainMenuKeyboard,

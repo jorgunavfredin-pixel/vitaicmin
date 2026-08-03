@@ -169,7 +169,7 @@ export default function Broadcast() {
             <div className="bc-bubble">
               <div className="bc-bubble-header">{showHeader}</div>
               {(showBody.trim() || !showPhotoUrl) && (
-                <div className="bc-bubble-body" dangerouslySetInnerHTML={{ __html: showBody || '<span style="opacity:.5">(pesan kosong)</span>' }} />
+                <div className="bc-bubble-body" style={{ whiteSpace: 'pre-wrap' }}>{showBody || '(pesan kosong)'}</div>
               )}
             </div>
           </div>

@@ -48,7 +48,7 @@ function registerSaldoHandlers(bot, { isAdmin, adminStates }) {
         }
 
         buttons.push([Markup.button.callback('🔎 Cari User by ID', 'adm_saldo_search')]);
-        buttons.push([Markup.button.callback('◀️ Kembali', 'admin_home')]);
+        buttons.push([Markup.button.callback('‹ Kembali', 'adm_users_balance')]);
 
         await ctx.editMessageText(msg, {
             parse_mode: 'Markdown',
@@ -167,12 +167,6 @@ function registerSaldoHandlers(bot, { isAdmin, adminStates }) {
             reply_markup: { inline_keyboard: [[Markup.button.callback('❌ Batal', `adm_saldo_user_${targetUserId}`)]] }
         });
     });
-}
-
-// Input handlers for saldo operations
-function handleSaldoInput(ctx, state, text) {
-    // This is handled inline in panel.js text handler since it needs balance module
-    // Kept as placeholder — actual logic moved to panel.js switch cases
 }
 
 module.exports = { registerSaldoHandlers };

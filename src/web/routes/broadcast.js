@@ -12,6 +12,7 @@
  */
 const db = require('../../models/db');
 const { resolveTargets: sharedResolveTargets, startBroadcastJob, getBroadcastJob } = require('../../services/broadcast');
+const { sanitizeTelegramHtml } = require('../../utils/telegramHtml');
 
 const BROADCAST_DELAY_MS = 50;      // ~20 msg/sec, aman dari rate limit Telegram
 const DEFAULT_HEADER = '📢 BROADCAST MESSAGE';
@@ -58,7 +59,7 @@ const runBroadcast = async (bot, jobId, userIds, { header, body, photoBuffer }) 
 
     const headerText = (header && header.trim()) ? header.trim() : DEFAULT_HEADER;
     // Header di-bold (HTML), lalu body apa adanya (frontend sudah kirim HTML valid).
-    const fullText = `<b>${escapeHtmlText(headerText)}</b>\n\n${body || ''}`.trim();
+    const fullText = `<b>${escapeHtmlText(headerText)}</b>\n\n${sanitizeTelegramHtml(body || '')}`.trim();
 
     job.status = 'running';
 
@@ -135,7 +136,7 @@ const startBroadcast = (bot) => (req, res) => {
         const headerText = (header && header.trim()) ? header.trim() : DEFAULT_HEADER;
         const fullText = `<b>${escapeHtmlText(headerText)}</b>
 
-${body || ''}`.trim();
+${sanitizeTelegramHtml(body || '')}`.trim();
         const job = startBroadcastJob({
             telegram: bot.telegram, users: r.users, label: r.label,
             send: (telegram, uid) => photoBuffer

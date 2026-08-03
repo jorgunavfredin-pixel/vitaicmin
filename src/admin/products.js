@@ -254,7 +254,7 @@ ${products.length > 0 ? `◼ Kategori ini punya ${products.length} produk.` : 'K
             const prodCount = db.getProductsByCategory(cat.id).length;
             return [Markup.button.callback(`📁 ${cat.name_id} (${prodCount})`, `adm_prod_cat_${cat.id}`)];
         });
-        buttons.push(...navButtons('admin_home'));
+        buttons.push(...navButtons('adm_catalog'));
 
         await ctx.editMessageText('📦 *Kelola Produk*\n\nPilih kategori:', {
             parse_mode: 'Markdown',
@@ -453,33 +453,6 @@ ${products.length > 0 ? `◼ Kategori ini punya ${products.length} produk.` : 'K
         await ctx.editMessageText(message, {
             parse_mode: 'Markdown',
             reply_markup: { inline_keyboard: navButtons(`adm_prod_cat_${catId}`) }
-        });
-    });
-
-    // Preview product
-    bot.action(/^adm_prod_preview_(.+)$/, async (ctx) => {
-        if (!isAdmin(ctx.from.id)) return;
-        const prodId = ctx.match[1];
-        await ctx.answerCbQuery();
-
-        const prod = db.getProductById(prodId);
-        const stock = db.getAvailableStockCount(prodId);
-
-        const preview = `👤 *PREVIEW (tampilan user)*
-
-⚙️ *${prod.name_id}*
-
-📌 ${prod.description_id || 'Tidak ada deskripsi'}
-
-💰 Harga: Rp ${formatIDR(prod.price_idr)}
-📦 Stok: ${prod.stock_mode === 'unlimited' ? 'Tersedia' : stock}
-
-📜 *S&K:*
-${prod.terms_id || '-'}`;
-
-        await ctx.editMessageText(preview, {
-            parse_mode: 'Markdown',
-            reply_markup: { inline_keyboard: navButtons(`adm_prod_view_${prodId}`) }
         });
     });
 
@@ -983,7 +956,7 @@ Kirim data stok (bisa multi-line):`, {
             parse_mode: 'Markdown',
             reply_markup: {
                 inline_keyboard: [
-                    ...navButtons('admin_home')
+                    ...navButtons('adm_stats_menu')
                 ]
             }
         });
