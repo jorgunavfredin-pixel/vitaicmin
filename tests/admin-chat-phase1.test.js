@@ -46,7 +46,7 @@ test('kategori dan produk diurutkan A-Z dengan back hierarchy yang benar', () =>
   const prodRows = productListKeyboard(products, 'cat1').reply_markup.inline_keyboard;
   assert.deepEqual(prodRows.filter(row => row[0]?.callback_data?.startsWith('adm_prod_view_')).map(row => row[0].text), ['✅ Apple | 2 stok', '✅ Zulu | 1 stok']);
   assert.equal(prodRows.flat().some(b => b.callback_data?.startsWith('adm_prod_search_')), false);
-  assert.equal(prodRows.at(-1)[0].callback_data, 'adm_prod_cat_cat1');
+  assert.equal(prodRows.at(-1)[0].callback_data, 'adm_cat_view_cat1');
 });
 
 test('kategori tidak lagi menawarkan emoji, toggle, search, atau hapus beserta produk', () => {
@@ -76,4 +76,14 @@ test('admin submenu yang disentuh memakai HTML escaping untuk data dinamis', () 
   assert.match(source, /<blockquote>📁 <b>\$\{escapeHtml\(cat\.name_id/);
   assert.match(source, /const renderProductSummary/);
   assert.match(source, /parse_mode: 'HTML'/);
+});
+
+test('Back hierarchy admin chat mengikuti parent (tidak self-loop)', () => {
+  const { productListKeyboard, productViewKeyboard } = require('../src/utils/keyboard');
+  const products = [{ id: 'p1', name_id: 'Apple', active: true, stockCount: 1 }];
+  const listRows = productListKeyboard(products, 'cat1').reply_markup.inline_keyboard.flat();
+  assert.equal(listRows.at(-2).callback_data, 'adm_cat_view_cat1'); // Back daftar produk → view kategori
+
+  const viewRows = productViewKeyboard('p1', 'cat1', { id: 'p1', name_id: 'Apple' }).reply_markup.inline_keyboard.flat();
+  assert.equal(viewRows.at(-2).callback_data, 'adm_cat_view_cat1'); // Back product view → view kategori
 });

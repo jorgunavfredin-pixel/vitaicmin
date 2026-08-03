@@ -108,7 +108,8 @@ const productListKeyboard = (products, categoryId, page = 1, perPage = 5) => {
 
     buttons.push([Markup.button.callback('➕ Tambah Produk', `adm_prod_add_${categoryId}`)]);
 
-    buttons.push(...navButtons(`adm_prod_cat_${categoryId}`));
+    // Back ke View Kategori (bukan self-loop ke daftar produk yang sama).
+    buttons.push(...navButtons(`adm_cat_view_${categoryId}`));
     return Markup.inlineKeyboard(buttons);
 };
 
@@ -139,7 +140,8 @@ const productViewKeyboard = (productId, categoryId, product = null) => {
     }
 
     buttons.push([Markup.button.callback('🗑 Delete Produk', `adm_prod_del_${productId}`)]);
-    buttons.push(...navButtons(`adm_prod_cat_${categoryId}`));
+    // Back ke View Kategori (parent) — konsisten dengan daftar produk.
+    buttons.push(...navButtons(`adm_cat_view_${categoryId}`));
     return Markup.inlineKeyboard(buttons);
 };
 
