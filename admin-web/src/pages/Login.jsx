@@ -54,8 +54,9 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <div className="login-glow" />
+      <div className="login-glow login-glow--b" />
       <form className="login-card" onSubmit={mode === 'login' ? submitLogin : submitReset}>
-        <div className="login-logo"><Icon name={mode === 'login' ? 'flash' : 'shield'} size={28} stroke={2.2} /></div>
+        <div className="login-logo"><Icon name={mode === 'login' ? 'flash' : 'shield'} size={26} stroke={2.2} /></div>
         <h1 className="login-title">{mode === 'login' ? 'Store Admin' : 'Reset Password'}</h1>
         <p className="login-sub">{mode === 'login'
           ? 'Masuk untuk mengelola toko kamu'
