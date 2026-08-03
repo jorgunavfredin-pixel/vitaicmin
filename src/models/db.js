@@ -285,6 +285,17 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_vhold_expiry ON voucher_holds(expires_at);
 
+  CREATE TABLE IF NOT EXISTS access_requests (
+    user_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'pending',
+    first_name TEXT,
+    username TEXT,
+    requested_at TEXT NOT NULL,
+    decided_at TEXT,
+    decided_by TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_access_requests_status ON access_requests(status);
+
   CREATE TABLE IF NOT EXISTS payment_gateways (
     id TEXT PRIMARY KEY,
     provider TEXT,
@@ -1448,6 +1459,25 @@ const purgeOldSoldStock = (daysOld = 60) => {
   return result.changes;
 };
 
+// ==================== ACCESS GATE ====================
+const getAccessRequest = (userId) => db.prepare('SELECT * FROM access_requests WHERE user_id = ?').get(String(userId)) || null;
+const requestAccess = (user) => {
+  const userId = String(user.id || user.user_id);
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO access_requests(user_id,status,first_name,username,requested_at,decided_at,decided_by)
+    VALUES(?,?,?,?,?,NULL,NULL)
+    ON CONFLICT(user_id) DO UPDATE SET first_name=excluded.first_name,username=excluded.username,
+      requested_at=CASE WHEN access_requests.status='rejected' THEN excluded.requested_at ELSE access_requests.requested_at END,
+      status=CASE WHEN access_requests.status='rejected' THEN 'pending' ELSE access_requests.status END`).run(userId, 'pending', user.first_name || null, user.username || null, now);
+  return getAccessRequest(userId);
+};
+const decideAccess = (userId, status, adminId) => {
+  if (!['approved', 'rejected'].includes(status)) return null;
+  const result = db.prepare(`UPDATE access_requests SET status=?,decided_at=?,decided_by=? WHERE user_id=?`)
+    .run(status, new Date().toISOString(), String(adminId), String(userId));
+  return result.changes ? getAccessRequest(userId) : null;
+};
+
 // ==================== EXPORTS ====================
 module.exports = {
   // Raw db instance (for balance.js to reuse)
@@ -1462,6 +1492,8 @@ module.exports = {
   getOrders, getOrderById, getOrdersByUser, getPendingOrders, getPendingQRISOrders, getActiveTopupOrderByUser, recoverStaleQrisProcessing, generateOrderId, createOrder, updateOrder, deleteOrder, claimOrderForPayment, claimOrderForDelivery, releaseOrderDeliveryClaim, claimOrderForExpiry, releaseOrderExpiryClaim, recoverPaymentClaims, completeTopupOrder, completeProductOrder,
   // Users
   getUsers, getUser, createOrUpdateUser, setUserLanguage, getUserLanguage,
+  // Access Gate
+  getAccessRequest, requestAccess, decideAccess,
   // Stats
   getStats, getDetailedStats, getTopSpenders, getSoldQtyByProduct, getSoldQtyByProducts,
   // Vouchers

@@ -5,6 +5,7 @@ const { Telegraf, session } = require('telegraf');
 const express = require('express');
 const log = require('./utils/logger');
 const { privateChatOnly } = require('./utils/buyerSecurity');
+const { accessGateMiddleware, registerAccessGateHandlers } = require('./handlers/accessGate');
 
 // Import handlers
 const { registerStartHandler } = require('./handlers/start');
@@ -102,6 +103,8 @@ bot.use(async (ctx, next) => {
 
 // Buyer transactions and delivered credentials are private-chat only.
 bot.use(privateChatOnly);
+// Deployment-controlled buyer access gate. Empty/off = zero external checks.
+bot.use(accessGateMiddleware);
 
 // Auto-cleanup rate limit map every 5 minutes
 setInterval(() => {
@@ -116,6 +119,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // Register all handlers
+registerAccessGateHandlers(bot);
 registerStartHandler(bot);
 registerKeyboardHandler(bot); // Reply keyboard handlers (hears)
 registerMenuHandler(bot);
