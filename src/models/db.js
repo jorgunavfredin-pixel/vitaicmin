@@ -1081,10 +1081,25 @@ const useVoucher = (code, userId) => {
 const deleteVoucherSafely = db.transaction((voucherId) => {
   const voucher = db.prepare('SELECT * FROM vouchers WHERE id = ?').get(voucherId);
   if (!voucher) return { ok: false, reason: 'not_found' };
-  const redemptions = db.prepare('SELECT COUNT(*) AS n FROM voucher_redemptions WHERE UPPER(voucher_code) = UPPER(?)').get(voucher.code).n;
-  const holds = db.prepare('SELECT COUNT(*) AS n FROM voucher_holds WHERE UPPER(voucher_code) = UPPER(?)').get(voucher.code).n;
-  const activeOrders = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE UPPER(voucher_code) = UPPER(?) AND status IN ('init','pending','processing','processing_delivery','paid')").get(voucher.code).n;
-  if (redemptions || holds || activeOrders) return { ok: false, reason: 'in_use', redemptions, holds, activeOrders };
+
+  const code = String(voucher.code).toUpperCase();
+
+  // Histori redemption order yang sudah selesai DIPERTAHANKAN (riwayat transaksi).
+  // Admin bebas menghapus voucher kapan saja; referensi diskon sudah tersimpan
+  // permanen di order (original_total_idr / discount_amount).
+
+  // Bersihkan hold voucher yang belum menjadi redemption (order masih draft/pending).
+  db.prepare('DELETE FROM voucher_holds WHERE UPPER(voucher_code) = ?').run(code);
+
+  // Lepas voucher dari order yang masih DRAFT (belum dibayar) supaya tidak nyantol
+  // kode mati saat buyer lanjut checkout. Order yang sudah dibayar/delivered tetap
+  // mempertahankan kode + diskonnya sebagai riwayat.
+  db.prepare(`UPDATE orders
+    SET voucher_code = NULL, discount_amount = 0,
+        total_idr = COALESCE(original_total_idr, total_idr),
+        total_usd = COALESCE(original_total_usd, total_usd)
+    WHERE UPPER(COALESCE(voucher_code,'')) = ? AND status IN ('init','pending','processing','processing_delivery')`).run(code);
+
   db.prepare('DELETE FROM vouchers WHERE id = ?').run(voucherId);
   return { ok: true, deleted: true, voucher };
 });
