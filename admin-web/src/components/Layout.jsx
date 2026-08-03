@@ -147,7 +147,7 @@ export default function Layout() {
 
       <div className="main">
         <header className="topbar">
-          <button className="hamburger" onClick={() => setOpen((v) => !v)} aria-label="Menu"><Icon name="menu" size={22} /></button>
+          <button className="hamburger" onClick={() => setOpen((v) => !v)} aria-label="Menu" aria-expanded={open}><Icon name="menu" size={22} /></button>
           <div className="topbar-title">{current.label}</div>
           <div className="topbar-right">
             <span className="dot" /> Online

@@ -1349,3 +1349,55 @@ input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
 @media (max-width: 720px) {
   .grid-2, .dash-grid { grid-template-columns: 1fr; }
 }
+
+
+/* ============ MOBILE SHELL — FASE 1 ============ */
+@media (max-width: 720px) {
+  html, body, #root, .app { min-height: 100dvh; }
+  body { overscroll-behavior-y: none; }
+  button, a, input, select, textarea { touch-action: manipulation; }
+
+  .sidebar {
+    width: min(84vw, 304px); height: 100dvh;
+    padding: max(18px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom));
+    box-shadow: 18px 0 48px rgba(0,0,0,.42);
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  .brand { padding: 5px 8px 20px; }
+  .nav { gap: 6px; }
+  .nav-item { min-height: 46px; padding: 12px 13px; font-size: 15px; }
+  .logout { min-height: 46px; margin-top: 16px; }
+  .scrim { backdrop-filter: blur(2px); -webkit-tap-highlight-color: transparent; }
+
+  .topbar {
+    height: calc(58px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 14px 0;
+    gap: 10px; background: rgba(11,15,26,.92);
+  }
+  .hamburger {
+    width: 42px; height: 42px; padding: 0; display: grid; place-items: center;
+    border-radius: 12px; background: rgba(255,255,255,.045); border: 1px solid var(--border);
+  }
+  .hamburger:active { background: rgba(91,140,255,.16); }
+  .topbar-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+  .topbar-right { font-size: 12px; gap: 6px; }
+  .dot { width: 7px; height: 7px; }
+  .content { padding: 16px 14px calc(26px + env(safe-area-inset-bottom)); }
+
+  .page-head { margin-bottom: 2px; }
+  .page-head h1, .page-head h2 { font-size: clamp(20px, 6vw, 25px); line-height: 1.2; }
+  .page-head p { line-height: 1.5; }
+  .btn-primary, .btn-ghost, .a-btn, .ic-btn { min-height: 42px; }
+  .row-actions { gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+  .toast { max-width: calc(100vw - 28px); right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .order-notif, .bc-float { left: 14px; right: 14px; width: auto; max-width: none; bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .order-notif { max-height: min(60dvh, 420px); overflow-y: auto; }
+}
+
+@media (max-width: 390px) {
+  .topbar-right { font-size: 0; }
+  .topbar-right .dot { margin: 0; }
+  .content { padding-left: 12px; padding-right: 12px; }
+  .stat-grid { gap: 10px; }
+}
