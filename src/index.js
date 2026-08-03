@@ -157,6 +157,11 @@ setInterval(() => {
 
 // Global error handler — notify user in their language
 bot.catch(async (err, ctx) => {
+    const message = (err?.response?.description || err?.description || err?.message || '').toString();
+    // "message is not modified" = konten & reply markup identik dengan yang tampil.
+    // Ini hasil tombol Back idempotent (menu sudah di posisi itu) — bukan kegagalan nyata.
+    // Log saja, jangan notify user supaya tidak spam.
+    if (/message is not modified/i.test(message)) return;
     log.error(`[BOT] ${ctx.updateType}:`, err);
     try {
         const userId = ctx.from?.id?.toString();
