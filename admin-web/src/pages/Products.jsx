@@ -230,12 +230,12 @@ export default function Products() {
                   <tbody>
                     {productsData?.products.map((p) => (
                       <tr key={p.id}>
-                        <td>
+                        <td data-label="Produk">
                           <div style={{ fontWeight: 600, color: '#fff' }}>{p.name_id}</div>
                           <div style={{ fontSize: 12, color: '#8a93a6' }}>{p.name_en || '-'}</div>
                         </td>
-                        <td><span className="badge st-muted">{p.category_name_id}</span></td>
-                        <td>
+                        <td data-label="Kategori"><span className="badge st-muted">{p.category_name_id}</span></td>
+                        <td data-label="Harga">
                           {p.is_flash_active ? (
                             <div>
                               <span style={{ textDecoration: 'line-through', color: '#8a93a6', fontSize: 12, marginRight: 6 }}>{formatIDR(p.price_idr)}</span>
@@ -249,18 +249,18 @@ export default function Products() {
                             <div className="hint-icon" style={{ fontSize: 11, color: '#5b8cff', marginTop: 2 }}><Icon name="tag" size={12} /> {p.parsed_qty_discounts.length} tier bulk</div>
                           )}
                         </td>
-                        <td>
+                        <td data-label="Stok">
                           <StockPill count={p.available_stock} />
                           <div style={{ fontSize: 11, color: '#8a93a6', marginTop: 2 }}>{stockTypeLabel(p.stock_type)}</div>
                         </td>
-                        <td><b>{p.sold_stock || 0}</b> pcs</td>
-                        <td>
+                        <td data-label="Terjual (30h)"><b>{p.sold_stock || 0}</b> pcs</td>
+                        <td data-label="Status">
                           <button className={`badge badge-icon ${p.active ? 'st-delivered' : 'st-expired'}`} style={{ border: 'none', cursor: 'pointer' }}
                             onClick={() => handleToggleActive(p)} title="Klik untuk toggle status">
                             <Icon name={p.active ? 'check' : 'pause'} size={13} /> {p.active ? 'Aktif' : 'Paused'}
                           </button>
                         </td>
-                        <td style={{ textAlign: 'right' }}>
+                        <td data-label="Aksi" style={{ textAlign: 'right' }}>
                           <div className="row-actions">
                             <button className="ic-btn" onClick={() => setStockDrawerProd(p)} title="Kelola Stok"><Icon name="box" /></button>
                             <button className="ic-btn" onClick={() => setEditingProduct(p)} title="Edit Produk"><Icon name="edit" /></button>
@@ -295,11 +295,11 @@ export default function Products() {
                 ) : (
                   categories.map((c) => (
                     <tr key={c.id}>
-                      <td><b>{c.name_id}</b></td>
-                      <td>{c.name_en || '-'}</td>
-                      <td><b>{c.product_count}</b> produk</td>
-                      <td><span className="badge st-delivered">{c.active_product_count} aktif</span></td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td data-label="Nama (ID)"><b>{c.name_id}</b></td>
+                      <td data-label="Nama (EN)">{c.name_en || '-'}</td>
+                      <td data-label="Jumlah Produk"><b>{c.product_count}</b> produk</td>
+                      <td data-label="Produk Aktif"><span className="badge st-delivered">{c.active_product_count} aktif</span></td>
+                      <td data-label="Aksi" style={{ textAlign: 'right' }}>
                         <div className="row-actions">
                           <button className="ic-btn" onClick={() => setCategoryModal({ mode: 'edit', cat: c })} title="Edit"><Icon name="edit" /></button>
                           <button className="ic-btn ic-danger" onClick={() => setDeleteCatModal(c)} title="Hapus"><Icon name="trash" /></button>

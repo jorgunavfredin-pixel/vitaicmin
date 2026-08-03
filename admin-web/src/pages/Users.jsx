@@ -154,7 +154,7 @@ export default function Users() {
               <tbody>
                 {data?.users.map((u) => (
                   <tr key={u.id} className="row-click" onClick={() => setSelected(u.id)}>
-                    <td>
+                    <td data-label="User">
                       <div className="user-cell">
                         <span className="user-avatar">{initial(u)}</span>
                         <div className="user-cell-info">
@@ -163,12 +163,12 @@ export default function Users() {
                         </div>
                       </div>
                     </td>
-                    <td className="mono">{u.id}</td>
-                    <td>{u.balance > 0 ? <b style={{ color: '#37d399' }}>{rupiah(u.balance)}</b> : <span className="muted">—</span>}</td>
-                    <td>{u.orders_success > 0 ? <><b>{u.orders_success}</b> <span className="muted">sukses</span></> : <span className="muted">0</span>}</td>
-                    <td>{u.total_spend > 0 ? rupiah(u.total_spend) : <span className="muted">—</span>}</td>
-                    <td>{u.banned ? <span className="badge st-cancelled">Banned</span> : <span className="badge st-delivered">Aktif</span>}</td>
-                    <td>
+                    <td data-label="ID" className="mono">{u.id}</td>
+                    <td data-label="Saldo">{u.balance > 0 ? <b style={{ color: '#37d399' }}>{rupiah(u.balance)}</b> : <span className="muted">—</span>}</td>
+                    <td data-label="Order">{u.orders_success > 0 ? <><b>{u.orders_success}</b> <span className="muted">sukses</span></> : <span className="muted">0</span>}</td>
+                    <td data-label="Total Spend">{u.total_spend > 0 ? rupiah(u.total_spend) : <span className="muted">—</span>}</td>
+                    <td data-label="Status">{u.banned ? <span className="badge st-cancelled">Banned</span> : <span className="badge st-delivered">Aktif</span>}</td>
+                    <td data-label="Aksi">
                       <div className="stock-action-cell">
                         <button className="a-btn a-blue btn-icon" onClick={(e) => { e.stopPropagation(); setSelected(u.id); }}>
                           <Icon name="eye" size={14} /> Detail
@@ -314,10 +314,10 @@ function UserDrawer({ id, onClose, onChanged, toast }) {
                         const st = ORDER_STATUS[o.status] || { label: o.status, cls: 'st-muted' };
                         return (
                           <tr key={o.id}>
-                            <td className="mono" style={{ fontSize: 12 }}>{o.id}</td>
-                            <td className="ellip">{o.product}</td>
-                            <td>{rupiah(o.total_idr)}</td>
-                            <td><span className={`badge ${st.cls}`}>{st.label}</span></td>
+                            <td data-label="Order" className="mono" style={{ fontSize: 12 }}>{o.id}</td>
+                            <td data-label="Produk" className="ellip">{o.product}</td>
+                            <td data-label="Total">{rupiah(o.total_idr)}</td>
+                            <td data-label="Status"><span className={`badge ${st.cls}`}>{st.label}</span></td>
                           </tr>
                         );
                       })}

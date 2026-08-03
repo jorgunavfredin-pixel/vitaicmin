@@ -130,14 +130,14 @@ export default function Orders() {
                 ) : (
                   data?.orders.map((o) => (
                     <tr key={o.id} className="row-click" onClick={() => setSelected(o.id)}>
-                      <td className="mono">{o.id}</td>
-                      <td>{o.username ? '@' + o.username : (o.first_name || o.user_id)}</td>
-                      <td className="ellip">{o.product}</td>
-                      <td>{o.quantity}</td>
-                      <td>{rupiah(o.total_idr)}</td>
-                      <td className="up">{o.method || '-'}</td>
-                      <td>{badge(o.status)}</td>
-                      <td className="muted-cell">{fmtDate(o.created_at)}</td>
+                      <td data-label="Order ID" className="mono">{o.id}</td>
+                      <td data-label="User">{o.username ? '@' + o.username : (o.first_name || o.user_id)}</td>
+                      <td data-label="Produk" className="ellip">{o.product}</td>
+                      <td data-label="Qty">{o.quantity}</td>
+                      <td data-label="Total">{rupiah(o.total_idr)}</td>
+                      <td data-label="Metode" className="up">{o.method || '-'}</td>
+                      <td data-label="Status">{badge(o.status)}</td>
+                      <td data-label="Tanggal" className="muted-cell">{fmtDate(o.created_at)}</td>
                     </tr>
                   ))
                 )}

@@ -220,16 +220,16 @@ export default function Stock() {
                   <tbody>
                     {rows.map((p) => (
                       <tr key={p.id}>
-                        <td>
+                        <td data-label="Produk">
                           <div style={{ fontWeight: 600, color: '#fff' }}>{p.name_id}</div>
                           {!p.active && <span className="badge st-expired" style={{ fontSize: 11 }}>Nonaktif</span>}
                         </td>
-                        <td><span className="badge st-muted">{p.category_name}</span></td>
-                        <td style={{ fontSize: 12, color: '#8a93a6' }}>{stockTypeLabel(p.stock_type)}</td>
-                        <td><StatusPill status={p.stock_status} available={p.available} /></td>
-                        <td><b>{p.sold_30d}</b> <span className="muted">pcs</span></td>
-                        <td>{formatIDR(p.inventory_value)}</td>
-                        <td>
+                        <td data-label="Kategori"><span className="badge st-muted">{p.category_name}</span></td>
+                        <td data-label="Tipe" style={{ fontSize: 12, color: '#8a93a6' }}>{stockTypeLabel(p.stock_type)}</td>
+                        <td data-label="Tersedia"><StatusPill status={p.stock_status} available={p.available} /></td>
+                        <td data-label="Terjual (30h)"><b>{p.sold_30d}</b> <span className="muted">pcs</span></td>
+                        <td data-label="Nilai">{formatIDR(p.inventory_value)}</td>
+                        <td data-label="Aksi">
                           <div className="stock-action-cell">
                             <button className="a-btn a-green btn-icon" onClick={() => setDrawerProd(p)}>
                               <Icon name="box" size={14} /> Kelola
@@ -356,11 +356,11 @@ function ReservedModal({ prod, onClose }) {
               <tbody>
                 {data.items.map((it) => (
                   <tr key={it.order_id}>
-                    <td className="mono">{it.order_id}</td>
-                    <td>{it.username ? '@' + it.username : (it.first_name || it.user_id || '-')}</td>
-                    <td><b>{it.qty}</b></td>
-                    <td><span className="badge st-pending">{it.order_status}</span></td>
-                    <td className="muted-cell">{fmtDate(it.reserved_at)}</td>
+                    <td data-label="Order ID" className="mono">{it.order_id}</td>
+                    <td data-label="User">{it.username ? '@' + it.username : (it.first_name || it.user_id || '-')}</td>
+                    <td data-label="Qty"><b>{it.qty}</b></td>
+                    <td data-label="Status"><span className="badge st-pending">{it.order_status}</span></td>
+                    <td data-label="Direserve" className="muted-cell">{fmtDate(it.reserved_at)}</td>
                   </tr>
                 ))}
               </tbody>

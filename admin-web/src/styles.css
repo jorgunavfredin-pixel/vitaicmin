@@ -1293,21 +1293,22 @@ input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
 
 /* Tabel lebar → kartu di layar kecil (berlaku umum untuk .table) */
 @media (max-width: 640px) {
-  /* Hanya tabel dengan baris row-click (Orders/Users) yang jadi kartu */
-  .table-wrap:has(.row-click) { overflow: visible; }
-  .table-wrap:has(.row-click) .table { display: block; }
-  .table-wrap:has(.row-click) .table thead { display: none; }
-  .table-wrap:has(.row-click) .table tbody { display: block; }
-  .table-wrap:has(.row-click) .table tr { display: block; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; padding: 10px 12px; background: var(--panel); }
-  .table-wrap:has(.row-click) .table td {
+  /* Semua tabel yang selnya punya data-label → jadi kartu (label dari data-label) */
+  .table-wrap:has(td[data-label]) { overflow: visible; }
+  .table-wrap:has(td[data-label]) .table { display: block; }
+  .table-wrap:has(td[data-label]) .table thead { display: none; }
+  .table-wrap:has(td[data-label]) .table tbody { display: block; }
+  .table-wrap:has(td[data-label]) .table tr { display: block; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; padding: 10px 12px; background: var(--panel); }
+  .table-wrap:has(td[data-label]) .table td {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     padding: 8px 2px; white-space: normal; border-bottom: 1px dashed rgba(255,255,255,0.06);
     text-align: right; font-size: 13px;
   }
-  .table-wrap:has(.row-click) .table td:last-child { border-bottom: none; }
-  .table-wrap:has(.row-click) .table td::before { font-weight: 600; color: var(--muted); flex-shrink: 0; font-size: 12px; }
-  .table-wrap:has(.row-click) .table td .badge, .table-wrap:has(.row-click) .table td .mono { margin-left: auto; }
-  .table-wrap:has(.row-click) .table tr.row-click { cursor: pointer; }
+  .table-wrap:has(td[data-label]) .table td:last-child { border-bottom: none; }
+  .table-wrap:has(td[data-label]) .table td[data-label]::before {
+    content: attr(data-label); font-weight: 600; color: var(--muted); flex-shrink: 0; font-size: 12px;
+  }
+  .table-wrap:has(td[data-label]) .table td .badge, .table-wrap:has(td[data-label]) .table td .mono { margin-left: auto; }
 }
 
 /* Drawer & modal full-width di HP */

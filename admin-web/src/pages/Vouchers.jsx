@@ -101,20 +101,20 @@ export default function Vouchers() {
               <tbody>
                 {data?.vouchers.map((v) => (
                   <tr key={v.id}>
-                    <td><span className="voucher-code">{v.code}</span></td>
-                    <td>
+                    <td data-label="Kode"><span className="voucher-code">{v.code}</span></td>
+                    <td data-label="Tipe">
                       <span className={`badge ${v.type === 'percent' ? 'st-paid' : 'st-delivered'}`}>
                         {v.type === 'percent' ? 'Persen' : 'Potongan'}
                       </span>
                     </td>
-                    <td><b>{v.label}</b></td>
-                    <td>
+                    <td data-label="Nilai"><b>{v.label}</b></td>
+                    <td data-label="Dipakai">
                       {v.redemptions > 0
                         ? <><b>{v.redemptions}</b> <span className="muted">user</span></>
                         : <span className="muted">Belum dipakai</span>}
                     </td>
-                    <td className="muted-cell">{fmtDate(v.created_at)}</td>
-                    <td>
+                    <td data-label="Dibuat" className="muted-cell">{fmtDate(v.created_at)}</td>
+                    <td data-label="Aksi">
                       <div className="stock-action-cell">
                         <button className="a-btn a-red btn-icon" onClick={() => setConfirmDel(v)}>
                           <Icon name="trash" size={14} /> Hapus

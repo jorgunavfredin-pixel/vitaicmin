@@ -195,12 +195,12 @@ export default function Dashboard() {
                 const s = STATUS[o.status] || { label: o.status, cls: 'st-muted' };
                 return (
                   <tr key={o.id}>
-                    <td className="mono">{o.id}</td>
-                    <td>{o.product}</td>
-                    <td>{o.quantity}</td>
-                    <td>{rupiah(o.total_idr)}</td>
-                    <td className="up">{o.method || '-'}</td>
-                    <td><span className={`badge ${s.cls}`}>{s.label}</span></td>
+                    <td data-label="Order ID" className="mono">{o.id}</td>
+                    <td data-label="Produk">{o.product}</td>
+                    <td data-label="Qty">{o.quantity}</td>
+                    <td data-label="Total">{rupiah(o.total_idr)}</td>
+                    <td data-label="Metode" className="up">{o.method || '-'}</td>
+                    <td data-label="Status"><span className={`badge ${s.cls}`}>{s.label}</span></td>
                   </tr>
                 );
               })}
