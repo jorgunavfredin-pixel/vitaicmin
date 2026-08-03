@@ -162,7 +162,8 @@ const toggleBan = (req, res) => {
         if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
         const newBan = !user.banned;
-        db.createOrUpdateUser(id, { banned: newBan });
+        const updated = db.createOrUpdateUser(id, { banned: newBan });
+        db.dbEvents.emit('user_change', { type: 'ban_updated', user: updated });
         res.json({ ok: true, banned: newBan, message: newBan ? 'User di-ban' : 'User di-unban' });
     } catch (e) {
         res.status(500).json({ error: e.message });

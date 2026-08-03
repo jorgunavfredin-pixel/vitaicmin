@@ -13,7 +13,7 @@ const { redeliverOrder, replaceOrderAccount, refundOrder } = require('../service
 const {
     ordersListKeyboard,
     orderDetailKeyboard,
-    orderDeleteConfirmKeyboard,
+
     orderRefundConfirmKeyboard,
     orderReplaceConfirmKeyboard,
     navButtons

@@ -49,6 +49,11 @@ export default function Settings() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const refresh = () => load();
+    window.addEventListener('settings_updated', refresh);
+    return () => window.removeEventListener('settings_updated', refresh);
+  }, [load]);
 
   const onToggle = async (key, value) => {
     setBusy(key);

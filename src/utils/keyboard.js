@@ -248,12 +248,6 @@ const orderDetailKeyboard = (orderId, status) => {
     return Markup.inlineKeyboard(buttons);
 };
 
-const orderDeleteConfirmKeyboard = (orderId) => {
-    return Markup.inlineKeyboard([
-        [Markup.button.callback('✅ Ya, Hapus', `adm_order_confirm_delete_${orderId}`)],
-        [Markup.button.callback('✘ Batal', `adm_order_view_${orderId}`)]
-    ]);
-};
 
 const orderRefundConfirmKeyboard = (orderId) => {
     return Markup.inlineKeyboard([
@@ -604,7 +598,7 @@ module.exports = {
     stockClearConfirmKeyboard,
     ordersListKeyboard,
     orderDetailKeyboard,
-    orderDeleteConfirmKeyboard,
+
     orderRefundConfirmKeyboard,
     orderReplaceConfirmKeyboard,
     usersKeyboard,

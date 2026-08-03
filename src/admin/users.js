@@ -138,7 +138,8 @@ function registerUserHandlers(bot, { isAdmin, adminStates }) {
         if (!user) return;
 
         const newBan = !user.banned;
-        db.createOrUpdateUser(userId, { banned: newBan });
+        const updated = db.createOrUpdateUser(userId, { banned: newBan });
+        db.dbEvents.emit('user_change', { type: 'ban_updated', user: updated });
 
         const name = user.username ? '@' + user.username : user.first_name || userId;
         await ctx.answerCbQuery(`${newBan ? '🚫 Banned' : '✅ Unbanned'}: ${name}`, { show_alert: true });

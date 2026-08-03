@@ -81,6 +81,11 @@ export default function Users() {
     const t = setTimeout(load, q ? 300 : 0);
     return () => clearTimeout(t);
   }, [load, q]);
+  useEffect(() => {
+    const refresh = () => load();
+    window.addEventListener('user_updated', refresh);
+    return () => window.removeEventListener('user_updated', refresh);
+  }, [load]);
 
   const counts = data?.counts || {};
   const s = data?.stats;

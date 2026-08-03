@@ -1158,7 +1158,9 @@ const updateSettings = (updates) => {
     }
   });
   batch();
-  return getSettings();
+  const settings = getSettings();
+  dbEvents.emit('settings_change', { updates, settings });
+  return settings;
 };
 
 // SQLite online backup API: menghasilkan satu file snapshot konsisten termasuk
