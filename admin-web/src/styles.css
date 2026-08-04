@@ -1484,3 +1484,40 @@ input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
   .prod-stat-grid, .stock-summary { grid-template-columns: 1fr; }
   .stock-actions { grid-template-columns: 1fr; }
 }
+
+
+/* ============ MOBILE FASE 4 — KONTEN BERAT & POLISH ============ */
+@media (max-width: 720px) {
+  /* Login — muat di layar kecil + safe-area */
+  .login-wrap { padding: 20px 16px; padding-top: max(20px, env(safe-area-inset-top)); }
+  .login-card { padding: 30px 22px 26px; border-radius: 20px; }
+  .login-logo { width: 54px; height: 54px; margin-bottom: 16px; }
+  .login-title { font-size: 22px; }
+  .login-sub { font-size: 13px; margin-bottom: 22px; }
+
+  /* Panel & chart */
+  .panel { padding: 16px; }
+  .panel-head { margin-bottom: 12px; }
+  .chart-summary { gap: 12px; flex-wrap: wrap; font-size: 12.5px; }
+  .grid-2 { gap: 12px; }
+  .top-name { font-size: 13.5px; }
+
+  /* Broadcast editor */
+  .bc-toolbar { flex-wrap: wrap; gap: 5px; }
+  .bc-fmt { min-height: 40px; min-width: 40px; }
+  .bc-upload { width: 100%; justify-content: center; min-height: 46px; }
+  .bc-photo-picked { flex-wrap: wrap; }
+  .bc-preview-panel { position: static; }
+
+  /* Settings tabs → scroll horizontal, tidak menumpuk */
+  .settings-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: 8px; padding-bottom: 4px; }
+  .settings-tabs::-webkit-scrollbar { display: none; }
+  .settings-tab { flex: 0 0 auto; min-height: 42px; }
+  .settings-panel { padding: 16px; }
+}
+
+@media (max-width: 400px) {
+  .login-card { padding: 26px 18px 22px; }
+  .skeleton-grid { grid-template-columns: 1fr; }
+  .panel { padding: 14px; }
+}
