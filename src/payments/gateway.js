@@ -23,6 +23,10 @@ const ADAPTERS = {
     klikqris: require('./providers/klikqris')
 };
 
+// Binance Pay BUKAN QRIS — flow terpisah (QR statis + submit TX ID). Adapter-nya
+// tidak ikut kontrak createQRIS/checkStatus, jadi disimpan di luar ADAPTERS QRIS.
+const binancepay = require('./providers/binancepay');
+
 const getAdapter = (provider) => ADAPTERS[provider] || null;
 
 // Provider yang dianggap valid untuk seluruh sistem (dipakai validasi web & UI).
@@ -33,8 +37,13 @@ const PROVIDER_FIELDS = {
     pakasir: ['api_key', 'slug'],
     wijayapay: ['code_merchant', 'api_key'],
     xoftware: ['api_key', 'merchant_id', 'webhook_secret', 'registered_notify_url'],
-    klikqris: ['api_key', 'merchant_id']
+    klikqris: ['api_key', 'merchant_id'],
+    // BUKAN QRIS: QR statis + buyer submit Transaction ID.
+    binancepay: ['api_key', 'api_secret', 'qr_string', 'currency']
 };
+
+// Provider Binance tidak boleh masuk pilihan QRIS buyer / polling QRIS.
+const isQrisProvider = (provider) => provider !== 'binancepay';
 
 /**
  * Bangun credential dari .env untuk provider tertentu (fallback backward-compat).
@@ -90,6 +99,8 @@ const listActiveGateways = () => {
     const providersWithDbRow = new Set();
     for (const gw of dbGateways) {
         providersWithDbRow.add(gw.provider);
+        // Binance Pay punya flow sendiri; jangan pernah tampil sebagai QRIS N.
+        if (!isQrisProvider(gw.provider)) continue;
         if (!gw.enabled) continue;
         const credentials = effectiveCredentials(gw.provider, gw.credentials);
         if (!hasCompleteCreds(gw.provider, credentials)) continue;
@@ -218,6 +229,82 @@ const generateQRImageBuffer = async (qrString, size = 600) => {
     });
 };
 
+// ==================== BINANCE PAY (flow terpisah dari QRIS) ====================
+
+const BINANCE_FIELDS = ['api_key', 'api_secret', 'qr_string', 'currency', 'binance_id'];
+
+// Credential Binance dari .env (fallback). Wajib: api_key, api_secret, qr_string.
+const binanceEnvCredential = () => {
+    const api_key = process.env.BINANCE_API_KEY || '';
+    const api_secret = process.env.BINANCE_API_SECRET || '';
+    const qr_string = process.env.BINANCE_QR_STRING || '';
+    const currency = process.env.BINANCE_CURRENCY || 'USDT';
+    const binance_id = process.env.BINANCE_ID || '';
+    if (api_key || api_secret || qr_string) return { api_key, api_secret, qr_string, currency, binance_id };
+    return null;
+};
+
+const hasBinanceCreds = (creds) =>
+    !!(creds && creds.api_key && creds.api_secret && creds.qr_string);
+
+/**
+ * Resolve konfigurasi Binance Pay yang AKTIF & lengkap.
+ * Prioritas: baris DB provider 'binancepay' yang enabled → fallback .env.
+ * @returns {{id:string|null, credentials:object}|null}
+ */
+const resolveBinanceConfig = () => {
+    const db = require('../models/db');
+    let dbGateways = [];
+    try { dbGateways = db.getPaymentGateways(); } catch (e) { dbGateways = []; }
+
+    const row = dbGateways.find((gw) => gw.provider === 'binancepay' && gw.enabled);
+    if (row && hasBinanceCreds(row.credentials)) {
+        const c = row.credentials;
+        return { id: row.id, credentials: { currency: 'USDT', ...c } };
+    }
+    // Fallback .env hanya kalau provider binancepay belum punya baris DB sama sekali.
+    const hasDbRow = dbGateways.some((gw) => gw.provider === 'binancepay');
+    if (!hasDbRow) {
+        const env = binanceEnvCredential();
+        if (hasBinanceCreds(env)) return { id: null, credentials: env };
+    }
+    return null;
+};
+
+// Binance Pay aktif & siap dipakai buyer?
+const isBinanceEnabled = () => !!resolveBinanceConfig();
+
+/**
+ * Render QR statis Binance + logo untuk ditampilkan ke buyer.
+ * @returns {Promise<{success, buffer?, currency?, binance_id?, error?}>}
+ */
+const renderBinanceQR = async (size = 600) => {
+    const cfg = resolveBinanceConfig();
+    if (!cfg) return { success: false, error: 'Binance Pay belum dikonfigurasi' };
+    try {
+        const buffer = await binancepay.renderQrWithLogo(cfg.credentials.qr_string, size);
+        return { success: true, buffer, currency: cfg.credentials.currency || 'USDT', binance_id: cfg.credentials.binance_id || '' };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+};
+
+/**
+ * Verifikasi pembayaran Binance dari TX ID + nominal USDT.
+ * @returns {Promise<{valid, status, matched?, error?}>}
+ */
+const verifyBinancePayment = async (txId, amountUSDT, options = {}) => {
+    const cfg = resolveBinanceConfig();
+    if (!cfg) return { valid: false, status: 'no_gateway', error: 'Binance Pay belum dikonfigurasi' };
+    return binancepay.verifyByTxId(txId, amountUSDT, cfg.credentials, options);
+};
+
+// Test koneksi Binance (tombol Test di panel). credsOverride opsional.
+const testBinanceConnection = async (credsOverride) => {
+    const creds = credsOverride || (resolveBinanceConfig() || {}).credentials || binanceEnvCredential() || {};
+    return binancepay.testConnection(creds);
+};
+
 module.exports = {
     SUPPORTED_PROVIDERS,
     PROVIDER_FIELDS,
@@ -232,5 +319,13 @@ module.exports = {
     verifyTransaction,
     testConnection,
     generateQRImageUrl,
-    generateQRImageBuffer
+    generateQRImageBuffer,
+    // Binance Pay (flow terpisah)
+    BINANCE_FIELDS,
+    binanceEnvCredential,
+    resolveBinanceConfig,
+    isBinanceEnabled,
+    renderBinanceQR,
+    verifyBinancePayment,
+    testBinanceConnection
 };

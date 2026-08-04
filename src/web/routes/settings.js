@@ -30,7 +30,7 @@ const maskCred = (creds = {}) => {
     const out = {};
     for (const [k, v] of Object.entries(creds)) {
         // Identifier/setting non-secret ditampilkan apa adanya.
-        if (k === 'slug' || k === 'code_merchant' || k === 'merchant_id' || k === 'fee_direction' || k === 'registered_notify_url') out[k] = v || null;
+        if (k === 'slug' || k === 'code_merchant' || k === 'merchant_id' || k === 'fee_direction' || k === 'registered_notify_url' || k === 'qr_string' || k === 'currency') out[k] = v || null;
         else out[k] = v ? mask(v) : null;
     }
     return out;
@@ -382,8 +382,12 @@ const gatewayDeleteCheck = (id) => {
     const existing = db.getPaymentGatewayById(id);
     if (!existing) return { found: false };
     const active_orders = db.getActiveOrderCountByGateway(id);
-    // Field .env sebagian pun dapat men-seed row lagi setelah restart; tetap blok hard-delete.
-    const env_configured = !!gateway.envCredential(existing.provider);
+    // Credential .env bisa jadi fallback setelah row DB dihapus. Untuk Binance
+    // gunakan resolver env khusus karena flow-nya bukan provider QRIS.
+    const envCredential = existing.provider === 'binancepay'
+        ? gateway.binanceEnvCredential()
+        : gateway.envCredential(existing.provider);
+    const env_configured = !!envCredential;
     return {
         found: true,
         gateway: { id: existing.id, label: existing.label, provider: existing.provider, enabled: existing.enabled },
@@ -435,7 +439,10 @@ const testGateway = async (req, res) => {
                 creds[field] = String(body[field]).trim();
             }
         }
-        const result = await gateway.testConnection(gw.provider, creds);
+        // Binance Pay bukan adapter QRIS; tetap punya test koneksi sendiri (read-only API).
+        const result = gw.provider === 'binancepay'
+            ? await gateway.testBinanceConnection(creds)
+            : await gateway.testConnection(gw.provider, creds);
         res.json(result);
     } catch (e) {
         res.status(500).json({ error: e.message });

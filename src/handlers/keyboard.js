@@ -9,6 +9,7 @@ const { cancelOrder } = require('../services/reminder');
 const { getOwnedOrder, rejectOrderAccess, assertCanStartTransaction } = require('../utils/buyerSecurity');
 const { handlePaymentSuccess } = require('../services/delivery');
 const { buildSupportContent } = require('./support');
+const { binanceTxidStates } = require('./binanceState');
 const {
     mainMenuKeyboard,
     languageKeyboard,
@@ -747,6 +748,7 @@ const registerKeyboardHandler = (bot) => {
         if (!gateways.length) {
             return ctx.answerCbQuery(lang === 'en' ? 'No QRIS gateway is available.' : 'Tidak ada gateway QRIS aktif.', { show_alert: true });
         }
+        // Susun tombol: QRIS sejajar, lalu Binance (kalau aktif), lalu Back.
         const buttons = [];
         for (let i = 0; i < gateways.length; i += 2) {
             buttons.push(gateways.slice(i, i + 2).map((gw, j) => ({
@@ -755,9 +757,40 @@ const registerKeyboardHandler = (bot) => {
                 style: 'success'
             })));
         }
+        // Binance Pay untuk top-up saldo (flow terpisah, bukan QRIS).
+        if (gateway.isBinanceEnabled()) {
+            buttons.push([{ text: '🅑 Binance Pay', callback_data: `topup_binance_${amount}`, style: 'success' }]);
+        }
         buttons.push([{ text: lang === 'en' ? '←️ Back' : '←️ Kembali', callback_data: 'saldo_back_new', style: 'primary' }]);
         await ctx.answerCbQuery();
         await ctx.editMessageReplyMarkup({ inline_keyboard: buttons });
+    });
+
+    // Binance Pay dipilih untuk top-up. Buat order TOPUP, render QR Binance statis,
+    // lalu buyer submit Transaction ID sama seperti flow checkout produk Binance.
+    bot.action(/^topup_binance_(\d+)$/, async (ctx) => {
+        const amount = parseInt(ctx.match[1]);
+        const userId = ctx.from.id.toString();
+        const lang = db.getUserLanguage(userId);
+        if (!await assertCanStartTransaction(ctx, lang)) return;
+        if (!gateway.isBinanceEnabled()) {
+            return ctx.answerCbQuery(lang === 'en' ? 'Binance Pay is not available.' : 'Binance Pay tidak tersedia.', { show_alert: true });
+        }
+        const activeTopup = db.getActiveTopupOrderByUser(userId);
+        if (activeTopup || topupCreationLocks.has(userId)) {
+            const message = lang === 'en'
+                ? `A top up invoice is already active${activeTopup ? `: ${activeTopup.id}` : ''}.`
+                : `Invoice topup masih aktif${activeTopup ? `: ${activeTopup.id}` : ''}.`;
+            return ctx.answerCbQuery(message, { show_alert: true });
+        }
+
+        topupCreationLocks.add(userId);
+        await ctx.answerCbQuery(lang === 'en' ? 'Processing Binance QR...' : 'Memproses QR Binance...');
+        try {
+            await processTopupBinance(ctx, userId, amount, lang);
+        } finally {
+            topupCreationLocks.delete(userId);
+        }
     });
 
     // Gateway QRIS dipilih untuk topup. Order baru dibuat SETELAH pilihan ini.
@@ -945,6 +978,82 @@ const registerKeyboardHandler = (bot) => {
         const msg = lang === 'en' ? '❌ Top up cancelled.' : '❌ Topup dibatalkan.';
         await ctx.reply(msg, { ...mainMenuKeyboard(lang, userId) });
     });
+
+    /**
+     * Process topup Binance Pay - buat order TOPUP, render QR statis Binance,
+     * lalu masuk state nunggu buyer submit Transaction ID.
+     */
+    async function processTopupBinance(ctx, userId, amount, lang) {
+        if (!gateway.isBinanceEnabled()) {
+            const msg = lang === 'en' ? '⚠️ Binance Pay is not available.' : '⚠️ Binance Pay tidak tersedia.';
+            try { await ctx.answerCbQuery(msg, { show_alert: true }); } catch (e) { await ctx.reply(msg); }
+            return;
+        }
+        const usdAmount = await convertIDRtoUSD(amount);
+        const amountUSDT = parseFloat(usdAmount.toFixed(2));
+
+        // Buat order TOPUP dengan Binance Pay, expiry 15 menit.
+        const topupOrder = db.createOrder({
+            user_id: userId,
+            product_id: 'TOPUP',
+            quantity: 1,
+            total_idr: amount,
+            total_usd: amountUSDT,
+            payment_method: 'binance',
+            chat_id: ctx.chat.id,
+            status: 'pending',
+            expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+        });
+
+        // Simpan nominal USDT ke order supaya verifikasi TX ID cocok nominal.
+        db.updateOrder(topupOrder.id, { binance_amount: String(amountUSDT) });
+
+        // Render QR Binance statis + twibbon.
+        const qr = await gateway.renderBinanceQR();
+        if (!qr.success || !qr.buffer) {
+            db.updateOrder(topupOrder.id, { status: 'cancelled' });
+            try { await ctx.deleteMessage(); } catch (e) { }
+            const errMsg = lang === 'en'
+                ? '❌ Failed to create Binance QR. Please try again.'
+                : '❌ Gagal membuat QR Binance. Silakan coba lagi.';
+            await ctx.reply(errMsg, { ...mainMenuKeyboard(lang, userId) });
+            return;
+        }
+
+        const currency = qr.currency || 'USDT';
+        const title = lang === 'en' ? '📥 <b>TOP UP BALANCE</b>' : '📥 <b>TOPUP SALDO</b>';
+        const amountLabel = lang === 'en' ? 'Balance received' : 'Saldo masuk';
+        const amountIDR = lang === 'en' ? `$${formatUSD(usdAmount)}` : `Rp ${formatIDR(amount)}`;
+        const caption = lang === 'en'
+            ? `${title}\n\n🅑 <b>Binance Pay</b>\n\n💰 <b>${amountLabel}:</b> ${amountIDR}\n🆔 <b>ID:</b> <code>${escapeHtml(topupOrder.id)}</code>\n\n<blockquote><b>Pay exactly: ${amountUSDT} ${currency}</b></blockquote>\n\n1. Scan the QR in your Binance app\n2. Enter the exact amount above\n3. After paying, reply here with your Transaction ID`
+            : `${title}\n\n🅑 <b>Binance Pay</b>\n\n💰 <b>${amountLabel}:</b> ${amountIDR}\n🆔 <b>ID:</b> <code>${escapeHtml(topupOrder.id)}</code>\n\n<blockquote><b>Bayar tepat: ${amountUSDT} ${currency}</b></blockquote>\n\n1. Scan QR di aplikasi Binance kamu\n2. Masukkan nominal PERSIS di atas\n3. Setelah bayar, balas pesan ini dengan Transaction ID`;
+
+        try { await ctx.deleteMessage(); } catch (e) { }
+
+        // Simpan message_id QR invoice + prompt TX ID supaya expiry checker hapus keduanya.
+        const invoiceMsg = await ctx.replyWithPhoto({ source: qr.buffer }, { caption, parse_mode: 'HTML' });
+        
+        const promptText = lang === 'en'
+            ? 'Reply here with your Binance Transaction ID:'
+            : 'Balas pesan ini dengan Transaction ID Binance kamu:';
+        const promptMsg = await ctx.reply(promptText, { reply_markup: { force_reply: true, selective: true } });
+
+        db.updateOrder(topupOrder.id, { 
+            message_id: invoiceMsg.message_id,
+            reminder_message_id: promptMsg.message_id
+        });
+
+        // Masuk state nunggu TX ID. expiresAt sama dengan order (15 menit), bukan 30 menit arbitrary.
+        const orderExpiry = new Date(topupOrder.expires_at).getTime();
+        binanceTxidStates.set(topupOrder.id, {
+            userId,
+            orderId: topupOrder.id,
+            amountUSDT,
+            lang,
+            promptMessageId: promptMsg.message_id,
+            expiresAt: orderExpiry
+        });
+    }
 
     /**
      * Process topup - generate QRIS and show to user

@@ -100,6 +100,23 @@ for (const column of ['delivery_terms_message_id', 'delivery_file_message_id']) 
   catch (_) { db.exec(`ALTER TABLE orders ADD COLUMN ${column} INTEGER`); }
 }
 
+// Migration: Binance Pay — TX ID yang di-submit buyer + nominal USDT yang diminta.
+// Additive & idempoten (aman untuk DB lama). binance_txid = ID transaksi internal
+// Binance Pay yang buyer paste; binance_amount = nominal USDT yang HARUS cocok.
+for (const [column, type] of [['binance_txid', 'TEXT'], ['binance_amount', 'TEXT']]) {
+  try { db.prepare(`SELECT ${column} FROM orders LIMIT 1`).get(); }
+  catch (_) { db.exec(`ALTER TABLE orders ADD COLUMN ${column} ${type}`); }
+}
+
+// Anti-reuse: satu TX ID Binance hanya boleh dipakai SEKALI. Mencegah buyer
+// memakai ulang TX ID valid untuk order berbeda. Dicatat saat order dikonfirmasi.
+db.exec(`CREATE TABLE IF NOT EXISTS binance_used_txids (
+  txid TEXT PRIMARY KEY,
+  order_id TEXT NOT NULL,
+  amount TEXT,
+  used_at TEXT NOT NULL
+)`);
+
 const mergeLegacyWarrantyTerms = () => {
   const rows = db.prepare(`SELECT id,warranty_id,warranty_en,terms_id,terms_en FROM products
     WHERE COALESCE(warranty_id,'')<>'' OR COALESCE(warranty_en,'')<>''`).all();
@@ -351,6 +368,30 @@ try {
         fee_direction: process.env.XOWFTWARE_FEE_DIRECTION === 'user' ? 'user' : 'merchant'
       }), 2, now, now);
     console.log('[DB] Seeded default Xoftware gateway from .env');
+  }
+
+  // KlikQRIS: seed otomatis dari .env bila credential lengkap dan belum dikelola panel.
+  if (!hasProvider('klikqris') && process.env.KLIKQRIS_API_KEY && process.env.KLIKQRIS_MERCHANT_ID) {
+    insertGw.run('klikqris-default', 'klikqris', 'KlikQRIS (dari .env)',
+      JSON.stringify({
+        api_key: process.env.KLIKQRIS_API_KEY,
+        merchant_id: process.env.KLIKQRIS_MERCHANT_ID
+      }), 3, now, now);
+    console.log('[DB] Seeded default KlikQRIS gateway from .env');
+  }
+
+  // Binance Pay: tampil otomatis di web admin jika .env sudah lengkap. Hanya seed
+  // saat belum ada row Binance sama sekali, sehingga konfigurasi/toggle panel tidak
+  // pernah ditimpa saat restart. Binance tetap flow terpisah, bukan QRIS.
+  if (!hasProvider('binancepay') && process.env.BINANCE_API_KEY && process.env.BINANCE_API_SECRET && process.env.BINANCE_QR_STRING) {
+    insertGw.run('binancepay-default', 'binancepay', 'Binance Pay (dari .env)',
+      JSON.stringify({
+        api_key: process.env.BINANCE_API_KEY,
+        api_secret: process.env.BINANCE_API_SECRET,
+        qr_string: process.env.BINANCE_QR_STRING,
+        currency: process.env.BINANCE_CURRENCY || 'USDT'
+      }), 99, now, now);
+    console.log('[DB] Seeded default Binance Pay gateway from .env');
   }
 } catch (e) {
   console.error('[DB] payment_gateways seed error:', e.message);
@@ -811,7 +852,7 @@ const updateOrder = (orderId, updates, reason) => {
   const order = getOrderById(orderId);
   if (!order) return null;
   const merged = { ...order, ...updates };
-  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, delivery_terms_message_id=?, delivery_file_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=?, gateway_id=?, flash_sale_applied=?, gateway_signature=?, gateway_reference=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.delivery_terms_message_id || null, merged.delivery_file_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, merged.gateway_id || null, merged.flash_sale_applied ? 1 : 0, merged.gateway_signature || null, merged.gateway_reference || null, orderId);
+  db.prepare(`UPDATE orders SET user_id=?, product_id=?, quantity=?, total_idr=?, total_usd=?, payment_method=?, unique_code=?, status=?, stock_ids=?, delivered_data=?, payment_proof=?, reminder_sent=?, message_id=?, chat_id=?, reminder_message_id=?, reminder_chat_id=?, delivery_message_id=?, delivery_terms_message_id=?, delivery_file_message_id=?, created_at=?, paid_at=?, delivered_at=?, expires_at=?, voucher_code=?, discount_amount=?, original_total_idr=?, original_total_usd=?, gateway_id=?, flash_sale_applied=?, gateway_signature=?, gateway_reference=?, binance_txid=?, binance_amount=? WHERE id=?`).run(merged.user_id, merged.product_id, merged.quantity, merged.total_idr, merged.total_usd, merged.payment_method, merged.unique_code, merged.status, JSON.stringify(merged.stock_ids || []), JSON.stringify(merged.delivered_data || []), merged.payment_proof, merged.reminder_sent ? 1 : 0, merged.message_id, merged.chat_id, merged.reminder_message_id || null, merged.reminder_chat_id || null, merged.delivery_message_id || null, merged.delivery_terms_message_id || null, merged.delivery_file_message_id || null, merged.created_at, merged.paid_at, merged.delivered_at, merged.expires_at, merged.voucher_code || null, merged.discount_amount || 0, merged.original_total_idr || null, merged.original_total_usd || null, merged.gateway_id || null, merged.flash_sale_applied ? 1 : 0, merged.gateway_signature || null, merged.gateway_reference || null, merged.binance_txid || null, merged.binance_amount || null, orderId);
   const updatedOrder = getOrderById(orderId);
   dbEvents.emit('order_change', updatedOrder, reason || 'update');
   return updatedOrder;
@@ -1283,6 +1324,28 @@ const deletePaymentGateway = (id) => {
   db.prepare('DELETE FROM payment_gateways WHERE id = ?').run(id);
 };
 
+// ===== Binance Pay: anti-reuse TX ID =====
+// Cek apakah sebuah TX ID sudah pernah dipakai (dikonsumsi) oleh order lain.
+const isBinanceTxidUsed = (txid) => {
+  if (!txid) return false;
+  const row = db.prepare('SELECT order_id FROM binance_used_txids WHERE txid = ?').get(String(txid).trim());
+  return row ? row.order_id : null;
+};
+
+// Klaim TX ID secara atomik untuk sebuah order. Mengembalikan true HANYA untuk
+// klaim pertama; kalau TX ID sudah dipakai order lain, mengembalikan false.
+const claimBinanceTxid = (txid, orderId, amount) => {
+  if (!txid || !orderId) return false;
+  try {
+    db.prepare('INSERT INTO binance_used_txids (txid, order_id, amount, used_at) VALUES (?, ?, ?, ?)')
+      .run(String(txid).trim(), orderId, amount != null ? String(amount) : null, new Date().toISOString());
+    return true;
+  } catch (e) {
+    // PRIMARY KEY conflict → TX ID sudah dipakai
+    return false;
+  }
+};
+
 const getActiveOrderCountByGateway = (gatewayId) => db.prepare(
   "SELECT COUNT(*) AS n FROM orders WHERE gateway_id = ? AND status IN ('pending','processing')"
 ).get(gatewayId).n || 0;
@@ -1518,6 +1581,7 @@ module.exports = {
   // Payment Gateways
   getPaymentGateways, getPaymentGatewayById, getActiveGateway, createPaymentGateway,
   updatePaymentGateway, deletePaymentGateway, getActiveOrderCountByGateway, getGatewayCredential,
+  isBinanceTxidUsed, claimBinanceTxid,
   getGatewayCredentialById, getRoutedGateway, getGatewayStrategy, claimWebhookEvent, releaseWebhookEvent,
   // Flash Sale
   isFlashSaleActive, getFlashSaleSlotStats, claimFlashSaleSlot, releaseFlashSaleSlot, consumeFlashSaleSlot, purgeExpiredFlashSaleHolds, getEffectivePrice, setFlashSale, clearFlashSale, getActiveFlashSales, getExpiredFlashSales,

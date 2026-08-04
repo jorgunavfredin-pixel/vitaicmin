@@ -33,6 +33,15 @@ const PROVIDER_META = {
       { key: 'api_key', label: 'API Key', secret: true, placeholder: 'Masukkan API Key' },
       { key: 'merchant_id', label: 'Merchant ID', secret: false, placeholder: 'cth: 123456789' }
     ]
+  },
+  binancepay: {
+    label: 'Binance Pay',
+    fields: [
+      { key: 'api_key', label: 'API Key (Read Only)', secret: true, placeholder: 'Binance API Key' },
+      { key: 'api_secret', label: 'API Secret', secret: true, placeholder: 'Binance API Secret' },
+      { key: 'qr_string', label: 'QR String Binance', secret: false, placeholder: 'https://app.binance.com/uni-qr/...' },
+      { key: 'currency', label: 'Mata Uang', secret: false, placeholder: 'USDT' }
+    ]
   }
 };
 
@@ -60,7 +69,7 @@ export default function PaymentTab({ showToast }) {
         </button>
       </div>
       <div className="settings-note hint-icon" style={{ marginTop: 14 }}>
-        <Icon name="shield" size={14} /> Hanya QRIS yang dipakai. Jika lebih dari satu gateway aktif, buyer memilih QRIS 1/2 saat checkout. Credential tersamar (••••) dan perubahan langsung aktif tanpa restart.
+        <Icon name="shield" size={14} /> Gateway QRIS aktif tampil sebagai QRIS 1/2 di checkout. Binance Pay adalah metode terpisah: QR statis + verifikasi Transaction ID, bukan polling QRIS. Credential tersamar (••••) dan perubahan langsung aktif tanpa restart.
       </div>
 
       {data.gateways.length === 0 ? (
@@ -165,17 +174,25 @@ function GatewayCard({ gw, showToast, onChanged }) {
           <div className="gw-card-ident">
             <div className="gw-card-badges">
               <span className="gw-provider-badge">{meta.label}</span>
-              {gw.buyer_label
-                ? <span className="gw-buyer-badge">Buyer: {gw.buyer_label}</span>
-                : <span className="gw-buyer-badge muted">Tidak tampil ke buyer</span>}
+              {gw.provider === 'binancepay'
+                ? <span className="gw-buyer-badge">Buyer: Binance Pay</span>
+                : gw.buyer_label
+                  ? <span className="gw-buyer-badge">Buyer: {gw.buyer_label}</span>
+                  : <span className="gw-buyer-badge muted">Tidak tampil ke buyer</span>}
             </div>
             <input className="gw-label-input" value={label} onChange={(e) => setLabel(e.target.value)} />
             <span className="gw-mapping-detail">
-              {gw.buyer_label
-                ? `${gw.buyer_label} menggunakan ${meta.label} · ${gw.label}`
-                : `${meta.label} · ${gw.label}`}
+              {gw.provider === 'binancepay'
+                ? `Binance Pay · QR statis + verifikasi Transaction ID`
+                : gw.buyer_label
+                  ? `${gw.buyer_label} menggunakan ${meta.label} · ${gw.label}`
+                  : `${meta.label} · ${gw.label}`}
             </span>
-            <span className="gw-mapping-detail">Callback (opsional): <code>{gw.callback_url || 'WEBHOOK_URL belum diset'}</code> · polling otomatis 20 detik tetap aktif</span>
+            <span className="gw-mapping-detail">
+              {gw.provider === 'binancepay'
+                ? 'Tidak memakai webhook atau polling QRIS — API Binance hanya dibaca saat buyer mengirim Transaction ID.'
+                : <>Callback (opsional): <code>{gw.callback_url || 'WEBHOOK_URL belum diset'}</code> · polling otomatis 20 detik tetap aktif</>}
+            </span>
           </div>
         </div>
         <div className="gw-card-actions">

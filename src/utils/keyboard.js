@@ -448,29 +448,15 @@ const quantityKeyboard = (maxQty, productId, currentQty = 1, categoryId, lang = 
     return Markup.inlineKeyboard(buttons);
 };
 
-// Susun descriptor tombol pembayaran. QRIS selalu 2 kolom; Saldo mengisi slot
-// QRIS ganjil atau mendapat baris sendiri kalau jumlah QRIS genap.
+// Semua QRIS aktif ditampilkan sejajar dalam satu baris. Saldo & Binance diatur
+// terpisah agar urutannya selalu: QRIS → Binance → Saldo.
 const buildPaymentButtonRows = (orderId, gateways, qrisEnabled, qrisText, saldoText, saldoCallback) => {
-    if (!qrisEnabled) {
-        return [[
-            { text: `${qrisText} (Maintenance)`, callback: 'noop' },
-            { text: saldoText, callback: saldoCallback }
-        ]];
-    }
-
-    const rows = [];
+    if (!qrisEnabled) return [];
     const qris = gateways.map((gw, index) => ({
         text: `▣ QRIS ${index + 1}`,
         callback: `pay_qgw_${gw.id || `env-${gw.provider}`}_${orderId}`
     }));
-    const saldo = { text: saldoText, callback: saldoCallback };
-    for (let i = 0; i < qris.length; i += 2) {
-        const row = qris.slice(i, i + 2);
-        if (row.length === 1 && i === qris.length - 1) row.push(saldo);
-        rows.push(row);
-    }
-    if (qris.length % 2 === 0) rows.push([saldo]);
-    return rows;
+    return qris.length ? [qris] : [];
 };
 
 const paymentMethodKeyboard = (orderId, lang = 'id') => {
@@ -479,8 +465,8 @@ const paymentMethodKeyboard = (orderId, lang = 'id') => {
     const settings = db.getSettings();
 
     const texts = {
-        id: { qris: '▣ QRIS', saldo: '● Saldo', voucher: '＋ Pakai Voucher', removeVoucher: '− Hapus Voucher', cancel: '× Batalkan' },
-        en: { qris: '▣ QRIS', saldo: '● Balance', voucher: '＋ Apply Voucher', removeVoucher: '− Remove Voucher', cancel: '× Cancel' }
+        id: { qris: '▣ QRIS', saldo: '● Saldo', binance: '🅑 Binance Pay', voucher: '＋ Pakai Voucher', removeVoucher: '− Hapus Voucher', cancel: '× Batalkan' },
+        en: { qris: '▣ QRIS', saldo: '● Balance', binance: '🅑 Binance Pay', voucher: '＋ Apply Voucher', removeVoucher: '− Remove Voucher', cancel: '× Cancel' }
     };
     const t = texts[lang] || texts.id;
 
@@ -503,11 +489,26 @@ const paymentMethodKeyboard = (orderId, lang = 'id') => {
         saldoBtn.callback_data
     ).map(row => row.map(btn => ({
         ...Markup.button.callback(btn.text, btn.callback),
-        style: btn.text === saldoBtn.text ? 'success' : 'primary'
+        style: 'primary'
     })));
 
+    // Binance Pay — tampil hanya kalau dikonfigurasi & aktif. Flow terpisah dari QRIS
+    // (QR statis + buyer submit TX ID). callback: pay_binance_<orderId>.
+    const binanceRows = [];
+    try {
+        if (gateway.isBinanceEnabled()) {
+            binanceRows.push([{ ...Markup.button.callback(t.binance, `pay_binance_${orderId}`), style: 'primary' }]);
+        }
+    } catch (e) { /* gateway belum siap → sembunyikan tombol */ }
+
+    // Saldo selalu di baris sendiri, DI BAWAH Binance.
+    const saldoRow = [{ ...saldoBtn, style: 'success' }];
+
+    // Urutan final: QRIS (sejajar) → Binance → Saldo → voucher → cancel.
     return Markup.inlineKeyboard([
         ...paymentRows,
+        ...binanceRows,
+        saldoRow,
         [voucherBtn],
         [{ ...Markup.button.callback(t.cancel, `pay_cancel_${orderId}`), style: 'danger' }]
     ]);

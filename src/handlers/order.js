@@ -8,6 +8,7 @@ const { handlePaymentSuccess } = require('../services/delivery');
 const { cancelOrder } = require('../services/reminder');
 const { getOwnedOrder, rejectOrderAccess, assertCanStartTransaction } = require('../utils/buyerSecurity');
 const { calculateBulkPrice } = require('../utils/bulkPricing');
+const { binanceTxidStates } = require('./binanceState');
 const {
     paymentMethodKeyboard,
     paymentPendingKeyboard,
@@ -723,6 +724,203 @@ const registerOrderHandler = (bot) => {
         // Edit the original confirmation message; no duplicate payment page.
         const updatedOrder = db.getOrderById(orderId);
         await editVoucherConfirmation(ctx, state, updatedOrder, lang);
+    });
+
+    // ==================== BINANCE PAY ====================
+    // Flow: buyer klik → bot tampilkan QR statis + nominal USDT + minta TX ID (force_reply)
+    // → buyer submit TX ID → bot verifikasi via API Binance (TX ID + nominal cocok, belum
+    // dipakai) → set paid → handlePaymentSuccess (kirim produk).
+    // State di-share dengan keyboard.js (untuk top-up Binance Pay juga) via binanceState.js.
+
+    bot.action(/^pay_binance_(.+)$/, async (ctx) => {
+        const orderId = ctx.match[1];
+        const userId = ctx.from.id.toString();
+        const lang = db.getUserLanguage(userId);
+
+        if (!await assertCanStartTransaction(ctx, lang)) return;
+
+        const order = getOwnedOrder(ctx, orderId, { statuses: ['init', 'pending'] });
+        if (!order) return rejectOrderAccess(ctx, lang);
+
+        if (!gateway.isBinanceEnabled()) {
+            return ctx.answerCbQuery(lang === 'en' ? 'Binance Pay is unavailable.' : 'Binance Pay tidak tersedia.', { show_alert: true });
+        }
+
+        await ctx.answerCbQuery(lang === 'en' ? 'Preparing Binance Pay...' : 'Menyiapkan Binance Pay...');
+
+        // Hitung nominal USDT saat QR disiapkan (bukan realtime polling — sesuai desain).
+        const totalUSD = order.total_usd || await convertIDRtoUSD(order.total_idr);
+        const amountUSDT = parseFloat(Number(totalUSD).toFixed(2));
+
+        const qr = await gateway.renderBinanceQR();
+        if (!qr.success) {
+            return ctx.reply(lang === 'en' ? `Failed to load Binance QR: ${qr.error}` : `Gagal memuat QR Binance: ${qr.error}`);
+        }
+
+        // Binance diberi waktu tetap 15 menit dari saat buyer memilih metode ini.
+        // QRIS/setting timeout lain tidak disentuh.
+        const binanceExpiry = new Date(Date.now() + 15 * 60 * 1000);
+        db.updateOrder(orderId, {
+            payment_method: 'binance',
+            status: 'pending',
+            binance_amount: String(amountUSDT),
+            expires_at: binanceExpiry.toISOString()
+        });
+
+        // Reserve stok setelah order pending — sama seperti flow QRIS (race guard).
+        const prodForReserve = db.getProductById(order.product_id);
+        if (prodForReserve && prodForReserve.stock_mode !== 'unlimited') {
+            const reserved = db.reserveStock(order.product_id, order.quantity, orderId);
+            if (!reserved) {
+                db.updateOrder(orderId, { status: 'cancelled' });
+                return ctx.reply(lang === 'en'
+                    ? '❌ Stock ran out. Please try again.'
+                    : '❌ Stok habis. Silakan coba lagi.');
+            }
+        }
+
+        // Hapus chat "Konfirmasi Pembayaran" (pesan pembawa tombol) — sama seperti flow
+        // QRIS: begitu QR muncul, halaman pemilihan metode dibersihkan.
+        try { await ctx.deleteMessage(); } catch (e) { }
+
+        const currency = qr.currency || 'USDT';
+        const product = db.getProductById(order.product_id);
+        const productName = escapeHtml(lang === 'en'
+            ? (product?.name_en || product?.name_id || '-')
+            : (product?.name_id || product?.name_en || '-'));
+        const qtyLabel = lang === 'en' ? 'pcs' : 'pcs';
+        const caption = lang === 'en'
+            ? `<blockquote>🅑 <b>Binance Pay</b></blockquote>\n\n<b>Order:</b> <code>${orderId}</code>\n<b>Product:</b> ${productName}\n<b>Quantity:</b> ${order.quantity} ${qtyLabel}\n\n<blockquote><b>Pay exactly: ${amountUSDT} ${currency}</b></blockquote>\n\n1. Scan the QR in your Binance app\n2. Enter the exact amount above\n3. After paying, <b>reply to this message with your Transaction ID</b>`
+            : `<blockquote>🅑 <b>Binance Pay</b></blockquote>\n\n<b>Order:</b> <code>${orderId}</code>\n<b>Produk:</b> ${productName}\n<b>Jumlah:</b> ${order.quantity} ${qtyLabel}\n\n<blockquote><b>Bayar tepat: ${amountUSDT} ${currency}</b></blockquote>\n\n1. Scan QR di aplikasi Binance kamu\n2. Masukkan nominal PERSIS di atas\n3. Setelah bayar, <b>balas pesan ini dengan Transaction ID</b>`;
+
+        // Sama seperti QRIS: simpan message_id invoice QR + prompt TX ID agar expiry
+        // checker bisa hapus keduanya saat order expired (cegah buyer submit TX ID setelah expiry).
+        const invoiceMsg = await ctx.replyWithPhoto({ source: qr.buffer }, { caption, parse_mode: 'HTML' });
+        
+        const promptText = lang === 'en'
+            ? 'Reply here with your Binance Transaction ID:'
+            : 'Balas pesan ini dengan Transaction ID Binance kamu:';
+        const promptMsg = await ctx.reply(promptText, { reply_markup: { force_reply: true, selective: true } });
+
+        db.updateOrder(orderId, {
+            message_id: invoiceMsg.message_id,
+            reminder_message_id: promptMsg.message_id
+        });
+        await notifyAdminNewOrder(ctx.telegram, orderId, db.getOrderById(orderId), 'BINANCE PAY');
+
+        binanceTxidStates.set(orderId, {
+            orderId,
+            chatId: ctx.chat.id,
+            invoiceMessageId: invoiceMsg.message_id,
+            promptMessageId: promptMsg.message_id,
+            amountUSDT,
+            expiresAt: Date.now() + 30 * 60 * 1000
+        });
+    });
+
+    // Text handler: buyer submit Binance TX ID (harus reply ke prompt).
+    bot.on('text', async (ctx, next) => {
+        const userId = ctx.from.id.toString();
+        const state = binanceTxidStates.get(userId);
+        if (!state) return next();
+        if (state.expiresAt <= Date.now()) { binanceTxidStates.delete(userId); return next(); }
+        if (String(ctx.chat.id) !== String(state.chatId)) return next();
+        if (ctx.message.reply_to_message?.message_id !== state.promptMessageId) return next();
+
+        const lang = db.getUserLanguage(userId);
+        const orderId = state.orderId;
+        const txId = ctx.message.text.trim();
+
+        // Validasi order masih layak dibayar + belum expired.
+        const order = db.getOrderById(orderId);
+        if (!order || !['pending', 'init', 'processing'].includes(order.status)) {
+            binanceTxidStates.delete(orderId);
+            return ctx.reply(lang === 'en' ? 'This order is no longer payable.' : 'Order ini sudah tidak bisa dibayar.');
+        }
+        // Cegah buyer submit TX ID setelah order expired (walau state masih ada).
+        if (order.expires_at && new Date(order.expires_at) <= new Date()) {
+            binanceTxidStates.delete(orderId);
+            return ctx.reply(lang === 'en'
+                ? '⏰ Order expired. Please create a new order.'
+                : '⏰ Order sudah kadaluarsa. Silakan buat order baru.');
+        }
+
+        // 1) Anti-reuse cepat (sebelum hit API).
+        const usedBy = db.isBinanceTxidUsed(txId);
+        if (usedBy) {
+            return ctx.reply(lang === 'en'
+                ? '❌ This Transaction ID was already used.'
+                : '❌ Transaction ID ini sudah pernah dipakai.');
+        }
+
+        const verifyingMsg = await ctx.reply(lang === 'en' ? '⏳ Verifying your payment...' : '⏳ Memverifikasi pembayaran...');
+        const deleteVerifying = async () => {
+            try { await ctx.telegram.deleteMessage(ctx.chat.id, verifyingMsg.message_id); } catch (_) { }
+        };
+
+        // 2) Verifikasi ke Binance (TX ID + nominal + currency + arah masuk).
+        const amountUSDT = state.amountUSDT || parseFloat(order.binance_amount || order.total_usd || 0);
+        console.log(`[BINANCE] verify start order=${orderId} txid=${txId} amount=${amountUSDT}`);
+        const vt0 = Date.now();
+        let result;
+        try {
+            result = await gateway.verifyBinancePayment(txId, amountUSDT, {
+                orderCreatedAt: order.created_at
+            });
+        } catch (e) {
+            console.error(`[BINANCE] verify THREW: ${e.message}`);
+            return ctx.reply(lang === 'en' ? 'Verification error, try again.' : 'Error verifikasi, coba lagi.');
+        }
+        console.log(`[BINANCE] verify done in ${((Date.now() - vt0) / 1000).toFixed(1)}s valid=${result.valid} status=${result.status}`);
+
+        if (!result.valid) {
+            const reasons = {
+                not_found: lang === 'en' ? 'Transaction ID not found in payments yet. Wait a moment and retry.' : 'Transaction ID belum ditemukan. Tunggu sebentar lalu coba lagi.',
+                amount_mismatch: lang === 'en' ? 'Amount does not match the order.' : 'Nominal tidak sesuai order.',
+                currency_mismatch: lang === 'en' ? 'Wrong currency.' : 'Mata uang salah.',
+                outgoing: lang === 'en' ? 'That transaction is outgoing, not a payment to us.' : 'Transaksi itu keluar, bukan pembayaran ke kami.',
+                api_error: lang === 'en' ? 'Verification service error. Try again shortly.' : 'Layanan verifikasi bermasalah. Coba lagi sebentar.',
+                no_txid: lang === 'en' ? 'Please send a valid Transaction ID.' : 'Kirim Transaction ID yang valid.'
+            };
+            const msg = reasons[result.status] || (lang === 'en' ? 'Verification failed.' : 'Verifikasi gagal.');
+            // JANGAN hapus state untuk kasus not_found/api_error → buyer bisa retry (reply lagi).
+            if (!['not_found', 'api_error'].includes(result.status)) binanceTxidStates.delete(userId);
+            return ctx.reply(`❌ ${msg}`);
+        }
+
+        // Valid = bersihkan pesan sementara sebelum receipt/pengiriman tampil.
+        // Invoice QR dihapus oleh handlePaymentSuccess memakai order.message_id.
+        await deleteVerifying();
+        try { await ctx.telegram.deleteMessage(state.chatId, state.promptMessageId); } catch (_) { }
+        try { await ctx.deleteMessage(); } catch (_) { } // pesan TX ID buyer
+
+        // 3) Klaim TX ID atomik (anti-reuse race). Kalah race → tolak.
+        const claimed = db.claimBinanceTxid(txId, orderId, amountUSDT);
+        if (!claimed) {
+            binanceTxidStates.delete(userId);
+            return ctx.reply(lang === 'en' ? '❌ This Transaction ID was just used.' : '❌ Transaction ID ini baru saja dipakai.');
+        }
+
+        // 4) Konsumsi state + catat TX ID. JANGAN set status 'paid' di sini:
+        // handlePaymentSuccess() memakai claimOrderForDelivery() yang HANYA menang saat
+        // status masih 'pending' (persis seperti flow QRIS). Kalau kita set 'paid' dulu,
+        // claim gagal dan produk tidak terkirim.
+        binanceTxidStates.delete(userId);
+        db.updateOrder(orderId, { binance_txid: txId, paid_at: new Date().toISOString() });
+
+        try {
+            const delivered = await handlePaymentSuccess(bot, orderId, { transaction_id: txId });
+            if (delivered === false) {
+                return ctx.reply(lang === 'en'
+                    ? '⚠️ Payment verified but order could not be delivered (already processed?). Contact support.'
+                    : '⚠️ Pembayaran terverifikasi tapi order gagal dikirim (sudah diproses?). Hubungi admin.');
+            }
+        } catch (e) {
+            console.error('[BINANCE] deliver error:', e.message);
+            return ctx.reply(lang === 'en'
+                ? '✅ Payment verified, but delivery hit an error. Contact support.'
+                : '✅ Pembayaran terverifikasi, tapi pengiriman error. Hubungi admin.');
+        }
     });
 
 };

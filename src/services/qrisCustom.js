@@ -6,10 +6,18 @@ const db = require('../models/db');
 
 const ROOT = path.join(__dirname, '../../assets/qris-custom');
 const PRESET_DIR = path.join(ROOT, 'presets');
-const CUSTOM_FILE = path.join(ROOT, 'custom.png');
 const CONFIG_FILE = path.join(ROOT, 'config.json');
 const DEFAULT_LAYOUT = Object.freeze({ x: 23.4375, y: 23.4375, size: 53.125 });
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+
+// Cari file custom.* dengan ekstensi valid (bukan hardcode .png saja).
+const findCustomFile = () => {
+  for (const ext of ['.png', '.jpg', '.jpeg', '.webp']) {
+    const candidate = path.join(ROOT, `custom${ext}`);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+};
 
 const ensureDirs = () => fs.mkdirSync(PRESET_DIR, { recursive: true });
 const safeId = (value) => String(value || '').replace(/[^a-zA-Z0-9_-]/g, '');
@@ -52,7 +60,7 @@ const getConfig = () => {
   }
   saved = saved || {};
   const presets = listPresets();
-  const customExists = fs.existsSync(CUSTOM_FILE);
+  const customExists = !!findCustomFile();
   let source = saved.source || (presets[0] ? 'preset' : 'custom');
   let presetId = saved.preset_id || presets[0]?.id || null;
   if (source === 'preset' && !presets.some(p => p.id === presetId)) presetId = presets[0]?.id || null;
@@ -69,7 +77,7 @@ const getConfig = () => {
 
 const getTemplatePath = (source, presetId) => {
   ensureDirs();
-  if (source === 'custom') return fs.existsSync(CUSTOM_FILE) ? CUSTOM_FILE : null;
+  if (source === 'custom') return findCustomFile();
   const wanted = safeId(presetId);
   const preset = listPresets().find(p => p.id === wanted);
   return preset ? path.join(PRESET_DIR, preset.file) : null;
@@ -97,8 +105,19 @@ const saveCustomTemplate = async (dataUrl) => {
   const meta = await image.metadata();
   if (!meta.width || !meta.height || meta.width < 300 || meta.height < 300) throw new Error('Resolusi minimal 300×300 px');
   if (meta.width > 4096 || meta.height > 4096) throw new Error('Resolusi maksimal 4096×4096 px');
-  await image.png().toFile(CUSTOM_FILE);
-  return { width: meta.width, height: meta.height };
+  
+  // Hapus file custom lama (ekstensi apapun) sebelum save yang baru.
+  const old = findCustomFile();
+  if (old) fs.unlinkSync(old);
+  
+  // Deteksi format dari input buffer, save sesuai format asli (jpg/webp/png).
+  let ext = '.png';
+  if (meta.format === 'jpeg') ext = '.jpg';
+  else if (meta.format === 'webp') ext = '.webp';
+  
+  const targetPath = path.join(ROOT, `custom${ext}`);
+  await image.toFile(targetPath);
+  return { width: meta.width, height: meta.height, format: meta.format };
 };
 
 const saveConfig = (input = {}) => {
@@ -117,7 +136,7 @@ const saveConfig = (input = {}) => {
   db.updateSettings({ qris_custom_config: config });
   ensureDirs();
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
-  return { ...config, custom_exists: fs.existsSync(CUSTOM_FILE) };
+  return { ...config, custom_exists: !!findCustomFile() };
 };
 
 const fetchImageBuffer = async (source) => {
@@ -173,7 +192,7 @@ const renderPaymentImage = async (paymentData = {}) => {
 };
 
 module.exports = {
-  ROOT, PRESET_DIR, CUSTOM_FILE, CONFIG_FILE, DEFAULT_LAYOUT,
+  ROOT, PRESET_DIR, CONFIG_FILE, DEFAULT_LAYOUT,
   normalizeLayout, listPresets, getConfig, getTemplatePath, resolveActiveTemplate,
-  saveCustomTemplate, saveConfig, renderWithTemplate, renderActive, getPlainQR, renderPaymentImage
+  saveCustomTemplate, saveConfig, renderWithTemplate, renderActive, getPlainQR, renderPaymentImage, findCustomFile
 };

@@ -20,8 +20,9 @@ const registerQrisCustomRoutes = (router) => {
   });
 
   r.get('/custom', (req, res) => {
-    if (!fs.existsSync(qrisCustom.CUSTOM_FILE)) return res.status(404).end();
-    res.sendFile(qrisCustom.CUSTOM_FILE);
+    const customFile = qrisCustom.findCustomFile();
+    if (!customFile) return res.status(404).end();
+    res.sendFile(customFile);
   });
 
   r.post('/upload', async (req, res) => {
