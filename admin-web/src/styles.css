@@ -1565,3 +1565,31 @@ input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
   .order-notif, .bc-float { bottom: calc(86px + env(safe-area-inset-bottom)); }
   .toast { bottom: calc(86px + env(safe-area-inset-bottom)); }
 }
+
+
+/* ============ MOBILE POLISH — STABILITAS & KONSISTENSI ============ */
+@media (max-width: 720px) {
+  /* Kartu tabel: spacing & radius konsisten, terasa seperti list app */
+  .table-wrap:has(td[data-label]) .table tr {
+    border-radius: 14px; margin-bottom: 10px; padding: 12px 14px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.02);
+  }
+  .table-wrap:has(td[data-label]) .table td { padding: 9px 2px; }
+  .table-wrap:has(td[data-label]) .table td[data-label]::before { font-size: 12px; letter-spacing: .01em; }
+
+  /* Badge status yang bisa di-tap → tinggi nyaman untuk jari */
+  button.badge, .badge.badge-icon { min-height: 32px; padding-top: 6px; padding-bottom: 6px; }
+
+  /* Panel & kartu: padding seragam antar halaman */
+  .panel { border-radius: 16px; }
+  .stat-card { border-radius: 14px; }
+
+  /* Row action ikon: jarak antar tombol biar nggak salah pencet */
+  .row-actions { gap: 10px; }
+
+  /* Konsistensi judul section */
+  .panel-head h3, .settings-section-title { font-size: 14.5px; }
+
+  /* Scroll lebih halus di seluruh kontainer scroll */
+  .drawer-body, .picker-list, .chips, .settings-tabs { scroll-behavior: smooth; }
+}
