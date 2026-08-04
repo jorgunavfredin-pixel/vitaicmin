@@ -15,6 +15,14 @@ const NAV = [
   { to: '/settings', label: 'Settings', icon: 'settings' }
 ];
 
+// Item utama untuk bottom navigation mobile (4 + tombol Menu)
+const BOTTOM_NAV = [
+  { to: '/', label: 'Home', icon: 'dashboard', end: true },
+  { to: '/orders', label: 'Orders', icon: 'receipt' },
+  { to: '/products', label: 'Produk', icon: 'package' },
+  { to: '/stock', label: 'Stok', icon: 'box' }
+];
+
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -157,6 +165,29 @@ export default function Layout() {
           <Outlet />
         </div>
       </div>
+
+      {/* Bottom navigation — hanya tampil di mobile (via CSS) */}
+      <nav className="bottom-nav">
+        {BOTTOM_NAV.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className={({ isActive }) => `bnav-item ${isActive ? 'active' : ''}`}
+          >
+            <span className="bnav-icon"><Icon name={item.icon} size={22} /></span>
+            <span className="bnav-label">{item.label}</span>
+          </NavLink>
+        ))}
+        <button
+          className={`bnav-item ${open ? 'active' : ''}`}
+          onClick={() => setOpen(true)}
+          aria-label="Menu lainnya"
+        >
+          <span className="bnav-icon"><Icon name="menu" size={22} /></span>
+          <span className="bnav-label">Menu</span>
+        </button>
+      </nav>
 
       {toast && <div className={`toast ${toast.kind}`}>{toast.msg}</div>}
 
