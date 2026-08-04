@@ -1440,3 +1440,47 @@ input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
   .modal-actions > button { width: 100%; min-height: 46px; }
   .modal-header h3 { font-size: 15px; }
 }
+
+
+/* ============ MOBILE FASE 3 — FORM & INPUT ============ */
+@media (max-width: 720px) {
+  /* Form grid modal → 1 kolom */
+  .form-grid { grid-template-columns: 1fr; gap: 12px; }
+  .modal.modal-lg { max-width: 100%; }
+
+  /* Semua input/select/textarea nyaman disentuh + cegah zoom iOS (font 16px) */
+  .field-input input, .qty-field, .select-field,
+  .search input, .picker-trigger, .picker-search input,
+  input[type=text], input[type=number], input[type=password], input[type=email], textarea, select {
+    font-size: 16px; min-height: 46px;
+  }
+  textarea { min-height: 92px; }
+  .field-label { font-size: 13px; }
+  .select-field { width: 100%; min-width: 0; }
+  .toolbar-right { flex-direction: column; align-items: stretch; gap: 10px; }
+  .toolbar-right > * { width: 100%; }
+
+  /* Product picker → panel besar, opsi nyaman disentuh */
+  .picker-panel { max-height: min(64dvh, 460px); }
+  .picker-option { min-height: 48px; padding: 11px; font-size: 14px; }
+  .picker-search { padding: 12px; }
+  .picker-search input { min-height: 40px; }
+
+  /* Grid statistik produk & ringkasan stok */
+  .prod-stat-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stock-summary { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stock-actions { grid-template-columns: 1fr 1fr; }
+
+  /* Bulk / tier row */
+  .tier-row { gap: 8px; }
+  .qcustom-row input[type=number] { min-height: 44px; font-size: 16px; }
+
+  /* View toggle & row action icon lebih besar */
+  .view-toggle button { min-height: 44px; padding: 9px 16px; }
+  .ic-btn { width: 40px; height: 40px; font-size: 16px; }
+}
+
+@media (max-width: 400px) {
+  .prod-stat-grid, .stock-summary { grid-template-columns: 1fr; }
+  .stock-actions { grid-template-columns: 1fr; }
+}
