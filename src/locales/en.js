@@ -111,14 +111,7 @@ Please create a new order if you still want to purchase.`,
     status_cancelled: '❌ Cancelled',
     status_expired: '⏰ Expired',
 
-    // Support
-    support_message: `💬 *Customer Support*
 
-For assistance, please contact admin directly:
-
-👤 @${process.env.SUPPORT_USERNAME || 'admin'}
-
-Operating hours: ${process.env.SUPPORT_HOURS || '09:00 - 22:00 WIB (GMT+7)'}`,
 
     // Errors
     error_general: '❌ An error occurred. Please try again.',

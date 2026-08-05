@@ -111,15 +111,6 @@ Silakan buat order baru jika masih ingin membeli.`,
     status_cancelled: '❌ Dibatalkan',
     status_expired: '⏰ Kadaluarsa',
 
-    // Support
-    support_message: `💬 *Customer Support*
-
-Untuk bantuan, silakan hubungi admin langsung:
-
-👤 @${process.env.SUPPORT_USERNAME || 'admin'}
-
-Jam operasional: ${process.env.SUPPORT_HOURS || '09:00 - 22:00 WIB'}`,
-
     // Errors
     error_general: '❌ Terjadi kesalahan. Silakan coba lagi.',
     error_no_stock: '❌ Maaf, stok tidak mencukupi.',
