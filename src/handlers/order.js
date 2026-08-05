@@ -808,7 +808,7 @@ const registerOrderHandler = (bot) => {
         });
         await notifyAdminNewOrder(ctx.telegram, orderId, db.getOrderById(orderId), 'BINANCE PAY');
 
-        binanceTxidStates.set(orderId, {
+        binanceTxidStates.set(userId, {
             orderId,
             chatId: ctx.chat.id,
             invoiceMessageId: invoiceMsg.message_id,
@@ -834,12 +834,12 @@ const registerOrderHandler = (bot) => {
         // Validasi order masih layak dibayar + belum expired.
         const order = db.getOrderById(orderId);
         if (!order || !['pending', 'init', 'processing'].includes(order.status)) {
-            binanceTxidStates.delete(orderId);
+            binanceTxidStates.delete(userId);
             return ctx.reply(lang === 'en' ? 'This order is no longer payable.' : 'Order ini sudah tidak bisa dibayar.');
         }
         // Cegah buyer submit TX ID setelah order expired (walau state masih ada).
         if (order.expires_at && new Date(order.expires_at) <= new Date()) {
-            binanceTxidStates.delete(orderId);
+            binanceTxidStates.delete(userId);
             return ctx.reply(lang === 'en'
                 ? '⏰ Order expired. Please create a new order.'
                 : '⏰ Order sudah kadaluarsa. Silakan buat order baru.');
