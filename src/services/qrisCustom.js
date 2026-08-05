@@ -154,17 +154,33 @@ const fetchImageBuffer = async (source) => {
 };
 
 const renderWithTemplate = async (templatePath, qrSource, layout) => {
-  const template = sharp(templatePath).rotate();
-  const meta = await template.metadata();
+  const meta = await sharp(templatePath).rotate().metadata();
   if (!meta.width || !meta.height) throw new Error('Template tidak valid');
+
+  // Output dibatasi MAX_OUTPUT px lalu di-encode JPEG: PNG 2048px ~2.5 MB terlalu berat
+  // untuk upload Telegram (QR baru muncul setelah beberapa detik). JPEG 1024px ~150-300 KB.
+  // Template di-resize DULU, posisi QR dihitung dari dimensi final — sharp menjalankan
+  // resize sebelum composite, jadi kotak QR harus mengacu ke ukuran sesudah resize.
+  const MAX_OUTPUT = 1024;
+  const scale = Math.min(1, MAX_OUTPUT / Math.max(meta.width, meta.height));
+  const outW = Math.round(meta.width * scale);
+  const outH = Math.round(meta.height * scale);
+
   const pos = normalizeLayout(layout);
-  const box = Math.max(64, Math.min(meta.width, meta.height, Math.round(meta.width * pos.size / 100)));
-  const left = Math.max(0, Math.min(meta.width - box, Math.round(meta.width * pos.x / 100)));
-  const top = Math.max(0, Math.min(meta.height - box, Math.round(meta.width * pos.y / 100)));
+  const box = Math.max(64, Math.min(outW, outH, Math.round(outW * pos.size / 100)));
+  const left = Math.max(0, Math.min(outW - box, Math.round(outW * pos.x / 100)));
+  const top = Math.max(0, Math.min(outH - box, Math.round(outW * pos.y / 100)));
+
   const qrInput = await fetchImageBuffer(qrSource);
   const qr = await sharp(qrInput).resize(box, box, { fit: 'contain', kernel: sharp.kernel.nearest, background: '#ffffff' }).png().toBuffer();
   const white = await sharp({ create: { width: box, height: box, channels: 4, background: '#ffffff' } }).png().toBuffer();
-  return template.composite([{ input: white, left, top }, { input: qr, left, top }]).png().toBuffer();
+
+  let pipeline = sharp(templatePath).rotate();
+  if (scale < 1) pipeline = pipeline.resize(outW, outH, { fit: 'fill' });
+  return pipeline
+    .composite([{ input: white, left, top }, { input: qr, left, top }])
+    .jpeg({ quality: 85, chromaSubsampling: '4:4:4' })
+    .toBuffer();
 };
 
 const renderActive = async (qrSource) => {
