@@ -157,8 +157,13 @@ export const deleteVoucher = (id) => apiFetch(`/vouchers/${encodeURIComponent(id
 
 // ---- Broadcast ----
 export const fetchBroadcastTargets = () => apiFetch('/broadcast/targets');
-export const previewBroadcast = (target, categoryId) =>
-  apiFetch('/broadcast/preview', { method: 'POST', body: JSON.stringify({ target, categoryId }) });
+export const previewBroadcast = (target, categoryId, options = {}) => {
+    const { header, body } = options;
+    return apiFetch('/broadcast/preview', { 
+        method: 'POST', 
+        body: JSON.stringify({ target, categoryId, header, body }) 
+    });
+};
 export const startBroadcast = (payload) =>
   apiFetch('/broadcast', { method: 'POST', body: JSON.stringify(payload) });
 export const fetchBroadcastStatus = (jobId) => apiFetch(`/broadcast/status/${encodeURIComponent(jobId)}`);

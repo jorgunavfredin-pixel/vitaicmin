@@ -11,6 +11,7 @@ export default function Broadcast() {
   const [target, setTarget] = useState('all');        // all | category
   const [categoryId, setCategoryId] = useState('');
   const [count, setCount] = useState(null);           // jumlah target hasil preview
+  const [previewHtml, setPreviewHtml] = useState(''); // HTML formatted untuk preview
 
   const [header, setHeader] = useState('');
   const [body, setBody] = useState('');
@@ -29,6 +30,8 @@ export default function Broadcast() {
   const showHeader = (locked ? snapshot.header : header).trim() || DEFAULT_HEADER;
   const showBody = locked ? snapshot.body : body;
   const showPhotoUrl = locked ? snapshot.photoUrl : photo?.dataUrl;
+  // Gunakan previewHtml dari backend kalau ada, otherwise gunakan raw body
+  const showPreviewHtml = locked && !snapshot.previewHtml ? '' : previewHtml || (showBody.trim() ? showBody : '(pesan kosong)');
 
   const showToast = (msg, kind = 'ok') => {
     setToast({ msg, kind });
@@ -43,12 +46,28 @@ export default function Broadcast() {
   // Hitung ulang jumlah target tiap ganti mode/kategori
   const refreshCount = useCallback(() => {
     if (target === 'category' && !categoryId) { setCount(null); return; }
-    previewBroadcast(target, categoryId)
-      .then((r) => setCount(r.count))
+    previewBroadcast(target, categoryId, { header, body })
+      .then((r) => {
+        setCount(r.count);
+        // Set preview HTML kalau ada dari backend
+        if (r.preview_html) {
+          setPreviewHtml(r.preview_html);
+        }
+      })
       .catch(() => setCount(null));
   }, [target, categoryId]);
 
   useEffect(() => { refreshCount(); }, [refreshCount]);
+  
+  // Update preview_html setiap kali header/body berubah
+  useEffect(() => {
+    previewBroadcast(target, categoryId, { header, body })
+      .then((r) => {
+        if (r.preview_html) {
+          setPreviewHtml(r.preview_html);
+        }
+      });
+  }, [header, body]);
 
   const onPickPhoto = (e) => {
     const file = e.target.files?.[0];
@@ -168,9 +187,9 @@ export default function Broadcast() {
             {showPhotoUrl && <img className="bc-preview-img" src={showPhotoUrl} alt="broadcast" />}
             <div className="bc-bubble">
               <div className="bc-bubble-header">{showHeader}</div>
-              {(showBody.trim() || !showPhotoUrl) && (
-                <div className="bc-bubble-body" style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: showBody || '(pesan kosong)' }} />
-              )}
+              {(showPreviewHtml && !showPhotoUrl) || showPreviewHtml === '(pesan kosong)' ? (
+                <div className="bc-bubble-body" style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: showPreviewHtml }} />
+              ) : null}
             </div>
           </div>
 

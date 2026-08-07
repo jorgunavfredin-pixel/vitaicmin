@@ -106,13 +106,27 @@ const getTargets = (req, res) => {
     }
 };
 
-// ---- POST /broadcast/preview ----  { target, categoryId } -> jumlah target
+// ---- POST /broadcast/preview ----  { target, categoryId } -> jumlah + preview HTML
 const previewTargets = (req, res) => {
     try {
-        const { target, categoryId } = req.body;
+        const { target, categoryId, header, body } = req.body;
         const r = sharedResolveTargets(target, categoryId);
         if (r.error) return res.status(400).json({ error: r.error });
-        res.json({ count: r.users.length, label: r.label });
+        
+        // Preview body saja (header sudah dirender terpisah di UI sebagai bc-bubble-header).
+        // Jangan gabung header di sini biar tidak dobel.
+        let previewText = '';
+        if (body && body.trim()) {
+            previewText = sanitizeTelegramHtml(body).trim();
+        } else {
+            previewText = '(pesan kosong)';
+        }
+        
+        res.json({ 
+            count: r.users.length, 
+            label: r.label,
+            preview_html: previewText
+        });
     } catch (e) {
         res.status(e.status || 500).json({ error: e.message });
     }
