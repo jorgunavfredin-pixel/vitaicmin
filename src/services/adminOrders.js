@@ -53,12 +53,28 @@ const refundOrder = async ({ telegram, orderId }) => {
     if (ids.length) db.restoreStock(ids);
     db.releaseReservedStock(order.id);
     db.updateOrder(order.id, { status: 'refunded', stock_ids: [], delivered_data: [] }, 'refund');
+
+    // Kalau order dibayar pakai SALDO, kembalikan uangnya ke saldo buyer (+ catat history).
+    // Tanpa ini, refund order saldo bikin uang buyer hilang.
+    let balanceRefunded = 0;
+    if (order.payment_method === 'saldo' && Number(order.total_idr) > 0) {
+        try {
+            const { addBalance } = require('../payments/balance');
+            addBalance(order.user_id, Number(order.total_idr), 'refund', `Refund order ${order.id}`, order.id);
+            balanceRefunded = Number(order.total_idr);
+        } catch (e) {
+            // jangan gagalkan seluruh refund kalau pengembalian saldo error; laporkan saja
+            console.error('[refundOrder] gagal refund saldo:', e.message);
+        }
+    }
+
     const chatId = order.chat_id || order.user_id;
     for (const messageId of [order.delivery_message_id, order.delivery_terms_message_id, order.delivery_file_message_id].filter(Boolean)) {
         try { await telegram.deleteMessage(chatId, messageId); } catch (_) {}
     }
-    try { await telegram.sendMessage(chatId, `💰 *REFUND NOTICE*\n\nOrder \`${md(order.id)}\` (${md(productLabel(order))}) has been refunded by admin.`, { parse_mode: 'Markdown' }); } catch (_) {}
-    return { order: db.getOrderById(order.id), restored: ids.length };
+    const refundLine = balanceRefunded > 0 ? `\n\n💵 Saldo Rp ${balanceRefunded.toLocaleString('id-ID')} telah dikembalikan ke akun kamu.` : '';
+    try { await telegram.sendMessage(chatId, `💰 *REFUND NOTICE*\n\nOrder \`${md(order.id)}\` (${md(productLabel(order))}) has been refunded by admin.${refundLine}`, { parse_mode: 'Markdown' }); } catch (_) {}
+    return { order: db.getOrderById(order.id), restored: ids.length, balanceRefunded };
 };
 
 module.exports = { redeliverOrder, replaceOrderAccount, refundOrder };

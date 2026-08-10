@@ -53,10 +53,19 @@ const getDashboard = (req, res) => {
             if (o.product_id === 'TOPUP') continue;
             soldByProduct[o.product_id] = (soldByProduct[o.product_id] || 0) + (o.quantity || 0);
         }
-        const topProducts = Object.entries(soldByProduct)
+        const topProductsSorted = Object.entries(soldByProduct)
             .map(([id, qty]) => ({ id, name: prodMap[id]?.name_id || id, qty }))
-            .sort((a, b) => b.qty - a.qty)
-            .slice(0, 5);
+            .filter(p => p.qty > 0)                 // hanya produk yang pernah terjual ≥1x
+            .sort((a, b) => b.qty - a.qty);
+        const topProducts = topProductsSorted.slice(0, 5);      // panel utama: 5 teratas
+        const topProductsAll = topProductsSorted;               // popup "Lihat semua": full ranking
+
+        // ---- Active users: user unik yang punya minimal 1 paid/delivered order ----
+        const activeUserSet = new Set();
+        for (const o of paidOrders) {
+            if (o.user_id != null) activeUserSet.add(String(o.user_id));
+        }
+        const activeUsers = activeUserSet.size;
 
         // ---- Stock health ----
         let totalStock = 0, lowStockCount = 0;
@@ -73,10 +82,10 @@ const getDashboard = (req, res) => {
         // Urut dari yang paling kritis (stok paling sedikit dulu)
         lowStockProducts.sort((a, b) => a.qty - b.qty);
 
-        // ---- Recent orders (last 6) ----
+        // ---- Recent orders (last 20, terbaru dulu) ----
         const recentOrders = [...orders]
             .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
-            .slice(0, 6)
+            .slice(0, 20)
             .map(o => ({
                 id: o.id,
                 product: o.product_id === 'TOPUP' ? '💰 Topup Saldo' : (prodMap[o.product_id]?.name_id || o.product_id),
@@ -97,6 +106,7 @@ const getDashboard = (req, res) => {
                 ordersSuccess: detailed.transactions.success,
                 successRate: detailed.transactions.success_rate,
                 totalUsers: Object.keys(users).length,
+                activeUsers,
                 totalProducts: products.length,
                 totalStock,
                 lowStockCount
@@ -104,6 +114,7 @@ const getDashboard = (req, res) => {
             lowStockProducts,
             revenueSeries,
             topProducts,
+            topProductsAll,
             recentOrders
         });
     } catch (e) {

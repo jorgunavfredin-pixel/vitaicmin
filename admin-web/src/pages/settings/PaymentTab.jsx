@@ -101,6 +101,7 @@ function GatewayCard({ gw, showToast, onChanged }) {
   const [busy, setBusy] = useState('');
   const [testResult, setTestResult] = useState(null);
   const [deleteState, setDeleteState] = useState(null);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     setEnabled(gw.enabled);
@@ -206,6 +207,12 @@ function GatewayCard({ gw, showToast, onChanged }) {
         </div>
       </div>
 
+      <button className={`gw-expand ${expanded ? 'open' : ''}`} onClick={() => setExpanded(v => !v)} aria-expanded={expanded}>
+        <span><Icon name="settings" size={15} /> {expanded ? 'Tutup Konfigurasi' : 'Kelola Konfigurasi'}</span>
+        <Icon name="chevron" size={15} />
+      </button>
+
+      {expanded && <>
       <div className="gw-fields">
         {meta.fields.map((f) => (
           <div key={f.key} className="gw-field">
@@ -251,6 +258,7 @@ function GatewayCard({ gw, showToast, onChanged }) {
           <Icon name="trash" size={14} /> {busy === 'delcheck' ? 'Memeriksa…' : 'Hapus'}
         </button>
       </div>
+      </>}
 
       {deleteState && (
         <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) setDeleteState(null); }}>
@@ -311,7 +319,7 @@ function AddGatewayModal({ providers, onClose, showToast, onDone }) {
 
   return (
     <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ maxWidth: 440, textAlign: 'left' }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="modal gateway-add-modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3 className="h3-icon"><Icon name="cash" size={18} /> Tambah Payment Gateway</h3>
           <button className="x" onClick={onClose}><Icon name="x" /></button>

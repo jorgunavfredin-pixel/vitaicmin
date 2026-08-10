@@ -9,6 +9,7 @@ const PRESET_DIR = path.join(ROOT, 'presets');
 const CONFIG_FILE = path.join(ROOT, 'config.json');
 const DEFAULT_LAYOUT = Object.freeze({ x: 23.4375, y: 23.4375, size: 53.125 });
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+const templateMetaCache = new Map();
 
 // Cari file custom.* dengan ekstensi valid (bukan hardcode .png saja).
 const findCustomFile = () => {
@@ -153,15 +154,24 @@ const fetchImageBuffer = async (source) => {
   return Buffer.from(response.data);
 };
 
-const renderWithTemplate = async (templatePath, qrSource, layout) => {
+const getTemplateMeta = async (templatePath) => {
+  const stat = fs.statSync(templatePath);
+  const cached = templateMetaCache.get(templatePath);
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) return cached.meta;
   const meta = await sharp(templatePath).rotate().metadata();
+  templateMetaCache.set(templatePath, { mtimeMs: stat.mtimeMs, size: stat.size, meta });
+  return meta;
+};
+
+const renderWithTemplate = async (templatePath, qrSource, layout, options = {}) => {
+  const meta = await getTemplateMeta(templatePath);
   if (!meta.width || !meta.height) throw new Error('Template tidak valid');
 
   // Output dibatasi MAX_OUTPUT px lalu di-encode JPEG: PNG 2048px ~2.5 MB terlalu berat
   // untuk upload Telegram (QR baru muncul setelah beberapa detik). JPEG 1024px ~150-300 KB.
   // Template di-resize DULU, posisi QR dihitung dari dimensi final — sharp menjalankan
   // resize sebelum composite, jadi kotak QR harus mengacu ke ukuran sesudah resize.
-  const MAX_OUTPUT = 1024;
+  const MAX_OUTPUT = Math.max(480, Math.min(1024, Number(options.maxOutput) || 1024));
   const scale = Math.min(1, MAX_OUTPUT / Math.max(meta.width, meta.height));
   const outW = Math.round(meta.width * scale);
   const outH = Math.round(meta.height * scale);
@@ -179,7 +189,7 @@ const renderWithTemplate = async (templatePath, qrSource, layout) => {
   if (scale < 1) pipeline = pipeline.resize(outW, outH, { fit: 'fill' });
   return pipeline
     .composite([{ input: white, left, top }, { input: qr, left, top }])
-    .jpeg({ quality: 85, chromaSubsampling: '4:4:4' })
+    .jpeg({ quality: Number(options.quality) || 85, chromaSubsampling: '4:4:4' })
     .toBuffer();
 };
 

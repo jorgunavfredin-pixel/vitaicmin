@@ -24,3 +24,4 @@ admin-web/node_modules/
 # Logs & OS
 *.log
 .DS_Store
+admin-web.backup/

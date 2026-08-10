@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { fetchVouchers, createVoucher, deleteVoucher } from '../api.js';
 import Icon from '../components/Icons.jsx';
 import { SkeletonTable } from '../components/Skeleton.jsx';
+import './vouchers/vouchers.css';
 
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const compact = (n) => new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(n || 0);
@@ -12,7 +13,9 @@ const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('id-ID', {
 function StatCard({ icon, label, value, sub, accent }) {
   return (
     <div className={`stat-card accent-${accent}`}>
-      <div className="stat-icon"><Icon name={icon} size={22} /></div>
+      <div className="stat-head">
+        <div className="stat-icon"><Icon name={icon} size={20} /></div>
+      </div>
       <div className="stat-body">
         <div className="stat-label">{label}</div>
         <div className="stat-value">{value}</div>
@@ -76,13 +79,13 @@ export default function Vouchers() {
       {s && (
         <div className="prod-stat-grid">
           <StatCard icon="ticket" accent="blue" label="Total Voucher" value={compact(s.total)} sub="Semua kode" />
-          <StatCard icon="discount" accent="violet" label="Tipe Persen" value={compact(s.percent)} sub="Diskon %" />
+          <StatCard icon="discount" accent="blue" label="Tipe Persen" value={compact(s.percent)} sub="Diskon %" />
           <StatCard icon="cash" accent="green" label="Tipe Potongan" value={compact(s.fixed)} sub="Diskon Rp" />
           <StatCard icon="check" accent="amber" label="Total Dipakai" value={compact(s.totalRedemptions)} sub="Redemption oleh user" />
         </div>
       )}
 
-      <div className="panel no-pad">
+      <div className="panel no-pad vouchers-table-card">
         {error ? (
           <div className="empty error-panel hint-icon"><Icon name="warning" size={16} /> {error}</div>
         ) : loading && !data ? (
@@ -90,7 +93,7 @@ export default function Vouchers() {
         ) : data && data.vouchers.length === 0 ? (
           <div className="empty">Belum ada voucher. Klik "Buat Voucher" untuk menambah.</div>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap vouchers-desktop-table">
             <table className="table vouchers-table">
               <thead>
                 <tr>
@@ -128,6 +131,30 @@ export default function Vouchers() {
           </div>
         )}
       </div>
+
+      {/* Dedicated mobile voucher cards — compact, bukan tabel 273px per row */}
+      {data && data.vouchers.length > 0 && (
+        <div className="vouchers-mobile-list">
+          {data.vouchers.map((v) => (
+            <div key={v.id} className="voucher-card">
+              <div className="voucher-card-head">
+                <span className="voucher-code">{v.code}</span>
+                <span className={`badge ${v.type === 'percent' ? 'st-paid' : 'st-delivered'}`}>
+                  {v.type === 'percent' ? 'Persen' : 'Potongan'}
+                </span>
+              </div>
+              <div className="voucher-card-body">
+                <div className="voucher-card-value"><small>Nilai diskon</small><b>{v.label}</b></div>
+                <div className="voucher-card-used"><small>Dipakai</small><b>{v.redemptions > 0 ? `${v.redemptions} user` : 'Belum'}</b></div>
+                <button className="voucher-card-delete" onClick={() => setConfirmDel(v)} aria-label={`Hapus voucher ${v.code}`}>
+                  <Icon name="trash" size={15} />
+                </button>
+              </div>
+              <div className="voucher-card-date">Dibuat {fmtDate(v.created_at)}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {showCreate && (
         <CreateVoucherModal
@@ -187,7 +214,7 @@ function CreateVoucherModal({ onClose, toast, onDone }) {
 
   return (
     <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ maxWidth: 420, textAlign: 'left' }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="modal voucher-create-modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3 className="h3-icon"><Icon name="ticket" size={18} /> Buat Voucher Baru</h3>
           <button className="x" onClick={onClose}><Icon name="x" /></button>

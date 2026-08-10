@@ -2,6 +2,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { fetchBroadcastTargets, previewBroadcast } from '../api.js';
 import Icon from '../components/Icons.jsx';
 import { useBroadcast } from '../context/BroadcastContext.jsx';
+import { sanitizeTelegramHtml, telegramTextLength, hasUnsupportedHtml } from './broadcast/telegramPreview.js';
+import './broadcast/broadcast.css';
 
 const DEFAULT_HEADER = '📢 BROADCAST MESSAGE';
 const MAX_PHOTO_MB = 8;
@@ -11,7 +13,6 @@ export default function Broadcast() {
   const [target, setTarget] = useState('all');        // all | category
   const [categoryId, setCategoryId] = useState('');
   const [count, setCount] = useState(null);           // jumlah target hasil preview
-  const [previewHtml, setPreviewHtml] = useState(''); // HTML formatted untuk preview
 
   const [header, setHeader] = useState('');
   const [body, setBody] = useState('');
@@ -30,8 +31,11 @@ export default function Broadcast() {
   const showHeader = (locked ? snapshot.header : header).trim() || DEFAULT_HEADER;
   const showBody = locked ? snapshot.body : body;
   const showPhotoUrl = locked ? snapshot.photoUrl : photo?.dataUrl;
-  // Gunakan previewHtml dari backend kalau ada, otherwise gunakan raw body
-  const showPreviewHtml = locked && !snapshot.previewHtml ? '' : previewHtml || (showBody.trim() ? showBody : '(pesan kosong)');
+  const sanitizedBody = sanitizeTelegramHtml(showBody);
+  const messageLength = telegramTextLength(showHeader, showBody);
+  const telegramLimit = showPhotoUrl ? 1024 : 4096;
+  const lengthExceeded = messageLength > telegramLimit;
+  const unsupportedHtml = hasUnsupportedHtml(showBody);
 
   const showToast = (msg, kind = 'ok') => {
     setToast({ msg, kind });
@@ -46,28 +50,12 @@ export default function Broadcast() {
   // Hitung ulang jumlah target tiap ganti mode/kategori
   const refreshCount = useCallback(() => {
     if (target === 'category' && !categoryId) { setCount(null); return; }
-    previewBroadcast(target, categoryId, { header, body })
-      .then((r) => {
-        setCount(r.count);
-        // Set preview HTML kalau ada dari backend
-        if (r.preview_html) {
-          setPreviewHtml(r.preview_html);
-        }
-      })
+    previewBroadcast(target, categoryId)
+      .then((r) => setCount(r.count))
       .catch(() => setCount(null));
   }, [target, categoryId]);
 
   useEffect(() => { refreshCount(); }, [refreshCount]);
-  
-  // Update preview_html setiap kali header/body berubah
-  useEffect(() => {
-    previewBroadcast(target, categoryId, { header, body })
-      .then((r) => {
-        if (r.preview_html) {
-          setPreviewHtml(r.preview_html);
-        }
-      });
-  }, [header, body]);
 
   const onPickPhoto = (e) => {
     const file = e.target.files?.[0];
@@ -91,7 +79,24 @@ export default function Broadcast() {
     setTimeout(() => { ta.focus(); ta.selectionStart = start + tag.length + 2; ta.selectionEnd = start + tag.length + 2 + sel.length; }, 0);
   };
 
-  const canSend = (body.trim() || photo) && count > 0 && !running;
+  const insertLink = () => {
+    const ta = bodyRef.current;
+    if (!ta || locked) return;
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const selected = body.slice(start, end) || 'teks link';
+    const href = window.prompt('URL link (https://...)');
+    if (!href) return;
+    let safe;
+    try {
+      const parsed = new URL(href);
+      if (!['http:', 'https:', 'tg:'].includes(parsed.protocol)) throw new Error();
+      safe = parsed.href.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    } catch (_) { return showToast('URL tidak valid', 'err'); }
+    setBody(body.slice(0, start) + `<a href="${safe}">${selected}</a>` + body.slice(end));
+    setTimeout(() => ta.focus(), 0);
+  };
+
+  const canSend = (body.trim() || photo) && count > 0 && !running && !lengthExceeded;
 
   const doStart = async () => {
     setConfirm(false);
@@ -149,18 +154,26 @@ export default function Broadcast() {
           <div className="bc-hint">Kosongkan untuk pakai header default: <code>{DEFAULT_HEADER}</code></div>
 
           {/* Body + toolbar format */}
-          <label className="field-label" style={{ marginTop: 16 }}>Isi Pesan (format HTML)</label>
+          <div className="bc-editor-label-row">
+            <label className="field-label">Isi Pesan</label>
+            <span className={`bc-char-count ${lengthExceeded ? 'over' : ''}`}>{messageLength}/{telegramLimit}</span>
+          </div>
           <div className="bc-toolbar">
             <button className="bc-fmt" title="Bold" disabled={locked} onClick={() => wrapSelection('b')}><b>B</b></button>
             <button className="bc-fmt" title="Italic" disabled={locked} onClick={() => wrapSelection('i')}><i>I</i></button>
             <button className="bc-fmt" title="Underline" disabled={locked} onClick={() => wrapSelection('u')}><u>U</u></button>
             <button className="bc-fmt" title="Strikethrough" disabled={locked} onClick={() => wrapSelection('s')}><s>S</s></button>
             <button className="bc-fmt" title="Monospace" disabled={locked} onClick={() => wrapSelection('code')}>{'</>'}</button>
+            <button className="bc-fmt" title="Kutipan" disabled={locked} onClick={() => wrapSelection('blockquote')}>❞</button>
+            <button className="bc-fmt" title="Spoiler" disabled={locked} onClick={() => wrapSelection('tg-spoiler')}>◩</button>
+            <button className="bc-fmt bc-fmt-link" title="Link" disabled={locked} onClick={insertLink}>🔗</button>
           </div>
           <textarea ref={bodyRef} rows={7} className="qty-field bc-body" disabled={locked}
             placeholder={"Tulis pesan di sini…\nContoh: <b>Promo!</b> Diskon <i>50%</i> hari ini."}
             value={locked ? snapshot.body : body} onChange={(e) => setBody(e.target.value)} />
-          <div className="bc-hint">Tag didukung Telegram: <code>&lt;b&gt; &lt;i&gt; &lt;u&gt; &lt;s&gt; &lt;code&gt; &lt;a href&gt;</code></div>
+          <div className="bc-hint">Toolbar menulis format HTML Telegram. Preview memakai sanitizer yang sama dengan pesan terkirim.</div>
+          {unsupportedHtml && <div className="bc-format-warning hint-icon"><Icon name="warning" size={13} /> Tag yang tidak didukung akan dihapus sebelum dikirim.</div>}
+          {lengthExceeded && <div className="bc-format-warning is-error hint-icon"><Icon name="warning" size={13} /> Pesan melebihi batas {telegramLimit} karakter untuk {showPhotoUrl ? 'caption foto' : 'pesan Telegram'}.</div>}
 
           {/* Foto */}
           <label className="field-label" style={{ marginTop: 16 }}>Foto (opsional)</label>
@@ -182,14 +195,17 @@ export default function Broadcast() {
 
         {/* ---- Preview + Send ---- */}
         <div className="panel bc-preview-panel">
-          <div className="panel-head"><h3>Preview</h3></div>
+          <div className="panel-head bc-preview-head"><h3>Preview Telegram</h3><span className="bc-live-pill">Live</span></div>
           <div className="bc-preview">
             {showPhotoUrl && <img className="bc-preview-img" src={showPhotoUrl} alt="broadcast" />}
             <div className="bc-bubble">
-              <div className="bc-bubble-header">{showHeader}</div>
-              {(showPreviewHtml && !showPhotoUrl) || showPreviewHtml === '(pesan kosong)' ? (
-                <div className="bc-bubble-body" style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: showPreviewHtml }} />
-              ) : null}
+              <div className="bc-bubble-header"><b>{showHeader}</b></div>
+              {(showBody.trim() || !showPhotoUrl) && (
+                showBody.trim()
+                  ? <div className="bc-bubble-body telegram-html" dangerouslySetInnerHTML={{ __html: sanitizedBody }} />
+                  : <div className="bc-bubble-body bc-preview-empty">(pesan kosong)</div>
+              )}
+              <div className="bc-bubble-meta"><span>Telegram</span><span>{messageLength} karakter</span></div>
             </div>
           </div>
 

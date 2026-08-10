@@ -4,6 +4,7 @@ import {
 } from '../api.js';
 import Icon from '../components/Icons.jsx';
 import { SkeletonTable } from '../components/Skeleton.jsx';
+import './users/users.css';
 
 const rupiah = (n) => 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(n || 0));
 const compact = (n) => new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(n || 0);
@@ -39,7 +40,9 @@ const SORTS = [
 function StatCard({ icon, label, value, sub, accent }) {
   return (
     <div className={`stat-card accent-${accent}`}>
-      <div className="stat-icon"><Icon name={icon} size={22} /></div>
+      <div className="stat-head">
+        <div className="stat-icon"><Icon name={icon} size={20} /></div>
+      </div>
       <div className="stat-body">
         <div className="stat-label">{label}</div>
         <div className="stat-value">{value}</div>
@@ -91,11 +94,12 @@ export default function Users() {
   const s = data?.stats;
 
   return (
-    <div className="users-page">
+    <div className={`users-workspace ${selected ? 'dock-open' : ''}`}>
+      <div className="users-main">
       <div className="page-head">
         <div>
-          <h2 className="page-title">Manajemen Pelanggan</h2>
-          <p className="page-sub">Kelola user, saldo, ban, & lihat riwayat transaksi</p>
+          <h2 className="page-title">Customer</h2>
+          <p className="page-sub">Kelola pelanggan, saldo, status akun, dan riwayat transaksi</p>
         </div>
       </div>
 
@@ -106,7 +110,7 @@ export default function Users() {
             sub={`${s.activeBuyers} buyer aktif`} />
           <StatCard icon="cash" accent="green" label="Buyer Aktif" value={compact(s.activeBuyers)}
             sub="Pernah checkout sukses" />
-          <StatCard icon="wallet" accent="violet" label="Saldo Beredar" value={rupiah(s.totalBalance)}
+          <StatCard icon="wallet" accent="blue" label="Saldo Beredar" value={rupiah(s.totalBalance)}
             sub="Total saldo semua user" />
           <StatCard icon="warning" accent={s.bannedUsers > 0 ? 'red' : 'amber'} label="User Banned" value={compact(s.bannedUsers)}
             sub="Tidak bisa order" />
@@ -114,7 +118,7 @@ export default function Users() {
       )}
 
       {/* Toolbar */}
-      <div className="toolbar">
+      <div className="users-toolbar">
         <div className="chips">
           {FILTERS.map((f) => (
             <button key={f.key} className={`chip ${filter === f.key ? 'active' : ''}`} onClick={() => { setFilter(f.key); setPage(1); }}>
@@ -123,8 +127,8 @@ export default function Users() {
             </button>
           ))}
         </div>
-        <div className="toolbar-right">
-          <div className="search" style={{ flex: 1, minWidth: 200 }}>
+        <div className="users-toolbar-controls">
+          <div className="search users-search">
             <span className="search-icon"><Icon name="search" size={15} /></span>
             <input placeholder="Cari username / nama / ID…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
           </div>
@@ -135,7 +139,7 @@ export default function Users() {
       </div>
 
       {/* Table */}
-      <div className="panel no-pad">
+      <div className="panel no-pad users-table-card">
         {error ? (
           <div className="empty error-panel hint-icon"><Icon name="warning" size={16} /> {error}</div>
         ) : loading && !data ? (
@@ -143,7 +147,7 @@ export default function Users() {
         ) : data && data.users.length === 0 ? (
           <div className="empty">Tidak ada user pada filter ini.</div>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap users-desktop-table">
             <table className="table users-table">
               <thead>
                 <tr>
@@ -164,7 +168,7 @@ export default function Users() {
                       </div>
                     </td>
                     <td data-label="ID" className="mono">{u.id}</td>
-                    <td data-label="Saldo">{u.balance > 0 ? <b style={{ color: '#37d399' }}>{rupiah(u.balance)}</b> : <span className="muted">—</span>}</td>
+                    <td data-label="Saldo">{u.balance > 0 ? <b className="text-success">{rupiah(u.balance)}</b> : <span className="muted">—</span>}</td>
                     <td data-label="Order">{u.orders_success > 0 ? <><b>{u.orders_success}</b> <span className="muted">sukses</span></> : <span className="muted">0</span>}</td>
                     <td data-label="Total Spend">{u.total_spend > 0 ? rupiah(u.total_spend) : <span className="muted">—</span>}</td>
                     <td data-label="Status">{u.banned ? <span className="badge st-cancelled">Banned</span> : <span className="badge st-delivered">Aktif</span>}</td>
@@ -183,6 +187,29 @@ export default function Users() {
         )}
       </div>
 
+      {/* Dedicated mobile customer cards — bukan tabel yang dipaksa mengecil */}
+      {data && data.users.length > 0 && (
+        <div className="users-mobile-list">
+          {data.users.map((u) => (
+            <button key={u.id} className={`customer-card ${selected === u.id ? 'active' : ''}`} onClick={() => setSelected(u.id)}>
+              <span className="user-avatar">{initial(u)}</span>
+              <span className="customer-card-body">
+                <span className="customer-card-top">
+                  <span className="customer-card-name">{u.first_name || '-'}{u.last_name ? ' ' + u.last_name : ''}</span>
+                  <span className={`badge ${u.banned ? 'st-cancelled' : 'st-delivered'}`}>{u.banned ? 'Banned' : 'Aktif'}</span>
+                </span>
+                <span className="customer-card-sub">{u.username ? '@' + u.username : `ID ${u.id}`}</span>
+                <span className="customer-card-metrics">
+                  <span><small>Saldo</small><b>{u.balance > 0 ? rupiah(u.balance) : 'Rp 0'}</b></span>
+                  <span><small>Order sukses</small><b>{u.orders_success || 0}</b></span>
+                  <span><small>Total belanja</small><b>{u.total_spend > 0 ? rupiah(u.total_spend) : 'Rp 0'}</b></span>
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {data && data.totalPages > 1 && (
         <div className="pager">
           <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>‹ Prev</button>
@@ -191,11 +218,14 @@ export default function Users() {
         </div>
       )}
 
-      {selected && (
-        <UserDrawer id={selected} onClose={() => setSelected(null)} onChanged={load} toast={showToast} />
-      )}
-
       {toast && <div className={`toast ${toast.kind}`}>{toast.msg}</div>}
+      </div>{/* /users-main */}
+
+      <aside className="users-detail-dock" aria-hidden={!selected}>
+        {selected && (
+          <UserDrawer id={selected} onClose={() => setSelected(null)} onChanged={load} toast={showToast} />
+        )}
+      </aside>
     </div>
   );
 }
@@ -212,6 +242,11 @@ function UserDrawer({ id, onClose, onChanged, toast }) {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !balanceModal) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, balanceModal]);
 
   const doBan = async () => {
     setBusy('ban');
@@ -223,17 +258,16 @@ function UserDrawer({ id, onClose, onChanged, toast }) {
   };
 
   const balHistoryIcon = (type) => {
-    if (type === 'topup' || type === 'admin_add') return { icon: 'plus', color: '#37d399' };
-    if (type === 'deduct' || type === 'admin_deduct') return { icon: 'minus', color: '#ff6b6b' };
-    return { icon: 'coin', color: '#8a93a6' };
+    if (type === 'topup' || type === 'admin_add') return { icon: 'plus', cls: 'is-positive' };
+    if (type === 'deduct' || type === 'admin_deduct') return { icon: 'minus', cls: 'is-negative' };
+    return { icon: 'coin', cls: 'is-neutral' };
   };
 
   return (
     <>
-      <div className="scrim" onClick={onClose} />
-      <aside className="drawer drawer-wide">
-        <div className="drawer-head">
-          <h3 className="h3-icon"><Icon name="user" size={18} /> Detail User</h3>
+      <div className="dock-panel customer-detail-panel">
+        <div className="dock-head">
+          <h3>Detail Customer</h3>
           <button className="x" onClick={onClose}><Icon name="x" /></button>
         </div>
 
@@ -241,7 +275,7 @@ function UserDrawer({ id, onClose, onChanged, toast }) {
         {!user && !err && <div className="empty">Memuat…</div>}
 
         {user && (
-          <div className="drawer-body">
+          <div className="dock-body customer-detail-body">
             {/* Identitas */}
             <div className="user-detail-head">
               <span className="user-avatar-lg">{(user.first_name || user.username || '?').charAt(0).toUpperCase()}</span>
@@ -263,7 +297,7 @@ function UserDrawer({ id, onClose, onChanged, toast }) {
             {/* Ringkasan */}
             <div className="user-stat-row">
               <div className="user-stat"><div className="us-val">{user.stats.orders_total}</div><div className="us-lbl">Total Order</div></div>
-              <div className="user-stat"><div className="us-val" style={{ color: '#37d399' }}>{user.stats.orders_success}</div><div className="us-lbl">Sukses</div></div>
+              <div className="user-stat"><div className="us-val text-success">{user.stats.orders_success}</div><div className="us-lbl">Sukses</div></div>
               <div className="user-stat"><div className="us-val">{rupiah(user.stats.total_spend)}</div><div className="us-lbl">Total Spend</div></div>
             </div>
 
@@ -287,12 +321,12 @@ function UserDrawer({ id, onClose, onChanged, toast }) {
                     const ic = balHistoryIcon(h.type);
                     return (
                       <div key={h.id} className="bal-item">
-                        <span className="bal-icon" style={{ color: ic.color }}><Icon name={ic.icon} size={14} /></span>
+                        <span className={`bal-icon ${ic.cls}`}><Icon name={ic.icon} size={14} /></span>
                         <div className="bal-item-main">
                           <div className="bal-note">{h.note}</div>
                           <div className="bal-date">{fmtDate(h.created_at)}</div>
                         </div>
-                        <div className="bal-amt" style={{ color: h.amount >= 0 ? '#37d399' : '#ff6b6b' }}>
+                        <div className={`bal-amt ${h.amount >= 0 ? 'is-positive' : 'is-negative'}`}>
                           {h.amount >= 0 ? '+' : ''}{rupiah(h.amount)}
                         </div>
                       </div>
@@ -306,15 +340,16 @@ function UserDrawer({ id, onClose, onChanged, toast }) {
             {user.recent_orders.length > 0 && (
               <>
                 <div className="d-label hint-icon" style={{ marginTop: 18 }}><Icon name="receipt" size={14} /> Order Terbaru</div>
-                <div className="table-wrap" style={{ marginTop: 8 }}>
-                  <table className="table">
+                {/* Desktop table */}
+                <div className="table-wrap customer-orders-table-wrap">
+                  <table className="table customer-orders-table">
                     <thead><tr><th>Order</th><th>Produk</th><th>Total</th><th>Status</th></tr></thead>
                     <tbody>
                       {user.recent_orders.map((o) => {
                         const st = ORDER_STATUS[o.status] || { label: o.status, cls: 'st-muted' };
                         return (
                           <tr key={o.id}>
-                            <td data-label="Order" className="mono" style={{ fontSize: 12 }}>{o.id}</td>
+                            <td data-label="Order" className="mono customer-order-id">{o.id}</td>
                             <td data-label="Produk" className="ellip">{o.product}</td>
                             <td data-label="Total">{rupiah(o.total_idr)}</td>
                             <td data-label="Status"><span className={`badge ${st.cls}`}>{st.label}</span></td>
@@ -324,18 +359,38 @@ function UserDrawer({ id, onClose, onChanged, toast }) {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Mobile compact list — informasi sama, geometri seperti Riwayat Saldo */}
+                <div className="customer-orders-mobile">
+                  {user.recent_orders.map((o) => {
+                    const st = ORDER_STATUS[o.status] || { label: o.status, cls: 'st-muted' };
+                    return (
+                      <div key={o.id} className="customer-order-item">
+                        <div className="customer-order-main">
+                          <div className="customer-order-top">
+                            <span className="mono customer-order-id">{o.id}</span>
+                            <span className={`badge ${st.cls}`}>{st.label}</span>
+                          </div>
+                          <div className="customer-order-product">{o.product}</div>
+                        </div>
+                        <div className="customer-order-total">{rupiah(o.total_idr)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
               </>
             )}
 
-            {/* Aksi */}
-            <div className="d-actions" style={{ marginTop: 20 }}>
-              <button className={`a-btn btn-icon ${user.banned ? 'a-green' : 'a-red'}`} disabled={!!busy} onClick={doBan}>
-                <Icon name={user.banned ? 'check' : 'pause'} size={15} /> {user.banned ? 'Unban User' : 'Ban User'}
-              </button>
-            </div>
           </div>
         )}
-      </aside>
+        {user && (
+          <div className="dock-footer">
+            <button className={`a-btn btn-icon customer-ban-action ${user.banned ? 'a-green' : 'a-red'}`} disabled={!!busy} onClick={doBan}>
+              <Icon name={user.banned ? 'check' : 'pause'} size={15} /> {user.banned ? 'Aktifkan Customer' : 'Ban Customer'}
+            </button>
+          </div>
+        )}
+      </div>
 
       {balanceModal && user && (
         <BalanceModal user={user} onClose={() => setBalanceModal(false)}
@@ -383,8 +438,8 @@ function BalanceModal({ user, onClose, toast, onDone }) {
           <h3 className="h3-icon"><Icon name="wallet" size={18} /> Kelola Saldo</h3>
           <button className="x" onClick={onClose}><Icon name="x" /></button>
         </div>
-        <p style={{ fontSize: 13, color: '#8a93a6', margin: '0 0 14px' }}>
-          {displayName(user)} · Saldo saat ini: <b style={{ color: '#37d399' }}>{rupiah(user.balance)}</b>
+        <p className="balance-modal-context">
+          {displayName(user)} · Saldo saat ini: <b className="text-success">{rupiah(user.balance)}</b>
         </p>
 
         <div className="chips" style={{ marginBottom: 14 }}>
@@ -400,8 +455,8 @@ function BalanceModal({ user, onClose, toast, onDone }) {
         <input type="text" className="qty-field" placeholder="cth: bonus event / koreksi" value={note} onChange={(e) => setNote(e.target.value)} />
 
         <div className="balance-preview">
-          Saldo setelah perubahan: <b style={{ color: insufficient ? '#ff6b6b' : '#37d399' }}>{rupiah(preview)}</b>
-          {insufficient && <div style={{ color: '#ff6b6b', marginTop: 4 }}>Saldo tidak cukup</div>}
+          Saldo setelah perubahan: <b className={insufficient ? 'is-negative' : 'is-positive'}>{rupiah(preview)}</b>
+          {insufficient && <div className="balance-insufficient">Saldo tidak cukup</div>}
         </div>
 
         <div className="modal-actions" style={{ marginTop: 18 }}>

@@ -1,0 +1,98 @@
+/* Broadcast composer — Telegram-faithful live preview */
+.broadcast-page { gap: 16px; }
+.bc-editor-label-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 16px; margin-bottom: 7px;
+}
+.bc-editor-label-row .field-label { margin: 0; }
+.bc-char-count { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.bc-char-count.over { color: var(--red); font-weight: 700; }
+.bc-format-warning {
+  display: flex; align-items: flex-start; gap: 6px; margin-top: 7px; padding: 8px 10px;
+  border: 1px solid rgba(217,164,65,.28); border-radius: 8px;
+  background: rgba(217,164,65,.08); color: var(--amber); font-size: 11.5px;
+}
+.bc-format-warning.is-error { border-color: rgba(216,102,102,.28); background: rgba(216,102,102,.08); color: var(--red); }
+.bc-toolbar { flex-wrap: wrap; }
+.bc-fmt { font-family: inherit; }
+.bc-fmt-link { margin-left: 2px; }
+
+.bc-preview-head { display: flex; align-items: center; justify-content: space-between; }
+.bc-live-pill {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px;
+  border-radius: 999px; background: rgba(69,185,124,.11); color: var(--green);
+  border: 1px solid rgba(69,185,124,.22); font-size: 10.5px; font-weight: 650;
+}
+.bc-live-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* Telegram-like canvas and message bubble */
+.bc-preview {
+  padding: 14px; border-radius: 12px; background-color: #0e1720;
+  background-image: radial-gradient(rgba(255,255,255,.025) 1px, transparent 1px);
+  background-size: 15px 15px;
+}
+.bc-preview-img { border-radius: 11px 11px 4px 4px; }
+.bc-bubble {
+  position: relative; max-width: 100%; padding: 11px 12px 7px;
+  background: #182533; border: 1px solid rgba(120,150,175,.13);
+  border-radius: 4px 12px 12px 12px; box-shadow: none;
+}
+.bc-bubble-header { margin-bottom: 7px; color: #f2f6f9; font-size: 13.5px; }
+.bc-bubble-body.telegram-html {
+  color: #e6edf3; font-size: 13.5px; line-height: 1.48;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.telegram-html strong, .telegram-html b { font-weight: 700; color: #f6f8fa; }
+.telegram-html i, .telegram-html em { font-style: italic; }
+.telegram-html u, .telegram-html ins { text-decoration: underline; }
+.telegram-html s, .telegram-html strike, .telegram-html del { text-decoration: line-through; }
+.telegram-html code {
+  padding: 1px 5px; border-radius: 5px; background: rgba(0,0,0,.34);
+  color: #f1f4f6; font-family: ui-monospace, Menlo, monospace; font-size: .93em;
+}
+.telegram-html pre {
+  display: block; margin: 7px 0; padding: 9px; border-radius: 7px;
+  background: rgba(0,0,0,.32); overflow-x: auto; white-space: pre;
+  font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+}
+.telegram-html blockquote {
+  margin: 7px 0; padding: 3px 0 3px 9px; border-left: 3px solid #5aa6d6;
+  color: #dce7ee;
+}
+.telegram-html a { color: #65b5e8; text-decoration: none; }
+.telegram-html tg-spoiler {
+  padding: 0 3px; border-radius: 3px; color: transparent;
+  background: #70808d; cursor: pointer; user-select: none;
+}
+.telegram-html tg-spoiler:hover { color: inherit; background: rgba(112,128,141,.32); }
+.bc-preview-empty { color: var(--muted); font-style: italic; }
+.bc-bubble-meta {
+  display: flex; justify-content: flex-end; gap: 10px; margin-top: 7px;
+  color: #8295a4; font-size: 9.5px;
+}
+
+@media (max-width: 860px) {
+  .broadcast-page { gap: 12px; min-width: 0; }
+  .bc-grid { gap: 12px; }
+  .bc-editor, .bc-preview-panel { padding: 14px; }
+  .bc-preview-panel { order: 2; }
+  .bc-preview { padding: 10px; }
+  .bc-toolbar {
+    flex-wrap: nowrap; max-width: 100%; overflow-x: auto;
+    padding-bottom: 2px; scrollbar-width: none;
+  }
+  .bc-toolbar::-webkit-scrollbar { display: none; }
+  .bc-fmt { flex: 0 0 34px; min-width: 34px; padding: 0; }
+  .bc-body { min-height: 150px; font-size: 16px; line-height: 1.45; }
+  .bc-editor .qty-field, .bc-editor .select-field { width: 100%; box-sizing: border-box; }
+  .bc-bubble-body.telegram-html { font-size: 13px; }
+}
+
+@media (max-width: 560px) {
+  .broadcast-page .page-title { font-size: 19px; }
+  .broadcast-page .page-sub { font-size: 11.5px; }
+  .bc-editor, .bc-preview-panel { padding: 12px; border-radius: 11px; }
+  .bc-target-info { padding: 8px 10px; }
+  .bc-photo-picked { min-width: 0; }
+  .bc-send { min-height: 44px; }
+}

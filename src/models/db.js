@@ -572,20 +572,21 @@ const updateProduct = (productId, updates) => {
 const deleteProduct = (productId) => {
   const prod = getProductById(productId);
   if (!prod) return { ok: false, reason: 'not_found' };
-  // Verifikasi #1: tolak jika ada order aktif atau stok yang sedang di-reserve.
   const active = db.prepare("SELECT COUNT(*) AS n FROM orders WHERE product_id = ? AND status IN ('init','pending','processing','processing_delivery','paid')").get(productId).n;
   const reserved = db.prepare('SELECT COUNT(*) AS n FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NOT NULL').get(productId).n;
   if (active || reserved) return { ok: false, reason: 'in_use', activeOrders: active, reserved };
-  // Verifikasi #2: tolak jika masih ada stok ready (belum terjual). Harus dikosongkan dulu.
-  const availableStock = db.prepare('SELECT COUNT(*) AS n FROM stock WHERE product_id = ? AND sold = 0').get(productId).n;
-  if (availableStock) return { ok: false, reason: 'has_stock', availableStock };
-  // Lolos 2 verifikasi -> hard delete produk dari list.
-  // Stok terjual (sold=1) & order history TIDAK disentuh (tetap jadi riwayat).
+  const history = db.prepare('SELECT COUNT(*) AS n FROM orders WHERE product_id = ?').get(productId).n;
+  const sold = db.prepare('SELECT COUNT(*) AS n FROM stock WHERE product_id = ? AND sold = 1').get(productId).n;
+  if (history || sold) {
+    updateProduct(productId, { active: false });
+    clearFlashSale(productId);
+    return { ok: true, archived: true };
+  }
   const remove = db.transaction(() => {
+    db.prepare('DELETE FROM stock WHERE product_id = ? AND sold = 0 AND reserved_by IS NULL').run(productId);
     db.prepare('DELETE FROM products WHERE id = ?').run(productId);
   });
   remove();
-  clearFlashSale(productId);
   dbEvents.emit('product_change', { type: 'product_deleted', productId });
   return { ok: true, deleted: true };
 };

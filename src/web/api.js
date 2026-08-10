@@ -10,12 +10,16 @@ const { getDashboard } = require('./routes/dashboard');
 const { registerOrderRoutes } = require('./routes/orders');
 const { registerProductRoutes } = require('./routes/products');
 const { registerStockRoutes } = require('./routes/stock');
+const { registerFinanceRoutes } = require('./routes/finance');
+const { registerFlashSaleRoutes } = require('./routes/flashsale');
+const { registerLogRoutes } = require('./routes/logs');
 const { registerUserRoutes } = require('./routes/users');
 const { registerVoucherRoutes } = require('./routes/vouchers');
 const { registerBroadcastRoutes } = require('./routes/broadcast');
 const { registerSettingsRoutes } = require('./routes/settings');
 const { registerQrisCustomRoutes } = require('./routes/qrisCustom');
 const { dbEvents } = require('../models/db');
+const auditLog = require('../services/auditLog');
 
 let sseClients = [];
 
@@ -115,11 +119,16 @@ const registerAdminApi = (app, bot) => {
     // --- Protected ---
     const adminRouter = express.Router();
     adminRouter.use(requireAuth);
+    // Audit hanya metadata request mutasi; body/credential/raw stock tidak disimpan.
+    adminRouter.use(auditLog.middleware);
     adminRouter.get('/me', (req, res) => res.json({ ok: true }));
     adminRouter.get('/dashboard', getDashboard);
     registerOrderRoutes(adminRouter, bot);
     registerProductRoutes(adminRouter);
     registerStockRoutes(adminRouter);
+    registerFinanceRoutes(adminRouter);
+    registerFlashSaleRoutes(adminRouter);
+    registerLogRoutes(adminRouter);
     registerUserRoutes(adminRouter);
     registerVoucherRoutes(adminRouter);
     registerBroadcastRoutes(adminRouter, bot);

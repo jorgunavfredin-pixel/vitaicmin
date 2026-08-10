@@ -108,8 +108,8 @@ const productListKeyboard = (products, categoryId, page = 1, perPage = 5) => {
 
     buttons.push([Markup.button.callback('➕ Tambah Produk', `adm_prod_add_${categoryId}`)]);
 
-    // Back ke View Kategori (bukan self-loop ke daftar produk yang sama).
-    buttons.push(...navButtons(`adm_cat_view_${categoryId}`));
+    // Back ke menu "Kelola Produk" (parent sebenarnya dari daftar produk ini).
+    buttons.push(...navButtons('adm_prod'));
     return Markup.inlineKeyboard(buttons);
 };
 
@@ -140,8 +140,8 @@ const productViewKeyboard = (productId, categoryId, product = null) => {
     }
 
     buttons.push([Markup.button.callback('🗑 Delete Produk', `adm_prod_del_${productId}`)]);
-    // Back ke View Kategori (parent) — konsisten dengan daftar produk.
-    buttons.push(...navButtons(`adm_cat_view_${categoryId}`));
+    // Back ke Daftar Produk kategori ini (menu sebelumnya), bukan langsung ke View Kategori.
+    buttons.push(...navButtons(`adm_prod_cat_${categoryId}`));
     return Markup.inlineKeyboard(buttons);
 };
 

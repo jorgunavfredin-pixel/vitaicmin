@@ -1,0 +1,61 @@
+/* Flash Sale — stable desktop + compact mobile */
+.flashsale-page { display: flex; flex-direction: column; gap: 16px; }
+.flashsale-section { overflow: hidden; }
+.flashsale-modal { max-height: min(88dvh, 720px); overflow-y: auto; text-align: left; }
+.flashsale-form-grid { margin-top: 14px; }
+
+@media (max-width: 720px) {
+  .flashsale-page { gap: 10px; min-width: 0; }
+  .flashsale-page .page-head {
+    display: flex; flex-direction: row; align-items: flex-start; justify-content: space-between;
+    flex-wrap: nowrap; gap: 10px;
+  }
+  .flashsale-page .page-head > div { min-width: 0; }
+  .flashsale-page .page-title { font-size: 19px; }
+  .flashsale-page .page-sub { max-width: 225px; font-size: 11.5px; line-height: 1.4; }
+  .flashsale-page .page-head .btn-primary {
+    flex: 0 0 auto; width: auto; min-width: 0; height: 36px; padding: 0 10px;
+    gap: 6px; border-radius: 8px; font-size: 11.5px; white-space: nowrap;
+  }
+
+  .flashsale-section { padding: 12px; border-radius: 11px; }
+  .flashsale-section .panel-head { margin-bottom: 9px; }
+  .flashsale-section .panel-head h3 { font-size: 13px; }
+  .flashsale-section.is-empty { padding-bottom: 9px; }
+  .flashsale-section.is-empty .panel-head { margin-bottom: 3px; }
+  .flashsale-section.is-empty .empty { min-height: 0; padding: 6px 2px 2px; font-size: 11.5px; }
+
+  .flashsale-page .fs-list { gap: 8px; }
+  .flashsale-page .fs-item {
+    align-items: flex-start; gap: 9px; padding: 11px; border-radius: 9px;
+  }
+  .flashsale-page .fs-main { min-width: 0; flex: 1; }
+  .flashsale-page .fs-name {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 12.5px;
+  }
+  .flashsale-page .fs-price { gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .flashsale-page .fs-flash { font-size: 13px; }
+  .flashsale-page .fs-normal, .flashsale-page .fs-disc { font-size: 10.5px; }
+  .flashsale-page .fs-time {
+    margin-top: 5px; font-size: 10.5px; line-height: 1.4; white-space: normal;
+  }
+  .flashsale-page .fs-actions { flex: 0 0 auto; gap: 5px; }
+  .flashsale-page .fs-actions .ic-btn { width: 32px; height: 32px; min-width: 32px; padding: 0; }
+
+  .flashsale-modal {
+    width: calc(100vw - 24px); max-width: 640px; max-height: calc(100dvh - 24px);
+    padding: 16px; overflow-y: auto;
+  }
+  .flashsale-modal .modal-header { position: sticky; top: -16px; z-index: 2; margin: -16px -16px 14px; padding: 0 16px; height: 52px; background: var(--surface-1); }
+  .flashsale-modal .modal-header h3 { font-size: 15px; }
+  .flashsale-form-grid { grid-template-columns: 1fr; gap: 11px; margin-top: 0; }
+  .flashsale-form-grid .field-full { grid-column: auto; }
+  .flashsale-form-grid .input { width: 100%; min-width: 0; height: 44px; font-size: 16px; box-sizing: border-box; }
+  .flashsale-form-grid input[type="datetime-local"] { height: 46px; }
+  .flashsale-modal .field-hint { font-size: 10.5px; }
+  .flashsale-modal .modal-actions {
+    position: sticky; bottom: -16px; z-index: 2; margin: 14px -16px -16px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: var(--surface-1); border-top: 1px solid var(--border);
+  }
+}

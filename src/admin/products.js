@@ -428,7 +428,7 @@ ${products.length > 0 ? `◼ Kategori ini punya ${products.length} produk.` : 'K
 
         if (!prod) return ctx.answerCbQuery('Produk tidak ditemukan', { show_alert: true });
 
-        await ctx.editMessageText(`⚠️ *Hapus Produk "${prod.name_id}" dari list?*\n\nProduk hanya bisa dihapus jika *tidak ada order aktif/reservasi* dan *stok ready sudah kosong*. Histori order & data terjual tetap tersimpan.`, {
+        await ctx.editMessageText(`⚠️ *Hapus/Arsip Produk "${prod.name_id}"?*\n\nProduk dengan histori akan dinonaktifkan. Hard-delete hanya untuk produk baru tanpa histori.`, {
             parse_mode: 'Markdown',
             reply_markup: {
                 inline_keyboard: [
@@ -447,16 +447,8 @@ ${products.length > 0 ? `◼ Kategori ini punya ${products.length} produk.` : 'K
         const catId = prod?.category_id;
 
         const result = db.deleteProduct(prodId);
-        let message;
-        if (result.ok) {
-            message = '✅ Produk berhasil dihapus dari list. Histori order tetap tersimpan.';
-        } else if (result.reason === 'has_stock') {
-            message = `❌ Produk masih punya ${result.availableStock} stok ready. Kosongkan stok dulu.`;
-        } else if (result.reason === 'in_use') {
-            message = '❌ Produk masih dipakai order/reservasi aktif.';
-        } else {
-            message = '❌ Produk tidak bisa dihapus.';
-        }
+        const message = !result.ok ? '❌ Produk masih dipakai order/reservasi aktif.'
+            : result.archived ? '✅ Produk memiliki histori dan berhasil diarsipkan.' : '✅ Produk baru berhasil dihapus permanen.';
         await ctx.answerCbQuery(result.ok ? '✅ Selesai' : '❌ Ditolak');
         await ctx.editMessageText(message, {
             parse_mode: 'Markdown',

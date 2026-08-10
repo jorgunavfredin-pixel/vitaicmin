@@ -11,8 +11,12 @@ export default function QrisCustomTab({ showToast }) {
   const [layout, setLayout] = useState(DEF);
   const [enabled, setEnabled] = useState(true);
   const [preview, setPreview] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
   const [busy, setBusy] = useState('');
   const timer = useRef(null);
+  const abortRef = useRef(null);
+  const requestRef = useRef(0);
 
   const load = useCallback(async () => {
     try {
@@ -25,16 +29,31 @@ export default function QrisCustomTab({ showToast }) {
 
   const refreshPreview = useCallback((s = source, p = presetId, l = layout) => {
     clearTimeout(timer.current);
+    setPreviewLoading(true);
+    setPreviewError('');
     timer.current = setTimeout(async () => {
-      if (s === 'preset' && (!p || !data?.presets.some(item => item.id === p))) return setPreview('');
-      if (s === 'custom' && !data?.config.custom_exists) return setPreview('');
+      if (s === 'preset' && (!p || !data?.presets.some(item => item.id === p))) { setPreviewLoading(false); return; }
+      if (s === 'custom' && !data?.config.custom_exists) { setPreviewLoading(false); return; }
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const requestId = ++requestRef.current;
       try {
-        const url = await previewQrisCustom({ source: s, preset_id: p, layout: l });
+        const url = await previewQrisCustom({ source: s, preset_id: p, layout: l }, controller.signal);
+        const image = new Image();
+        image.src = url;
+        await image.decode().catch(() => {});
+        if (requestId !== requestRef.current || controller.signal.aborted) { URL.revokeObjectURL(url); return; }
         setPreview(old => { if (old) URL.revokeObjectURL(old); return url; });
-      } catch (e) { setPreview(''); }
-    }, 250);
-  }, [source, presetId, layout, data, showToast]);
-  useEffect(() => { if (data) refreshPreview(); return () => clearTimeout(timer.current); }, [data, source, presetId, layout, refreshPreview]);
+        setPreviewLoading(false);
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        if (requestId === requestRef.current) { setPreviewError(e.message || 'Preview gagal dimuat'); setPreviewLoading(false); }
+      }
+    }, 90);
+  }, [source, presetId, layout, data]);
+  useEffect(() => { if (data) refreshPreview(); }, [data, source, presetId, layout, refreshPreview]);
+  useEffect(() => () => { clearTimeout(timer.current); abortRef.current?.abort(); }, []);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
   const update = (key, value) => {
@@ -118,7 +137,13 @@ export default function QrisCustomTab({ showToast }) {
         <div className="qcustom-button-row"><button className="a-btn" onClick={reset}>Reset Default</button><button className="a-btn" onClick={center}>Tepatkan ke Tengah</button></div>
         <button className="btn-primary" onClick={save} disabled={!!busy || (enabled && source==='preset'&&!presetId) || (enabled && source==='custom'&&!data.config.custom_exists)}>{busy==='save'?'Menyimpan…':'Simpan'}</button>
       </div>
-      <div className="qcustom-preview">{preview ? <img src={preview} alt="Preview QRIS Custom"/> : <div className="empty">Pilih tema atau upload twibbon</div>}<span className="pill">{source==='custom'?'Twibbon sendiri':data.presets.find(p=>p.id===presetId)?.name||'Tema bawaan'}</span></div>
+      <div className={`qcustom-preview ${previewLoading ? 'is-loading' : ''}`}>
+        {preview ? <img src={preview} alt="Preview QRIS Custom"/> : !previewLoading && <div className="empty">Pilih tema atau upload twibbon</div>}
+        {previewLoading && <div className="qcustom-preview-loading"><span className="qcustom-spinner"/><b>Merender preview…</b><small>Memuat twibbon dan posisi QR terbaru</small></div>}
+        {previewError && !previewLoading && <div className="qcustom-preview-error"><Icon name="warning" size={18}/><span>{previewError}</span><button className="a-btn" onClick={()=>refreshPreview()}>Coba Lagi</button></div>}
+        <span className="pill">{source==='custom'?'Twibbon sendiri':data.presets.find(p=>p.id===presetId)?.name||'Tema bawaan'}</span>
+        {!previewLoading && preview && <span className="qcustom-ready"><Icon name="check" size={11}/> Preview siap</span>}
+      </div>
     </div>
   </div>;
 }

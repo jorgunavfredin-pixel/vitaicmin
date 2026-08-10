@@ -261,16 +261,8 @@ const deleteProduct = (req, res) => {
     if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
 
     const result = db.deleteProduct(id);
-    if (!result.ok) {
-        if (result.reason === 'has_stock') {
-            return res.status(409).json({ error: `Produk masih punya ${result.availableStock} stok ready. Kosongkan stok dulu sebelum menghapus produk.` });
-        }
-        if (result.reason === 'in_use') {
-            return res.status(409).json({ error: 'Produk masih dipakai order/reservasi aktif. Selesaikan order dulu sebelum menghapus produk.' });
-        }
-        return res.status(409).json({ error: 'Produk tidak bisa dihapus' });
-    }
-    res.json({ ok: true, message: 'Produk berhasil dihapus dari list' });
+    if (!result.ok) return res.status(409).json({ error: 'Produk masih digunakan order/reservasi aktif' });
+    res.json({ ok: true, archived: !!result.archived, message: result.archived ? 'Produk memiliki histori dan diarsipkan' : 'Produk berhasil dihapus' });
 };
 
 // ---- PRODUCT STATS (overview cards) ----

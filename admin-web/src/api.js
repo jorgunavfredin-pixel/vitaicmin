@@ -157,13 +157,8 @@ export const deleteVoucher = (id) => apiFetch(`/vouchers/${encodeURIComponent(id
 
 // ---- Broadcast ----
 export const fetchBroadcastTargets = () => apiFetch('/broadcast/targets');
-export const previewBroadcast = (target, categoryId, options = {}) => {
-    const { header, body } = options;
-    return apiFetch('/broadcast/preview', { 
-        method: 'POST', 
-        body: JSON.stringify({ target, categoryId, header, body }) 
-    });
-};
+export const previewBroadcast = (target, categoryId) =>
+  apiFetch('/broadcast/preview', { method: 'POST', body: JSON.stringify({ target, categoryId }) });
 export const startBroadcast = (payload) =>
   apiFetch('/broadcast', { method: 'POST', body: JSON.stringify(payload) });
 export const fetchBroadcastStatus = (jobId) => apiFetch(`/broadcast/status/${encodeURIComponent(jobId)}`);
@@ -183,7 +178,7 @@ export async function fetchAdminImage(path, options = {}) {
   if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Gagal memuat gambar'); }
   return URL.createObjectURL(await res.blob());
 }
-export const previewQrisCustom = (payload) => fetchAdminImage('/qris-custom/preview', { method: 'POST', body: JSON.stringify(payload) });
+export const previewQrisCustom = (payload, signal) => fetchAdminImage('/qris-custom/preview', { method: 'POST', body: JSON.stringify(payload), signal });
 export const toggleSetting = (key, value) =>
   apiFetch('/settings/toggle', { method: 'PATCH', body: JSON.stringify({ key, value }) });
 export const changeAdminPassword = (currentPassword, newPassword) =>
@@ -215,3 +210,23 @@ export async function downloadBackup() {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+// ---- Finance: Transactions & Balance ----
+export const fetchTransactions = ({ page = 1, pageSize = 25, type = 'all', q = '' } = {}) => {
+  const qs = new URLSearchParams({ page, pageSize, type, q }).toString();
+  return apiFetch(`/transactions?${qs}`);
+};
+export const fetchBalances = (q = '') => apiFetch(`/balances${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+export const fetchBalanceHistory = (userId) => apiFetch(`/balances/${encodeURIComponent(userId)}/history`);
+
+// ---- Flash Sale ----
+export const fetchFlashSales = () => apiFetch('/flash-sales');
+export const saveFlashSale = (payload) => apiFetch('/flash-sales', { method: 'POST', body: JSON.stringify(payload) });
+export const deleteFlashSale = (productId) => apiFetch(`/flash-sales/${encodeURIComponent(productId)}`, { method: 'DELETE' });
+
+// ---- Logs ----
+export const fetchLogs = ({ lines = 400, q = '' } = {}) => {
+  const qs = new URLSearchParams({ lines, q }).toString();
+  return apiFetch(`/logs?${qs}`);
+};
+export const fetchActivity = () => apiFetch('/activity');

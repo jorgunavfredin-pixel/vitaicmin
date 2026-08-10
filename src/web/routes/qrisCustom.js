@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const qrisCustom = require('../../services/qrisCustom');
 const gateway = require('../../payments/gateway');
+let previewQrBuffer = null;
 
 const registerQrisCustomRoutes = (router) => {
   const r = express.Router();
@@ -37,8 +38,10 @@ const registerQrisCustomRoutes = (router) => {
       const source = req.body?.source === 'custom' ? 'custom' : 'preset';
       const file = qrisCustom.getTemplatePath(source, req.body?.preset_id);
       if (!file) return res.status(400).json({ error: 'Template tidak ditemukan' });
-      const qr = await gateway.generateQRImageBuffer('QRIS-PREVIEW-VITAICMIN', 600);
-      const output = await qrisCustom.renderWithTemplate(file, qr, req.body?.layout);
+      if (!previewQrBuffer) previewQrBuffer = await gateway.generateQRImageBuffer('QRIS-PREVIEW-VITAICMIN', 600);
+      // Panel preview cukup 720px: lebih cepat composite/encode/download/decode.
+      // Render pembayaran nyata tetap memakai default 1024px.
+      const output = await qrisCustom.renderWithTemplate(file, previewQrBuffer, req.body?.layout, { maxOutput: 720, quality: 80 });
       res.type('png').send(output);
     } catch (error) { res.status(400).json({ error: error.message }); }
   });

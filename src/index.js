@@ -479,6 +479,14 @@ const startBot = async () => {
         });
 
         // Use polling for development
+        // SKIP_BOT_LAUNCH=1 → jalankan hanya Express/panel tanpa polling Telegram
+        // (berguna untuk preview admin-web tanpa bentrok getUpdates dengan instance produksi)
+        if (process.env.SKIP_BOT_LAUNCH === '1') {
+            console.log('⏭️  SKIP_BOT_LAUNCH=1 — Telegram polling dilewati, hanya server/panel yang jalan');
+            console.log(`✅ ${process.env.STORE_NAME || 'Bot'} panel is running (no polling)!`);
+            return;
+        }
+
         console.log('🔄 Connecting to Telegram...');
 
         await bot.launch({
@@ -500,7 +508,11 @@ const startBot = async () => {
 const shutdown = (signal) => {
     console.log(`\n⏹ ${signal} received, shutting down...`);
     stopPaymentPolling();
-    bot.stop(signal);
+    try {
+        bot.stop(signal);
+    } catch (e) {
+        // Bot mungkin belum di-launch (mis. SKIP_BOT_LAUNCH=1). Aman diabaikan saat shutdown.
+    }
     if (server) {
         server.close(() => {
             console.log('✅ Server closed, port released.');
