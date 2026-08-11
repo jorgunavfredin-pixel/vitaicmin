@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { clearToken, getToken } from '../api.js';
+import { clearToken, getToken, fetchBranding } from '../api.js';
 import Icon from './Icons.jsx';
 import { useBroadcast } from '../context/BroadcastContext.jsx';
 import './layout-enhanced.css';
@@ -72,6 +72,7 @@ export default function Layout() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuQuery, setMenuQuery] = useState('');
+  const [branding, setBranding] = useState({ store_name: 'VITAICMIN', admin_label: 'STORE ADMIN' });
   const [notifications, setNotifications] = useState(() => {
     try { return JSON.parse(localStorage.getItem('admin_notifications') || '[]').slice(0, 20); }
     catch (_) { return []; }
@@ -84,6 +85,13 @@ export default function Layout() {
   const { job: bcJob, running: bcRunning, clear: bcClear } = useBroadcast();
   const current = NAV.find((n) => n.to === location.pathname) || NAV[0];
   const onBroadcastPage = location.pathname === '/broadcast';
+
+  useEffect(() => {
+    fetchBranding().then((data) => setBranding({
+      store_name: data?.store_name || 'VITAICMIN',
+      admin_label: data?.admin_label || 'STORE ADMIN'
+    })).catch(() => {});
+  }, []);
 
   const addNotification = (item) => {
     setNotifications((prev) => {
@@ -226,8 +234,8 @@ export default function Layout() {
         <div className="brand">
           <span className="brand-logo"><Icon name="shield" size={20} stroke={2.2} /></span>
           <span className="brand-text">
-            <span className="brand-name">VITAICMIN</span>
-            <span className="brand-sub">STORE ADMIN</span>
+            <span className="brand-name">{branding.store_name}</span>
+            <span className="brand-sub">{branding.admin_label}</span>
           </span>
         </div>
         <nav className="nav">

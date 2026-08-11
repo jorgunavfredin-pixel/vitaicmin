@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login, resetPasswordToEnv, setToken } from '../api.js';
+import { login, resetPasswordToEnv, setToken, fetchBranding } from '../api.js';
 import Icon from '../components/Icons.jsx';
 
 function PasswordField({ label, value, onChange, autoFocus = false }) {
@@ -27,6 +27,14 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [branding, setBranding] = useState({ store_name: 'VITAICMIN', admin_label: 'STORE ADMIN' });
+
+  useEffect(() => {
+    fetchBranding().then((data) => setBranding({
+      store_name: data?.store_name || 'VITAICMIN',
+      admin_label: data?.admin_label || 'STORE ADMIN'
+    })).catch(() => {});
+  }, []);
 
   const submitLogin = async (e) => {
     e.preventDefault(); setError(''); setLoading(true);
@@ -57,9 +65,9 @@ export default function Login() {
       <div className="login-glow login-glow--b" />
       <form className="login-card" onSubmit={mode === 'login' ? submitLogin : submitReset}>
         <div className="login-logo"><Icon name={mode === 'login' ? 'flash' : 'shield'} size={26} stroke={2.2} /></div>
-        <h1 className="login-title">{mode === 'login' ? 'Store Admin' : 'Reset Password'}</h1>
+        <h1 className="login-title">{mode === 'login' ? branding.store_name : 'Reset Password'}</h1>
         <p className="login-sub">{mode === 'login'
-          ? 'Masuk untuk mengelola toko kamu'
+          ? `${branding.admin_label} · Masuk untuk mengelola toko kamu`
           : 'Password custom database akan dihapus dan login kembali memakai ADMIN_PANEL_PASSWORD dari .env.'}</p>
 
         {mode === 'login' ? <>

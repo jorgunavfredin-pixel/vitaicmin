@@ -44,6 +44,11 @@ export async function apiFetch(path, options = {}) {
 
 export const login = (password) =>
   apiFetch('/login', { method: 'POST', body: JSON.stringify({ password }) });
+export async function fetchBranding() {
+  const res = await fetch(BASE + '/branding', { cache: 'no-store' });
+  if (!res.ok) return { store_name: 'VITAICMIN', admin_label: 'STORE ADMIN' };
+  return res.json();
+}
 export const resetPasswordToEnv = (recoveryPassword) =>
   apiFetch('/forgot-password', { method: 'POST', body: JSON.stringify({ recoveryPassword }) });
 

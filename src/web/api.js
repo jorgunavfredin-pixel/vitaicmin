@@ -75,6 +75,11 @@ const registerAdminApi = (app, bot) => {
     const api = express.Router();
 
     // --- Public ---
+    api.get('/branding', (req, res) => {
+        // Public-safe identity only. Do not expose any other environment values.
+        const storeName = String(process.env.STORE_NAME || '').trim().slice(0, 80) || 'VITAICMIN';
+        res.json({ store_name: storeName, admin_label: 'STORE ADMIN' });
+    });
     api.post('/login', login);
     api.post('/forgot-password', forgotPassword);
 
