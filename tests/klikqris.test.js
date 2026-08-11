@@ -42,7 +42,7 @@ const klikqris = require('../src/payments/providers/klikqris');
 
 test('createQRIS mengirim x-api-key/id_merchant dan memetakan response', async () => {
   calls = [];
-  const result = await klikqris.createQRIS('INV-123', 1000, { api_key: 'KEY', merchant_id: 'MID' }, {});
+  const result = await klikqris.createQRIS('INV-123', 1000, { api_key: 'KEY', merchant_id: 'MID' }, { callback_url: 'https://store.example.com/' });
   assert.equal(result.success, true);
   const [method, url, body, config] = calls[0];
   assert.equal(method, 'POST');
@@ -50,6 +50,7 @@ test('createQRIS mengirim x-api-key/id_merchant dan memetakan response', async (
   assert.equal(body.order_id, 'INV-123');
   assert.equal(body.id_merchant, 'MID');
   assert.equal(body.amount, 1000);
+  assert.equal(body.callback_url, 'https://store.example.com/webhook/klikqris');
   assert.equal(config.headers['x-api-key'], 'KEY');
   assert.equal(config.headers['id_merchant'], 'MID');
   assert.equal(result.data.qris_string, null);

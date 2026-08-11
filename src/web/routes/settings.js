@@ -266,7 +266,12 @@ const deleteBanner = (req, res) => {
 const listGateways = (req, res) => {
     try {
         const webhookBase = String(process.env.WEBHOOK_URL || '').replace(/\/$/, '');
-        const callbackPath = { pakasir: '/webhook/qris', wijayapay: '/webhook/wijayapay', xoftware: '/webhook/xoftware' };
+        const callbackPath = {
+            pakasir: '/webhook/qris',
+            wijayapay: '/webhook/wijayapay',
+            xoftware: '/webhook/xoftware',
+            klikqris: '/webhook/klikqris'
+        };
         const activeMap = new Map(
             gateway.listActiveGateways()
                 .filter(g => g.id)
