@@ -18,7 +18,8 @@ const { registerVoucherRoutes } = require('./routes/vouchers');
 const { registerBroadcastRoutes } = require('./routes/broadcast');
 const { registerSettingsRoutes } = require('./routes/settings');
 const { registerQrisCustomRoutes } = require('./routes/qrisCustom');
-const { dbEvents } = require('../models/db');
+const db = require('../models/db');
+const { dbEvents } = db;
 const auditLog = require('../services/auditLog');
 
 let sseClients = [];
@@ -77,7 +78,8 @@ const registerAdminApi = (app, bot) => {
     // --- Public ---
     api.get('/branding', (req, res) => {
         // Public-safe identity only. Do not expose any other environment values.
-        const storeName = String(process.env.STORE_NAME || '').trim().slice(0, 80) || 'VITAICMIN';
+        // Satu sumber kebenaran dengan Bot Settings: DB live > env deployment > fallback.
+        const storeName = String(db.getConfig('store_name', 'STORE_NAME', 'VITAICMIN') || '').trim().slice(0, 80) || 'VITAICMIN';
         res.json({ store_name: storeName, admin_label: 'STORE ADMIN' });
     });
     api.post('/login', login);

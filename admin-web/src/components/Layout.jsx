@@ -86,11 +86,15 @@ export default function Layout() {
   const current = NAV.find((n) => n.to === location.pathname) || NAV[0];
   const onBroadcastPage = location.pathname === '/broadcast';
 
-  useEffect(() => {
+  const refreshBranding = () => {
     fetchBranding().then((data) => setBranding({
       store_name: data?.store_name || 'VITAICMIN',
       admin_label: data?.admin_label || 'STORE ADMIN'
     })).catch(() => {});
+  };
+
+  useEffect(() => {
+    refreshBranding();
   }, []);
 
   const addNotification = (item) => {
@@ -170,6 +174,9 @@ export default function Layout() {
           addNotification({ type: 'customer', title: payload.type === 'balance_change' ? 'Saldo customer berubah' : 'Data customer berubah', detail: payload.data?.user_id || payload.data?.id || 'Customer', to: '/users' });
         } else if (payload.type === 'settings_change') {
           window.dispatchEvent(new CustomEvent('settings_updated', { detail: payload.data }));
+          if (payload.data?.updates && Object.prototype.hasOwnProperty.call(payload.data.updates, 'store_name')) {
+            refreshBranding();
+          }
         }
       } catch (err) {
         console.error('Error handling SSE live update:', err);
